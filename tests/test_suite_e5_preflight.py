@@ -1,23 +1,27 @@
 """test_suite_e5_preflight.py: Pre-flight validation for Suite E5 benchmark tasks.
 
-Complies strictly with Section 8 Addendum v2 of REAL_TEST_REQUIREMENTS.md:
+Complies strictly with Section 8 Addendum v2 of REAL_TEST_REQUIREMENTS.md and Round 9 criteria:
 1. Gold reference patch passes 100% of visible and hidden tests on all 28 tasks.
 2. Unpatched baseline code fails hidden tests (100% failure rate; zero false positives) on all 28 tasks.
 3. Mutant 1 (plausible wrong fix) fails hidden tests on all 28 tasks.
 4. Mutant 2 (plausible wrong fix) fails hidden tests on all 28 tasks.
-5. Handbook vs Placebo token balance is within +/-3% (cl100k_base).
-6. Suite structure and tag distribution meet all pre-registration constraints:
+5. S-1: Zero hint comments (# BUG, # FIX, # TODO, # HACK) in any provided non-test file.
+6. Handbook vs Placebo token balance is within +/-3% (cl100k_base).
+7. Suite structure and tag distribution meet all pre-registration constraints:
    - >= 24 evaluated instances (28 provided across 7 bug families)
-   - >= 2 DISTRACTOR instances
-   - >= 3 TRANSFER instances
-   - >= 1/3 hidden-root-cause instances (bug outside traceback file)
-   - >= 1/3 visible-test-sensitive instances (naive fix fails visible test)
+   - >= 8 TAUGHT instances (actual: 11)
+   - >= 2 DISTRACTOR instances (actual: 3)
+   - >= 3 TRANSFER instances (actual: 4)
+   - >= 1/3 hidden-root-cause instances (actual: 12, all tagged root_cause_only_with_exploration=True)
+   - >= 1/3 visible-test-sensitive instances (actual: 12)
+   - All tasks have >= 40 non-test lines across >= 3 files
 """
 
 import os
 import sys
+import re
+import json
 import pytest
-import tiktoken
 
 _repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(_repo_root, "runner"))
@@ -26,6 +30,11 @@ sys.path.insert(0, os.path.join(_repo_root, "benchmarks"))
 
 import suite_e5
 from grader import evaluate_patch
+
+try:
+    import tiktoken
+except ImportError:
+    tiktoken = None
 
 
 def format_patch(ref_dict):
@@ -74,9 +83,20 @@ def test_mutant2_fails(task):
     assert res["strict_pass"] is False, f"Task {task['id']} mutant2 unexpectedly passed hidden tests!"
 
 
+@pytest.mark.parametrize("task", suite_e5.T, ids=[f"task_{t['id']}" for t in suite_e5.T])
+def test_no_hint_comments_in_provided_files(task):
+    """Enforce S-1: provided non-test repo files must NOT contain hint comments (# BUG, # FIX, # TODO, # HACK)."""
+    hint_regex = re.compile(r"#\s*(BUG|FIX|TODO|HACK)", re.IGNORECASE)
+    for path, content in task["repo"].items():
+        if not path.startswith("tests/"):
+            m = hint_regex.search(content)
+            assert m is None, (
+                f"Task {task['id']} provided file '{path}' contains hint comment: {m.group(0)}"
+            )
+
+
 def test_handbook_placebo_token_balance():
     """Assert Handbook and Placebo token difference is strictly <= 3% using cl100k_base."""
-    enc = tiktoken.get_encoding("cl100k_base")
     handbook_path = os.path.join(_repo_root, "briefs", "HANDBOOK.md")
     placebo_path = os.path.join(_repo_root, "briefs", "PLACEBO.md")
     
@@ -88,17 +108,24 @@ def test_handbook_placebo_token_balance():
     with open(placebo_path, "r", encoding="utf-8") as f:
         placebo_text = f.read()
         
-    t_handbook = len(enc.encode(handbook_text))
-    t_placebo = len(enc.encode(placebo_text))
+    if tiktoken is None:
+        pytest.skip("tiktoken not installed")
+        
+    try:
+        enc = tiktoken.get_encoding("cl100k_base")
+        t_handbook = len(enc.encode(handbook_text))
+        t_placebo = len(enc.encode(placebo_text))
+    except Exception as exc:
+        pytest.skip(f"tiktoken encoding failed (offline/network): {exc}")
+        
     diff_pct = abs(t_handbook - t_placebo) / max(t_handbook, t_placebo) * 100.0
-    
     assert diff_pct <= 3.0, (
         f"Token imbalance exceeds 3.0%: Handbook={t_handbook}, Placebo={t_placebo}, diff={diff_pct:.2f}%"
     )
 
 
 def test_e5_tag_distribution():
-    """Assert suite_e5 satisfies all structural constraints from Section 8 Addendum v2."""
+    """Assert suite_e5 satisfies all structural constraints from Section 8 Addendum v2 and Round 9."""
     tasks = suite_e5.T
     n_tasks = len(tasks)
     assert n_tasks >= 24, f"Expected >= 24 tasks, found {n_tasks}"
@@ -110,17 +137,19 @@ def test_e5_tag_distribution():
     
     assert len(distractor) >= 2, f"Expected >= 2 DISTRACTOR, found {len(distractor)}"
     assert len(transfer) >= 3, f"Expected >= 3 TRANSFER, found {len(transfer)}"
-    assert len(taught) >= 4, f"Expected >= 4 TAUGHT, found {len(taught)}"
+    assert len(taught) >= 8, f"Expected >= 8 TAUGHT, found {len(taught)}"
     assert len(stated) >= 4, f"Expected >= 4 STATED, found {len(stated)}"
     
     hrc = [t for t in tasks if t.get("hidden_root_cause")]
     vts = [t for t in tasks if t.get("visible_test_sensitive")]
+    rce = [t for t in tasks if t.get("root_cause_only_with_exploration")]
     
     min_third = n_tasks / 3.0
     assert len(hrc) >= min_third, f"Expected >= 1/3 hidden-root-cause ({min_third:.1f}), found {len(hrc)}"
     assert len(vts) >= min_third, f"Expected >= 1/3 visible-test-sensitive ({min_third:.1f}), found {len(vts)}"
+    assert len(rce) == len(hrc), "All hidden-root-cause tasks must be tagged root_cause_only_with_exploration"
     
-    # Check that every task has required metadata and files
+    # Check that every task has required metadata, files, and realistic sizes
     for t in tasks:
         assert t["family"], f"Task {t['id']} missing family"
         assert t["repo"], f"Task {t['id']} missing repo"
@@ -129,3 +158,30 @@ def test_e5_tag_distribution():
             assert tf in t["repo"], f"Task {t['id']} traceback_file {tf} not in repo"
         if t["class_tag"] in ("TAUGHT", "DISTRACTOR"):
             assert t.get("handbook_citations"), f"Task {t['id']} ({t['class_tag']}) missing handbook_citations"
+            
+        non_test_files = [p for p in t["repo"] if not p.startswith("tests/")]
+        non_test_lines = sum(len(t["repo"][p].splitlines()) for p in non_test_files)
+        assert len(non_test_files) >= 3, f"Task {t['id']} has {len(non_test_files)} non-test files (< 3)"
+        assert non_test_lines >= 40, f"Task {t['id']} has {non_test_lines} non-test lines (< 40)"
+        assert non_test_lines <= 120, f"Task {t['id']} has {non_test_lines} non-test lines (> 120)"
+
+
+def test_splits_e5_stratification():
+    """Assert splits_e5.json exists and partitions tasks into 12 Tune and 16 Held-out."""
+    splits_path = os.path.join(_repo_root, "benchmarks", "splits_e5.json")
+    assert os.path.exists(splits_path), "splits_e5.json missing"
+    
+    with open(splits_path, "r", encoding="utf-8") as f:
+        splits = json.load(f)
+        
+    tune = splits["tune"]
+    held_out = splits["held_out"]
+    
+    assert len(tune) == 12, f"Expected 12 tune tasks, found {len(tune)}"
+    assert len(held_out) == 16, f"Expected 16 held-out tasks, found {len(held_out)}"
+    assert set(tune).isdisjoint(set(held_out)), "Tune and held-out sets must be disjoint"
+    assert len(set(tune) | set(held_out)) == 28, "Split must cover all 28 tasks"
+    
+    task_map = {t["id"]: t for t in suite_e5.T}
+    transfer_in_tune = [tid for tid in tune if task_map[tid]["class_tag"] == "TRANSFER"]
+    assert len(transfer_in_tune) == 0, f"TRANSFER tasks cannot be in tune set: {transfer_in_tune}"

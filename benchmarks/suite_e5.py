@@ -1,15 +1,13 @@
-"""suite_e5.py: Template-generated benchmark suite for E5 evaluation (28 instances across 7 families).
+"""suite_e5.py: Modular benchmark suite for E5 evaluation (28 instances across 7 families).
 
-Complies strictly with Section 8 Addendum v2 of REAL_TEST_REQUIREMENTS.md:
+Complies strictly with Section 8 Addendum v2 of REAL_TEST_REQUIREMENTS.md and Round 9 criteria:
 - 7 bug families, 4 distinct instances per family (28 total instances).
-- Class tags: STATED (13), TAUGHT (8), DISTRACTOR (3), TRANSFER (4).
-- >= 1/3 instances feature hidden-root-cause variants (bug outside the traceback file).
-- >= 1/3 instances feature visible-test-sensitive variants (naive fixes fail visible tests).
-- Every instance includes:
-  (1) Gold reference patch passing 100% of visible and hidden tests.
-  (2) Unpatched baseline failing 100% of hidden tests.
-  (3) Two plausible-wrong mutant patches each failing hidden tests (mutation verification).
-  (4) Minimal context package files (traceback_files) for Baseline B0 evaluation.
+- Class tags: STATED (10), TAUGHT (11), DISTRACTOR (3), TRANSFER (4).
+- Hidden Root Cause (12 tasks, 42.9%): tagged root_cause_only_with_exploration=True.
+- Visible Test Sensitive (12 tasks, 42.9%): naive fixes fail visible tests.
+- Zero hint comments in any provided non-test files.
+- Repositories contain 40-120 non-test lines across 2-4 files.
+- Minimal context package (traceback_files) provided to Baseline B0.
 """
 
 import os
@@ -17,28 +15,10 @@ import sys
 
 T = []
 
-
-def register_task(
-    tid,
-    family,
-    name,
-    class_tag,
-    issue,
-    traceback_text,
-    traceback_files,
-    repo,
-    hidden,
-    ref,
-    mutant1,
-    mutant2,
-    hidden_root_cause=False,
-    visible_test_sensitive=False,
-    handbook_citations=(),
-    visible=None,
-    protected=(),
-    forbidden=(),
-    must_touch=(),
-):
+def register_task(tid, family, name, class_tag, issue, traceback_text, traceback_files,
+                  repo, hidden, ref, mutant1, mutant2, hidden_root_cause=False,
+                  visible_test_sensitive=False, root_cause_only_with_exploration=False,
+                  handbook_citations=(), visible=None, protected=(), forbidden=(), must_touch=()):
     vis = visible or [p for p in repo if p.startswith("tests/")]
     key = {
         "visible_paths": list(vis),
@@ -62,6 +42,7 @@ def register_task(
         "class_tag": class_tag,
         "hidden_root_cause": hidden_root_cause,
         "visible_test_sensitive": visible_test_sensitive,
+        "root_cause_only_with_exploration": root_cause_only_with_exploration,
         "handbook_citations": list(handbook_citations),
         "issue": issue,
         "traceback_text": traceback_text,
@@ -75,107 +56,20 @@ def register_task(
     T.append(task_dict)
     return task_dict
 
-
-# ==============================================================================
-# FAMILY 1: money_rounding (Tasks 2001 - 2004)
-# ==============================================================================
-
 # Task 2001: Order Tax Calculation (STATED)
-t2001_repo = {
-    "pricing.py": '''"""Order pricing calculation with itemized taxes."""
-from tax_engine import calculate_vat
-
-def calculate_order_total(items, vat_rate=0.20):
-    """Calculate order total including tax.
-    items: list of (price_cents, quantity).
-    Returns (net_cents, tax_cents, gross_cents).
-    Tax must use banker's rounding (round half to even) on exact half-cents.
-    """
-    net = sum(price * qty for price, qty in items)
-    tax = calculate_vat(net, vat_rate)
-    return net, tax, net + tax
-''',
-    "tax_engine.py": '''"""Low-level tax rate computation."""
-def calculate_vat(net_cents, vat_rate):
-    # BUG: naive float truncation
-    return int(net_cents * vat_rate)
-''',
-    "tests/test_pricing.py": '''from pricing import calculate_order_total
-
-def test_single_item():
-    net, tax, gross = calculate_order_total([(100, 1)], vat_rate=0.20)
-    assert net == 100
-    assert tax == 20
-    assert gross == 120
-'''
-}
-
-t2001_hidden = {
-    "tests/test_pricing_hidden.py": '''import pytest
-from pricing import calculate_order_total
-from tax_engine import calculate_vat
-
-def test_bankers_rounding_half_cents():
-    # 125 * 0.20 = 25.0 -> 25
-    # 135 * 0.10 = 13.5 -> 14 (round to even)
-    # 145 * 0.10 = 14.5 -> 14 (round to even)
-    # 155 * 0.10 = 15.5 -> 16 (round to even)
-    assert calculate_order_total([(135, 1)], vat_rate=0.10)[1] == 14
-    assert calculate_order_total([(145, 1)], vat_rate=0.10)[1] == 14
-    assert calculate_order_total([(155, 1)], vat_rate=0.10)[1] == 16
-    assert calculate_order_total([(165, 1)], vat_rate=0.10)[1] == 16
-
-def test_tax_engine_direct():
-    assert calculate_vat(135, 0.10) == 14
-    assert calculate_vat(145, 0.10) == 14
-'''
-}
-
-t2001_ref = {
-    "tax_engine.py": '''"""Low-level tax rate computation."""
-from decimal import Decimal, ROUND_HALF_EVEN
-
-def calculate_vat(net_cents, vat_rate):
-    d_net = Decimal(str(net_cents))
-    d_rate = Decimal(str(vat_rate))
-    return int((d_net * d_rate).quantize(Decimal("1"), rounding=ROUND_HALF_EVEN))
-'''
-}
-
-t2001_m1 = {
-    "pricing.py": '''"""Order pricing calculation with itemized taxes."""
-from tax_engine import calculate_vat
-from decimal import Decimal, ROUND_HALF_EVEN
-
-def calculate_order_total(items, vat_rate=0.20):
-    net = sum(price * qty for price, qty in items)
-    # Mutant 1: Workaround in pricing.py without fixing tax_engine.py
-    tax = int((Decimal(str(net)) * Decimal(str(vat_rate))).quantize(Decimal("1"), rounding=ROUND_HALF_EVEN))
-    return net, tax, net + tax
-''',
-    "tax_engine.py": '''"""Low-level tax rate computation."""
-def calculate_vat(net_cents, vat_rate):
-    return int(net_cents * vat_rate)
-'''
-}
-
-t2001_m2 = {
-    "tax_engine.py": '''"""Low-level tax rate computation."""
-def calculate_vat(net_cents, vat_rate):
-    # Mutant 2: Ceiling rounding
-    import math
-    return int(math.ceil(net_cents * vat_rate))
-'''
-}
-
+t2001_repo = {'models.py': '"""Data models for commerce order line items."""\nfrom dataclasses import dataclass, field\nfrom typing import List, Dict, Any\n\n@dataclass\nclass LineItem:\n    sku: str\n    price_cents: int\n    quantity: int = 1\n\n    def subtotal(self) -> int:\n        return self.price_cents * self.quantity\n\n@dataclass\nclass OrderSummary:\n    order_id: str\n    items: List[LineItem]\n    net_cents: int\n    tax_cents: int\n    gross_cents: int\n\n    def to_dict(self) -> Dict[str, Any]:\n        return {\n            "order_id": self.order_id,\n            "net_cents": self.net_cents,\n            "tax_cents": self.tax_cents,\n            "gross_cents": self.gross_cents,\n        }\n', 'tax_engine.py': '"""Low-level tax rate computation engine."""\nfrom typing import Dict, Any\n\nDEFAULT_TAX_JURISDICTIONS = {\n    "standard": 0.20,\n    "reduced": 0.10,\n    "exempt": 0.0,\n}\n\ndef get_rate_for_jurisdiction(code: str) -> float:\n    return DEFAULT_TAX_JURISDICTIONS.get(code, 0.20)\n\ndef calculate_vat(net_cents: int, vat_rate: float) -> int:\n    """Compute VAT in integer cents for given net amount."""\n    return int(net_cents * vat_rate)\n', 'pricing.py': '"""Order pricing calculation with itemized taxes."""\nfrom typing import List, Tuple, Optional\nfrom models import LineItem, OrderSummary\nfrom tax_engine import calculate_vat, get_rate_for_jurisdiction\n\ndef calculate_order_total(items: List[Tuple[int, int]], vat_rate: float = 0.20, order_id: str = "ORD-001") -> OrderSummary:\n    """Calculate order total including tax.\n    items: list of (price_cents, quantity).\n    Returns OrderSummary.\n    Tax calculation must use banker\'s rounding (round half to even) on exact half-cents.\n    """\n    line_objs = [LineItem(sku=f"SKU-{i+1}", price_cents=p, quantity=q) for i, (p, q) in enumerate(items)]\n    net = sum(item.subtotal() for item in line_objs)\n    tax = calculate_vat(net, vat_rate)\n    return OrderSummary(order_id=order_id, items=line_objs, net_cents=net, tax_cents=tax, gross_cents=net + tax)\n', 'tests/test_pricing.py': 'from pricing import calculate_order_total\n\ndef test_single_item():\n    summary = calculate_order_total([(100, 1)], vat_rate=0.20)\n    assert summary.net_cents == 100\n    assert summary.tax_cents == 20\n    assert summary.gross_cents == 120\n\ndef test_multi_item():\n    summary = calculate_order_total([(100, 2), (200, 1)], vat_rate=0.10)\n    assert summary.net_cents == 400\n    assert summary.tax_cents == 40\n    assert summary.gross_cents == 440\n'}
+t2001_hidden = {'tests/test_pricing_hidden.py': 'import pytest\nfrom pricing import calculate_order_total\nfrom tax_engine import calculate_vat\n\ndef test_bankers_rounding_half_cents():\n    assert calculate_order_total([(135, 1)], vat_rate=0.10).tax_cents == 14\n    assert calculate_order_total([(145, 1)], vat_rate=0.10).tax_cents == 14\n    assert calculate_order_total([(155, 1)], vat_rate=0.10).tax_cents == 16\n    assert calculate_order_total([(165, 1)], vat_rate=0.10).tax_cents == 16\n\ndef test_tax_engine_direct():\n    assert calculate_vat(135, 0.10) == 14\n    assert calculate_vat(145, 0.10) == 14\n'}
+t2001_ref = {'tax_engine.py': '"""Low-level tax rate computation engine."""\nfrom decimal import Decimal, ROUND_HALF_EVEN\nfrom typing import Dict, Any\n\nDEFAULT_TAX_JURISDICTIONS = {\n    "standard": 0.20,\n    "reduced": 0.10,\n    "exempt": 0.0,\n}\n\ndef get_rate_for_jurisdiction(code: str) -> float:\n    return DEFAULT_TAX_JURISDICTIONS.get(code, 0.20)\n\ndef calculate_vat(net_cents: int, vat_rate: float) -> int:\n    """Compute VAT in integer cents for given net amount using banker\'s rounding."""\n    d_net = Decimal(str(net_cents))\n    d_rate = Decimal(str(vat_rate))\n    return int((d_net * d_rate).quantize(Decimal("1"), rounding=ROUND_HALF_EVEN))\n'}
+t2001_m1 = {'pricing.py': '"""Order pricing calculation with itemized taxes."""\nfrom typing import List, Tuple, Optional\nfrom models import LineItem, OrderSummary\nfrom tax_engine import calculate_vat, get_rate_for_jurisdiction\nfrom decimal import Decimal, ROUND_HALF_EVEN\n\ndef calculate_order_total(items: List[Tuple[int, int]], vat_rate: float = 0.20, order_id: str = "ORD-001") -> OrderSummary:\n    line_objs = [LineItem(sku=f"SKU-{i+1}", price_cents=p, quantity=q) for i, (p, q) in enumerate(items)]\n    net = sum(item.subtotal() for item in line_objs)\n    # Workaround in pricing.py without fixing tax_engine.py\n    tax = int((Decimal(str(net)) * Decimal(str(vat_rate))).quantize(Decimal("1"), rounding=ROUND_HALF_EVEN))\n    return OrderSummary(order_id=order_id, items=line_objs, net_cents=net, tax_cents=tax, gross_cents=net + tax)\n'}
+t2001_m2 = {'tax_engine.py': '"""Low-level tax rate computation engine."""\nimport math\nfrom typing import Dict, Any\n\nDEFAULT_TAX_JURISDICTIONS = {\n    "standard": 0.20,\n    "reduced": 0.10,\n    "exempt": 0.0,\n}\n\ndef get_rate_for_jurisdiction(code: str) -> float:\n    return DEFAULT_TAX_JURISDICTIONS.get(code, 0.20)\n\ndef calculate_vat(net_cents: int, vat_rate: float) -> int:\n    return int(math.ceil(net_cents * vat_rate))\n'}
 register_task(
     tid=2001,
-    family="money_rounding",
-    name="Order Tax Calculation",
-    class_tag="STATED",
-    issue="Order tax calculation truncates fractional cents instead of using banker's rounding.",
-    traceback_text="FAILED tests/test_pricing_hidden.py::test_bankers_rounding_half_cents - in calculate_order_total (pricing.py:11): assert (100, 13, 113) == (100, 14, 114)",
-    traceback_files=["pricing.py"],
+    family='money_rounding',
+    name='Order Tax Calculation',
+    class_tag='STATED',
+    issue='Incident INC-8401: Itemized billing batch reconciliation failed for customer order line items under variable VAT rates.',
+    traceback_text='FAILED tests/test_pricing_hidden.py::test_bankers_rounding_half_cents - AssertionError: Reconciliation error at pricing.py:16: calculated invoice tax line failed to match expected settlement total',
+    traceback_files=['pricing.py'],
     repo=t2001_repo,
     hidden=t2001_hidden,
     ref=t2001_ref,
@@ -183,98 +77,24 @@ register_task(
     mutant2=t2001_m2,
     hidden_root_cause=True,
     visible_test_sensitive=False,
-    handbook_citations=["Rule H02"],
+    root_cause_only_with_exploration=True,
+    handbook_citations=['Rule H02'],
 )
 
-
-# Task 2002: Invoice Discount Proration (TAUGHT)
-t2002_repo = {
-    "discount.py": '''"""Invoice discount allocation."""
-def prorate_discount(line_totals, total_discount_cents):
-    """Prorate discount across lines proportionally to their value.
-    line_totals: list of integer cents.
-    Returns list of discount cents per line.
-    Residual rounding cents must adhere to standard company rounding invariants.
-    """
-    total = sum(line_totals)
-    if total == 0:
-        return [0] * len(line_totals)
-    # BUG: naive truncation leaves unpaid discount
-    return [int(t * total_discount_cents / total) for t in line_totals]
-''',
-    "tests/test_discount.py": '''from discount import prorate_discount
-
-def test_equal_split():
-    assert prorate_discount([100, 100], 50) == [25, 25]
-
-def test_proportional_split():
-    assert prorate_discount([100, 300], 40) == [10, 30]
-'''
-}
-
-t2002_hidden = {
-    "tests/test_discount_hidden.py": '''from discount import prorate_discount
-
-def test_exact_bankers_rounding_half():
-    # Split 15 cents across 100 and 100: each gets 7.5 -> 8 and 7, sum == 15
-    res = prorate_discount([100, 100], 15)
-    assert sum(res) == 15
-    # 3 lines of 100 with discount 10: 3.333 each -> 3, 3, 4 (sum == 10)
-    res2 = prorate_discount([100, 100, 100], 10)
-    assert sum(res2) == 10
-'''
-}
-
-t2002_ref = {
-    "discount.py": '''"""Invoice discount allocation."""
-from decimal import Decimal, ROUND_HALF_EVEN
-
-def prorate_discount(line_totals, total_discount_cents):
-    total = sum(line_totals)
-    if total == 0:
-        return [0] * len(line_totals)
-    d_total = Decimal(str(total))
-    d_disc = Decimal(str(total_discount_cents))
-    allocated = []
-    accumulated = 0
-    for i, t in enumerate(line_totals):
-        if i == len(line_totals) - 1:
-            allocated.append(total_discount_cents - accumulated)
-        else:
-            share = (Decimal(str(t)) * d_disc / d_total).quantize(Decimal("1"), rounding=ROUND_HALF_EVEN)
-            val = int(share)
-            allocated.append(val)
-            accumulated += val
-    return allocated
-'''
-}
-
-t2002_m1 = {
-    "discount.py": '''"""Invoice discount allocation."""
-def prorate_discount(line_totals, total_discount_cents):
-    # Mutant 1: Does not conserve total discount (no residual absorption)
-    total = sum(line_totals)
-    if total == 0: return [0] * len(line_totals)
-    return [round(t * total_discount_cents / total) for t in line_totals]
-'''
-}
-
-t2002_m2 = {
-    "discount.py": '''"""Invoice discount allocation."""
-def prorate_discount(line_totals, total_discount_cents):
-    # Mutant 2: Floor allocation
-    return [0] * len(line_totals)
-'''
-}
-
+# Task 2002: Invoice Discount Allocation (TAUGHT)
+t2002_repo = {'models.py': '"""Discount rule models and line items."""\nfrom dataclasses import dataclass\nfrom typing import List, Dict, Any\n\n@dataclass\nclass LineDiscount:\n    line_id: int\n    allocated_cents: int\n\n@dataclass\nclass AllocationResult:\n    discounts: List[int]\n    total_allocated: int\n    is_fully_allocated: bool\n\n    def as_dict(self) -> Dict[str, Any]:\n        return {\n            "discounts": self.discounts,\n            "total_allocated": self.total_allocated,\n            "is_fully_allocated": self.is_fully_allocated,\n        }\n', 'discount.py': '"""Invoice discount allocation module."""\nfrom typing import List\nfrom models import AllocationResult\n\ndef prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:\n    """Prorate discount across lines proportionally to their value.\n    line_totals: list of integer cents.\n    Returns list of discount cents per line.\n    """\n    total = sum(line_totals)\n    if total == 0:\n        return [0] * len(line_totals)\n    return [int(cents * total_discount_cents // total) for cents in line_totals]\n\ndef allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:\n    """Wrapper returning structured allocation result."""\n    allocs = prorate_discount(line_totals, total_discount_cents)\n    tot = sum(allocs)\n    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))\n', 'utils.py': '"""Invoice discount validation helpers."""\nfrom typing import List\n\ndef validate_line_totals(lines: List[int]) -> bool:\n    return all(isinstance(x, int) and x >= 0 for x in lines)\n\ndef compute_total_cents(lines: List[int]) -> int:\n    return sum(lines)\n', 'tests/test_discount.py': 'from discount import prorate_discount, allocate_discounts\n\ndef test_even_split():\n    assert prorate_discount([100, 100], 20) == [10, 10]\n    res = allocate_discounts([200, 100], 30)\n    assert res.discounts == [20, 10]\n    assert res.total_allocated == 30\n\ndef test_zero_total():\n    assert prorate_discount([0, 0], 50) == [0, 0]\n\ndef test_proportional_distribution():\n    res = prorate_discount([100, 300], 100)\n    assert res == [25, 75]\n'}
+t2002_hidden = {'tests/test_discount_hidden.py': 'import pytest\nfrom discount import prorate_discount\n\ndef test_half_cent_bankers_rounding():\n    assert prorate_discount([100, 100], 25) == [12, 12]\n    assert prorate_discount([100, 100], 35) == [18, 18]\n    assert prorate_discount([100, 100], 45) == [22, 22]\n\ndef test_three_line_unallocated():\n    assert sum(prorate_discount([100, 100, 100], 30)) == 30\n'}
+t2002_ref = {'discount.py': '"""Invoice discount allocation module."""\nfrom typing import List\nfrom decimal import Decimal, ROUND_HALF_EVEN\nfrom models import AllocationResult\n\ndef prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:\n    """Prorate discount across lines proportionally to their value.\n    line_totals: list of integer cents.\n    Returns list of discount cents per line.\n    """\n    total = sum(line_totals)\n    if total == 0:\n        return [0] * len(line_totals)\n    d_total = Decimal(str(total))\n    d_disc = Decimal(str(total_discount_cents))\n    res = []\n    for cents in line_totals:\n        share = (Decimal(str(cents)) * d_disc / d_total).quantize(Decimal("1"), rounding=ROUND_HALF_EVEN)\n        res.append(int(share))\n    return res\n\ndef allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:\n    """Wrapper returning structured allocation result."""\n    allocs = prorate_discount(line_totals, total_discount_cents)\n    tot = sum(allocs)\n    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))\n'}
+t2002_m1 = {'discount.py': '"""Invoice discount allocation module."""\nfrom typing import List\nfrom decimal import Decimal, ROUND_HALF_UP\nfrom models import AllocationResult\n\ndef prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:\n    total = sum(line_totals)\n    if total == 0:\n        return [0] * len(line_totals)\n    d_total = Decimal(str(total))\n    d_disc = Decimal(str(total_discount_cents))\n    return [int((Decimal(str(c)) * d_disc / d_total).quantize(Decimal("1"), rounding=ROUND_HALF_UP)) for c in line_totals]\n\ndef allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:\n    allocs = prorate_discount(line_totals, total_discount_cents)\n    tot = sum(allocs)\n    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))\n'}
+t2002_m2 = {'discount.py': '"""Invoice discount allocation module."""\nfrom typing import List\nfrom models import AllocationResult\n\ndef prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:\n    total = sum(line_totals)\n    if total == 0:\n        return [0] * len(line_totals)\n    return [int(c * total_discount_cents // total) for c in line_totals]\n\ndef allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:\n    allocs = prorate_discount(line_totals, total_discount_cents)\n    tot = sum(allocs)\n    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))\n'}
 register_task(
     tid=2002,
-    family="money_rounding",
-    name="Invoice Discount Proration",
-    class_tag="TAUGHT",
-    issue="Prorated discount lines do not sum up to total discount and violate company rounding rules.",
-    traceback_text="FAILED tests/test_discount_hidden.py::test_exact_bankers_rounding_half - assert 14 == 15",
-    traceback_files=["discount.py"],
+    family='money_rounding',
+    name='Invoice Discount Allocation',
+    class_tag='TAUGHT',
+    issue='Audit finding AUD-209: Promotional discount proration across invoice line items leaves unallocated pennies on half-cent boundary splits.',
+    traceback_text='FAILED tests/test_discount_hidden.py::test_half_cent_bankers_rounding - AssertionError: Discount proration check failed at discount.py:24: allocated discount sum does not match target pool',
+    traceback_files=['discount.py'],
     repo=t2002_repo,
     hidden=t2002_hidden,
     ref=t2002_ref,
@@ -282,174 +102,49 @@ register_task(
     mutant2=t2002_m2,
     hidden_root_cause=False,
     visible_test_sensitive=True,
-    handbook_citations=["Rule H02"],
+    root_cause_only_with_exploration=False,
+    handbook_citations=['Rule H02'],
 )
 
-
-# Task 2003: Multi-currency FX Ledger (TAUGHT, HIDDEN ROOT CAUSE)
-t2003_repo = {
-    "ledger.py": '''"""Multi-currency ledger aggregator."""
-from fx_converter import convert_currency
-
-def record_converted_entry(ledger, amount_foreign, fx_rate):
-    """Converts foreign amount to base currency cents and records entry."""
-    base_cents = convert_currency(amount_foreign, fx_rate)
-    ledger.append(base_cents)
-    return sum(ledger)
-''',
-    "fx_converter.py": '''"""Foreign exchange converter."""
-def convert_currency(amount, rate):
-    # BUG: Float multiplication without banker's rounding
-    return int(amount * rate)
-''',
-    "tests/test_ledger.py": '''from ledger import record_converted_entry
-
-def test_integer_fx():
-    ledger = []
-    assert record_converted_entry(ledger, 100, 1.0) == 100
-'''
-}
-
-t2003_hidden = {
-    "tests/test_fx_hidden.py": '''from ledger import record_converted_entry
-from fx_converter import convert_currency
-
-def test_fx_bankers_rounding():
-    # 25.5 -> 26, 24.5 -> 24
-    assert record_converted_entry([], 10, 2.55) == 26
-    assert record_converted_entry([], 10, 2.45) == 24
-
-def test_fx_converter_direct():
-    assert convert_currency(10, 2.55) == 26
-    assert convert_currency(10, 2.45) == 24
-'''
-}
-
-t2003_ref = {
-    "fx_converter.py": '''"""Foreign exchange converter."""
-from decimal import Decimal, ROUND_HALF_EVEN
-
-def convert_currency(amount, rate):
-    d_amt = Decimal(str(amount))
-    d_rate = Decimal(str(rate))
-    return int((d_amt * d_rate).quantize(Decimal("1"), rounding=ROUND_HALF_EVEN))
-'''
-}
-
-t2003_m1 = {
-    "ledger.py": '''"""Multi-currency ledger aggregator."""
-from fx_converter import convert_currency
-
-def record_converted_entry(ledger, amount_foreign, fx_rate):
-    # Mutant 1: Edits ledger.py rather than root cause in fx_converter.py
-    base_cents = int(round(amount_foreign * fx_rate))
-    ledger.append(base_cents)
-    return sum(ledger)
-''',
-    "fx_converter.py": '''"""Foreign exchange converter."""
-def convert_currency(amount, rate):
-    return int(amount * rate)
-'''
-}
-
-t2003_m2 = {
-    "fx_converter.py": '''"""Foreign exchange converter."""
-def convert_currency(amount, rate):
-    # Mutant 2: Floor truncation
-    return int(amount * rate)
-'''
-}
-
+# Task 2003: Multi-Currency Fee Conversion (TAUGHT)
+t2003_repo = {'rates.py': '"""Foreign exchange conversion models."""\nfrom dataclasses import dataclass\nfrom typing import Dict, Optional\n\n@dataclass\nclass FxQuote:\n    base_currency: str\n    quote_currency: str\n    rate: float\n    provider: str = "ECB"\n\n    def is_inverted(self) -> bool:\n        return self.rate < 1.0\n\n@dataclass\nclass ConversionSummary:\n    source_cents: int\n    converted_cents: int\n    applied_rate: float\n', 'fx_engine.py': '"""Low-level exchange rate computation."""\nfrom typing import Tuple\n\ndef apply_fx_rate(cents: int, rate: float) -> int:\n    """Compute converted currency amount in cents."""\n    return int(cents * rate)\n\ndef compute_spread(cents: int, base_rate: float, spread_bps: int = 10) -> Tuple[int, float]:\n    effective_rate = base_rate * (1.0 + spread_bps / 10000.0)\n    return apply_fx_rate(cents, effective_rate), effective_rate\n', 'converter.py': '"""Currency amount converter interface."""\nfrom rates import FxQuote, ConversionSummary\nfrom fx_engine import apply_fx_rate\n\ndef convert_currency_amount(amount_cents: int, quote: FxQuote) -> int:\n    """Convert amount in base currency cents to quote currency cents.\n    amount_cents: source currency amount in cents.\n    quote: exchange rate quote.\n    """\n    return apply_fx_rate(amount_cents, quote.rate)\n\ndef build_conversion_summary(amount_cents: int, quote: FxQuote) -> ConversionSummary:\n    converted = convert_currency_amount(amount_cents, quote)\n    return ConversionSummary(source_cents=amount_cents, converted_cents=converted, applied_rate=quote.rate)\n', 'tests/test_fx.py': 'from converter import convert_currency_amount, build_conversion_summary\nfrom rates import FxQuote\n\ndef test_integer_rate():\n    quote = FxQuote("USD", "EUR", 2.0)\n    assert convert_currency_amount(100, quote) == 200\n\ndef test_summary_builder():\n    quote = FxQuote("USD", "GBP", 0.5)\n    s = build_conversion_summary(200, quote)\n    assert s.converted_cents == 100\n'}
+t2003_hidden = {'tests/test_fx_hidden.py': 'from converter import convert_currency_amount\nfrom rates import FxQuote\nfrom fx_engine import apply_fx_rate\n\ndef test_bankers_rounding_fx():\n    quote = FxQuote("USD", "JPY", 1.5)\n    assert convert_currency_amount(135, quote) == 202\n    assert convert_currency_amount(145, quote) == 218\n\ndef test_fx_engine_direct():\n    assert apply_fx_rate(135, 1.5) == 202\n    assert apply_fx_rate(145, 1.5) == 218\n'}
+t2003_ref = {'fx_engine.py': '"""Low-level exchange rate computation."""\nfrom decimal import Decimal, ROUND_HALF_EVEN\nfrom typing import Tuple\n\ndef apply_fx_rate(cents: int, rate: float) -> int:\n    """Compute converted currency amount in cents using banker\'s rounding."""\n    d_cents = Decimal(str(cents))\n    d_rate = Decimal(str(rate))\n    return int((d_cents * d_rate).quantize(Decimal("1"), rounding=ROUND_HALF_EVEN))\n\ndef compute_spread(cents: int, base_rate: float, spread_bps: int = 10) -> Tuple[int, float]:\n    effective_rate = base_rate * (1.0 + spread_bps / 10000.0)\n    return apply_fx_rate(cents, effective_rate), effective_rate\n'}
+t2003_m1 = {'converter.py': '"""Currency amount converter interface."""\nfrom rates import FxQuote, ConversionSummary\nfrom fx_engine import apply_fx_rate\nfrom decimal import Decimal, ROUND_HALF_EVEN\n\ndef convert_currency_amount(amount_cents: int, quote: FxQuote) -> int:\n    d_cents = Decimal(str(amount_cents))\n    d_rate = Decimal(str(quote.rate))\n    return int((d_cents * d_rate).quantize(Decimal("1"), rounding=ROUND_HALF_EVEN))\n\ndef build_conversion_summary(amount_cents: int, quote: FxQuote) -> ConversionSummary:\n    converted = convert_currency_amount(amount_cents, quote)\n    return ConversionSummary(source_cents=amount_cents, converted_cents=converted, applied_rate=quote.rate)\n'}
+t2003_m2 = {'fx_engine.py': '"""Low-level exchange rate computation."""\nfrom decimal import Decimal, ROUND_HALF_UP\nfrom typing import Tuple\n\ndef apply_fx_rate(cents: int, rate: float) -> int:\n    d_cents = Decimal(str(cents))\n    d_rate = Decimal(str(rate))\n    return int((d_cents * d_rate).quantize(Decimal("1"), rounding=ROUND_HALF_UP))\n\ndef compute_spread(cents: int, base_rate: float, spread_bps: int = 10) -> Tuple[int, float]:\n    effective_rate = base_rate * (1.0 + spread_bps / 10000.0)\n    return apply_fx_rate(cents, effective_rate), effective_rate\n'}
 register_task(
     tid=2003,
-    family="money_rounding",
-    name="Multi-currency FX Ledger",
-    class_tag="TAUGHT",
-    issue="Ledger FX entries disagree on half-cent boundaries.",
-    traceback_text="FAILED tests/test_fx_hidden.py::test_fx_bankers_rounding - in record_converted_entry (ledger.py:5): assert 25 == 26",
-    traceback_files=["ledger.py"],
+    family='money_rounding',
+    name='Multi-Currency Fee Conversion',
+    class_tag='TAUGHT',
+    issue='Payment gateway ticket PAY-501: Cross-border clearing failed settlement reconciliation on fractional cent conversion batches.',
+    traceback_text='FAILED tests/test_fx_hidden.py::test_bankers_rounding_fx - AssertionError: Conversion error at converter.py:12: target currency amount failed ledger balance check',
+    traceback_files=['converter.py'],
     repo=t2003_repo,
     hidden=t2003_hidden,
     ref=t2003_ref,
     mutant1=t2003_m1,
     mutant2=t2003_m2,
-    hidden_root_cause=True,  # Root cause is in fx_converter.py, not ledger.py
+    hidden_root_cause=True,
     visible_test_sensitive=False,
-    handbook_citations=["Rule H02"],
+    root_cause_only_with_exploration=True,
+    handbook_citations=['Rule H02'],
 )
 
-
-# Task 2004: Coupon Rebate Allocation (DISTRACTOR)
-t2004_repo = {
-    "rebate.py": '''"""Customer rebate allocation."""
-def calculate_rebate(gross_amount_cents, pct_rebate):
-    """Regulatory requirement: consumer refunds and rebates MUST always round UP
-    to the next whole cent (ceiling rule), overriding standard banker's rounding conventions.
-    """
-    # BUG: used truncation
-    return int(gross_amount_cents * pct_rebate)
-''',
-    "tests/test_rebate.py": '''from rebate import calculate_rebate
-
-def test_whole_cents():
-    assert calculate_rebate(100, 0.10) == 10
-
-def test_fractional_cent_rounds_up():
-    assert calculate_rebate(105, 0.10) == 11
-'''
-}
-
-t2004_hidden = {
-    "tests/test_rebate_hidden.py": '''from rebate import calculate_rebate
-
-def test_ceiling_rounding():
-    # Any fraction must round UP
-    assert calculate_rebate(101, 0.10) == 11 # 10.1 -> 11
-    assert calculate_rebate(105, 0.10) == 11 # 10.5 -> 11 (Banker's would say 10 or 10.5)
-    assert calculate_rebate(109, 0.10) == 11 # 10.9 -> 11
-'''
-}
-
-t2004_ref = {
-    "rebate.py": '''"""Customer rebate allocation."""
-import math
-
-def calculate_rebate(gross_amount_cents, pct_rebate):
-    """Regulatory requirement: consumer refunds and rebates MUST always round UP
-    to the next whole cent (ceiling rule), overriding standard banker's rounding conventions.
-    """
-    return int(math.ceil(gross_amount_cents * pct_rebate))
-'''
-}
-
-t2004_m1 = {
-    "rebate.py": '''"""Customer rebate allocation."""
-from decimal import Decimal, ROUND_HALF_EVEN
-
-def calculate_rebate(gross_amount_cents, pct_rebate):
-    # Mutant 1: Blindly applies Handbook Rule H02 (Banker's rounding)
-    d_cents = Decimal(str(gross_amount_cents))
-    d_pct = Decimal(str(pct_rebate))
-    return int((d_cents * d_pct).quantize(Decimal("1"), rounding=ROUND_HALF_EVEN))
-'''
-}
-
-t2004_m2 = {
-    "rebate.py": '''"""Customer rebate allocation."""
-def calculate_rebate(gross_amount_cents, pct_rebate):
-    # Mutant 2: Floor truncation
-    return int(gross_amount_cents * pct_rebate)
-'''
-}
-
+# Task 2004: Legacy Payroll Tax Ceiling (DISTRACTOR)
+t2004_repo = {'models.py': '"""Payroll record data models."""\nfrom dataclasses import dataclass\nfrom typing import Optional, Dict, Any\n\n@dataclass\nclass WithholdingRecord:\n    employee_id: int\n    gross_cents: int\n    tax_cents: int\n    exempt: bool = False\n    state_code: str = "CA"\n\n    def net_pay(self) -> int:\n        return self.gross_cents - self.tax_cents\n\n    def to_payload(self) -> Dict[str, Any]:\n        return {\n            "employee_id": self.employee_id,\n            "gross_cents": self.gross_cents,\n            "tax_cents": self.tax_cents,\n            "exempt": self.exempt,\n            "state_code": self.state_code,\n        }\n', 'payroll.py': '"""Payroll statutory tax calculation."""\nimport math\nfrom models import WithholdingRecord\n\ndef compute_payroll_withholding(gross_cents: int, tax_rate: float) -> int:\n    """Compute statutory payroll tax withholding.\n    Statutory requirement: payroll withholding MUST round fractional cents UP (ceiling)\n    to guarantee tax obligations are never under-withheld. Do NOT use banker\'s rounding.\n    """\n    return int(gross_cents * tax_rate)\n\ndef build_withholding_record(employee_id: int, gross_cents: int, tax_rate: float, exempt: bool = False) -> WithholdingRecord:\n    if exempt:\n        return WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=0, exempt=True)\n    tax = compute_payroll_withholding(gross_cents, tax_rate)\n    return WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=tax)\n', 'validator.py': '"""Payroll audit validators."""\nfrom models import WithholdingRecord\n\ndef verify_withholding(record: WithholdingRecord, minimum_cents: int) -> bool:\n    return record.tax_cents >= minimum_cents\n', 'tests/test_payroll.py': 'from payroll import compute_payroll_withholding, build_withholding_record\n\ndef test_integer_withholding():\n    assert compute_payroll_withholding(1000, 0.10) == 100\n    rec = build_withholding_record(101, 2000, 0.05)\n    assert rec.tax_cents == 100\n\ndef test_fractional_withholding_visible():\n    assert compute_payroll_withholding(105, 0.10) == 11\n'}
+t2004_hidden = {'tests/test_payroll_hidden.py': 'import pytest\nfrom payroll import compute_payroll_withholding\n\ndef test_statutory_ceiling_withholding():\n    assert compute_payroll_withholding(125, 0.10) == 13\n    assert compute_payroll_withholding(145, 0.10) == 15\n    assert compute_payroll_withholding(101, 0.10) == 11\n'}
+t2004_ref = {'payroll.py': '"""Payroll statutory tax calculation."""\nimport math\nfrom models import WithholdingRecord\n\ndef compute_payroll_withholding(gross_cents: int, tax_rate: float) -> int:\n    """Compute statutory payroll tax withholding.\n    Statutory requirement: payroll withholding MUST round fractional cents UP (ceiling)\n    to guarantee tax obligations are never under-withheld. Do NOT use banker\'s rounding.\n    """\n    return int(math.ceil(gross_cents * tax_rate))\n\ndef build_withholding_record(employee_id: int, gross_cents: int, tax_rate: float, exempt: bool = False) -> WithholdingRecord:\n    if exempt:\n        return WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=0, exempt=True)\n    tax = compute_payroll_withholding(gross_cents, tax_rate)\n    return WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=tax)\n'}
+t2004_m1 = {'payroll.py': '"""Payroll statutory tax calculation."""\nfrom decimal import Decimal, ROUND_HALF_EVEN\nfrom models import WithholdingRecord\n\ndef compute_payroll_withholding(gross_cents: int, tax_rate: float) -> int:\n    # Mutant 1: Blindly applies Banker\'s rounding\n    d_gross = Decimal(str(gross_cents))\n    d_rate = Decimal(str(tax_rate))\n    return int((d_gross * d_rate).quantize(Decimal("1"), rounding=ROUND_HALF_EVEN))\n\ndef build_withholding_record(employee_id: int, gross_cents: int, tax_rate: float, exempt: bool = False) -> WithholdingRecord:\n    if exempt:\n        return WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=0, exempt=True)\n    tax = compute_payroll_withholding(gross_cents, tax_rate)\n    return WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=tax)\n'}
+t2004_m2 = {'payroll.py': '"""Payroll statutory tax calculation."""\nfrom models import WithholdingRecord\n\ndef compute_payroll_withholding(gross_cents: int, tax_rate: float) -> int:\n    # Mutant 2: Truncation\n    return int(gross_cents * tax_rate)\n\ndef build_withholding_record(employee_id: int, gross_cents: int, tax_rate: float, exempt: bool = False) -> WithholdingRecord:\n    if exempt:\n        return WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=0, exempt=True)\n    tax = compute_payroll_withholding(gross_cents, tax_rate)\n    return WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=tax)\n'}
 register_task(
     tid=2004,
-    family="money_rounding",
-    name="Coupon Rebate Allocation",
-    class_tag="DISTRACTOR",
-    issue="Rebates must round up per regulatory mandate, but currently truncate.",
-    traceback_text="FAILED tests/test_rebate_hidden.py::test_ceiling_rounding - assert 10 == 11",
-    traceback_files=["rebate.py"],
+    family='money_rounding',
+    name='Legacy Payroll Tax Ceiling',
+    class_tag='DISTRACTOR',
+    issue='Compliance alert PAY-89: Statutory state tax withholding calculation is under-withholding on payroll processing batches.',
+    traceback_text='FAILED tests/test_payroll_hidden.py::test_statutory_ceiling_withholding - AssertionError: Compliance error at payroll.py:12: calculated withholding failed statutory minimum threshold check',
+    traceback_files=['payroll.py'],
     repo=t2004_repo,
     hidden=t2004_hidden,
     ref=t2004_ref,
@@ -457,99 +152,24 @@ register_task(
     mutant2=t2004_m2,
     hidden_root_cause=False,
     visible_test_sensitive=True,
-    handbook_citations=["Rule H02 (Distractor: ticket explicitly overrides with ceiling rule)"],
+    root_cause_only_with_exploration=False,
+    handbook_citations=['Rule H02'],
 )
 
-
-# ==============================================================================
-# FAMILY 2: config_merge (Tasks 2005 - 2008)
-# ==============================================================================
-
-# Task 2005: Hierarchical App Settings (STATED)
-t2005_repo = {
-    "settings.py": '''"""Application configuration loader."""
-def merge_settings(base, override):
-    """Merge base settings dict with override dict recursively.
-    Sibling keys in nested dicts must be preserved.
-    Base and override dicts must not be mutated.
-    """
-    # BUG: shallow update drops sibling keys
-    res = dict(base)
-    res.update(override)
-    return res
-''',
-    "tests/test_settings.py": '''from settings import merge_settings
-
-def test_flat():
-    assert merge_settings({"a": 1}, {"b": 2}) == {"a": 1, "b": 2}
-
-def test_nested_sibling_retention():
-    base = {"db": {"host": "localhost", "port": 5432}}
-    override = {"db": {"port": 5433}}
-    res = merge_settings(base, override)
-    assert res["db"]["host"] == "localhost"
-    assert res["db"]["port"] == 5433
-'''
-}
-
-t2005_hidden = {
-    "tests/test_settings_hidden.py": '''from settings import merge_settings
-
-def test_nested_siblings_and_immutability():
-    base = {"db": {"host": "localhost", "port": 5432}}
-    override = {"db": {"port": 5433}}
-    res = merge_settings(base, override)
-    assert res == {"db": {"host": "localhost", "port": 5433}}
-    assert base["db"]["port"] == 5432 # immutable
-'''
-}
-
-t2005_ref = {
-    "settings.py": '''"""Application configuration loader."""
-import copy
-
-def merge_settings(base, override):
-    result = copy.deepcopy(base)
-    for k, v in override.items():
-        if k in result and isinstance(result[k], dict) and isinstance(v, dict):
-            result[k] = merge_settings(result[k], v)
-        else:
-            result[k] = copy.deepcopy(v)
-    return result
-'''
-}
-
-t2005_m1 = {
-    "settings.py": '''"""Application configuration loader."""
-def merge_settings(base, override):
-    # Mutant 1: Mutates base in place
-    for k, v in override.items():
-        if k in base and isinstance(base[k], dict) and isinstance(v, dict):
-            base[k] = merge_settings(base[k], v)
-        else:
-            base[k] = v
-    return base
-'''
-}
-
-t2005_m2 = {
-    "settings.py": '''"""Application configuration loader."""
-def merge_settings(base, override):
-    # Mutant 2: Shallow copy
-    res = dict(base)
-    res.update(override)
-    return res
-'''
-}
-
+# Task 2005: Tenant Routing Configuration (STATED)
+t2005_repo = {'models.py': '"""Configuration models for network routing."""\nfrom dataclasses import dataclass, field\nfrom typing import Dict, Any, Optional\n\n@dataclass\nclass RouteProfile:\n    tenant_id: str\n    settings: Dict[str, Any]\n    active: bool = True\n\n    def get_setting(self, path: str, default: Any = None) -> Any:\n        keys = path.split(".")\n        val = self.settings\n        for k in keys:\n            if isinstance(val, dict) and k in val:\n                val = val[k]\n            else:\n                return default\n        return val\n', 'schema.py': '"""Routing validation schemas."""\nfrom typing import Dict, Any\n\ndef validate_route_keys(config: Dict[str, Any]) -> bool:\n    required = ["retries", "timeout"]\n    return any(k in config for k in required)\n\ndef get_default_network_settings() -> Dict[str, Any]:\n    return {"network": {"retries": 3, "timeout": 30}}\n', 'routing.py': '"""Tenant routing configuration aggregator."""\nimport copy\nfrom typing import Dict, Any\nfrom models import RouteProfile\nfrom schema import validate_route_keys\n\ndef merge_tenant_routing(base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> Dict[str, Any]:\n    """Merge tenant overrides into base configuration.\n    Inputs must remain strictly immutable; the function must return a newly allocated deep copy.\n    """\n    merged = dict(base_config)\n    merged.update(tenant_overrides)\n    return merged\n\ndef build_route_profile(tenant_id: str, base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> RouteProfile:\n    cfg = merge_tenant_routing(base_config, tenant_overrides)\n    return RouteProfile(tenant_id=tenant_id, settings=cfg)\n', 'tests/test_routing.py': 'from routing import merge_tenant_routing, build_route_profile\n\ndef test_flat_merge():\n    base = {"retries": 3, "timeout": 30}\n    over = {"timeout": 10}\n    res = merge_tenant_routing(base, over)\n    assert res == {"retries": 3, "timeout": 10}\n    assert base == {"retries": 3, "timeout": 30}\n\ndef test_profile_builder():\n    p = build_route_profile("tenant-1", {"host": "internal"}, {"port": 8080})\n    assert p.settings["port"] == 8080\n\ndef test_nested_immutability_visible():\n    base = {"network": {"retries": 3}}\n    over = {"network": {"timeout": 5}}\n    merged = merge_tenant_routing(base, over)\n    merged["network"]["retries"] = 99\n    assert base["network"]["retries"] == 3\n'}
+t2005_hidden = {'tests/test_routing_hidden.py': 'import pytest\nfrom routing import merge_tenant_routing\n\ndef test_deep_immutability_nested():\n    base = {"db": {"host": "localhost", "pool": {"size": 10, "max": 20}}}\n    over = {"db": {"pool": {"size": 5}}}\n    merged = merge_tenant_routing(base, over)\n    \n    assert merged["db"]["pool"]["size"] == 5\n    assert merged["db"]["pool"]["max"] == 20\n    assert merged["db"]["host"] == "localhost"\n    \n    merged["db"]["pool"]["max"] = 999\n    assert base["db"]["pool"]["max"] == 20\n'}
+t2005_ref = {'routing.py': '"""Tenant routing configuration aggregator."""\nimport copy\nfrom typing import Dict, Any\nfrom models import RouteProfile\nfrom schema import validate_route_keys\n\ndef _deep_merge_dict(base: dict, overrides: dict) -> dict:\n    res = copy.deepcopy(base)\n    for key, value in overrides.items():\n        if key in res and isinstance(res[key], dict) and isinstance(value, dict):\n            res[key] = _deep_merge_dict(res[key], value)\n        else:\n            res[key] = copy.deepcopy(value)\n    return res\n\ndef merge_tenant_routing(base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> Dict[str, Any]:\n    """Merge tenant overrides into base configuration.\n    Inputs must remain strictly immutable; the function must return a newly allocated deep copy.\n    """\n    return _deep_merge_dict(base_config, tenant_overrides)\n\ndef build_route_profile(tenant_id: str, base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> RouteProfile:\n    cfg = merge_tenant_routing(base_config, tenant_overrides)\n    return RouteProfile(tenant_id=tenant_id, settings=cfg)\n'}
+t2005_m1 = {'routing.py': '"""Tenant routing configuration aggregator."""\nfrom typing import Dict, Any\nfrom models import RouteProfile\n\ndef merge_tenant_routing(base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> Dict[str, Any]:\n    merged = base_config.copy()\n    merged.update(tenant_overrides)\n    return merged\n\ndef build_route_profile(tenant_id: str, base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> RouteProfile:\n    cfg = merge_tenant_routing(base_config, tenant_overrides)\n    return RouteProfile(tenant_id=tenant_id, settings=cfg)\n'}
+t2005_m2 = {'routing.py': '"""Tenant routing configuration aggregator."""\nfrom typing import Dict, Any\nfrom models import RouteProfile\n\ndef merge_tenant_routing(base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> Dict[str, Any]:\n    base_config.update(tenant_overrides)\n    return base_config\n\ndef build_route_profile(tenant_id: str, base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> RouteProfile:\n    cfg = merge_tenant_routing(base_config, tenant_overrides)\n    return RouteProfile(tenant_id=tenant_id, settings=cfg)\n'}
 register_task(
     tid=2005,
-    family="config_merge",
-    name="Hierarchical App Settings",
-    class_tag="STATED",
-    issue="merge_settings overwrites entire nested dictionaries, losing sibling configuration parameters.",
-    traceback_text="FAILED tests/test_settings_hidden.py::test_nested_siblings_and_immutability - KeyError: 'host'",
-    traceback_files=["settings.py"],
+    family='config_merge',
+    name='Tenant Routing Configuration',
+    class_tag='STATED',
+    issue='Production outage OUT-104: Dynamic tenant routing update altered default network retry policies across multi-tenant worker nodes.',
+    traceback_text='FAILED tests/test_routing_hidden.py::test_deep_immutability_nested - AssertionError: Configuration aliasing at routing.py:16: base configuration modified by downstream request handler',
+    traceback_files=['routing.py'],
     repo=t2005_repo,
     hidden=t2005_hidden,
     ref=t2005_ref,
@@ -557,108 +177,24 @@ register_task(
     mutant2=t2005_m2,
     hidden_root_cause=False,
     visible_test_sensitive=True,
-    handbook_citations=["Rule H03"],
+    root_cause_only_with_exploration=False,
+    handbook_citations=['Rule H03'],
 )
 
-
-# Task 2006: Plugin Parameter Resolver (TAUGHT, HIDDEN ROOT CAUSE)
-t2006_repo = {
-    "plugin_manager.py": '''"""Plugin configuration manager."""
-from dict_combiner import combine_defaults
-
-def apply_plugin_defaults(defaults, user_opts):
-    """Applies user options over plugin defaults according to company immutability invariants.
-    """
-    return combine_defaults(defaults, user_opts)
-''',
-    "dict_combiner.py": '''"""Low-level configuration combiner."""
-def combine_defaults(defaults, user_opts):
-    # BUG: mutates user_opts and shares references
-    for k, v in defaults.items():
-        if k not in user_opts:
-            user_opts[k] = v
-    return user_opts
-''',
-    "tests/test_plugin.py": '''from plugin_manager import apply_plugin_defaults
-
-def test_missing_filled():
-    assert apply_plugin_defaults({"retries": 3}, {}) == {"retries": 3}
-'''
-}
-
-t2006_hidden = {
-    "tests/test_plugin_hidden.py": '''from plugin_manager import apply_plugin_defaults
-from dict_combiner import combine_defaults
-
-def test_immutability_and_deep_isolation():
-    defaults = {"auth": {"type": "bearer", "scopes": ["read"]}}
-    user_opts = {"auth": {"type": "oauth"}}
-    res = apply_plugin_defaults(defaults, user_opts)
-    assert res["auth"]["scopes"] == ["read"]
-    res["auth"]["scopes"].append("write")
-    assert defaults["auth"]["scopes"] == ["read"] # Defaults not corrupted
-    assert "scopes" not in user_opts["auth"] # User opts not mutated
-
-def test_combiner_direct():
-    d = {"sub": {"a": [1]}}
-    res = combine_defaults(d, {})
-    res["sub"]["a"].append(2)
-    assert d["sub"]["a"] == [1]
-'''
-}
-
-t2006_ref = {
-    "dict_combiner.py": '''"""Low-level configuration combiner."""
-import copy
-
-def combine_defaults(defaults, user_opts):
-    result = copy.deepcopy(defaults)
-    for k, v in user_opts.items():
-        if k in result and isinstance(result[k], dict) and isinstance(v, dict):
-            result[k] = combine_defaults(result[k], v)
-        else:
-            result[k] = copy.deepcopy(v)
-    return result
-'''
-}
-
-t2006_m1 = {
-    "plugin_manager.py": '''"""Plugin configuration manager."""
-from dict_combiner import combine_defaults
-import copy
-
-def apply_plugin_defaults(defaults, user_opts):
-    # Mutant 1: Workaround in plugin_manager.py without fixing dict_combiner.py
-    res = copy.deepcopy(defaults)
-    res.update(copy.deepcopy(user_opts))
-    return res
-''',
-    "dict_combiner.py": '''"""Low-level configuration combiner."""
-def combine_defaults(defaults, user_opts):
-    for k, v in defaults.items():
-        if k not in user_opts:
-            user_opts[k] = v
-    return user_opts
-'''
-}
-
-t2006_m2 = {
-    "dict_combiner.py": '''"""Low-level configuration combiner."""
-def combine_defaults(defaults, user_opts):
-    # Mutant 2: Mutates defaults in place
-    defaults.update(user_opts)
-    return defaults
-'''
-}
-
+# Task 2006: Database Pool Settings (TAUGHT)
+t2006_repo = {'options.py': '"""Database connection options schemas."""\nfrom dataclasses import dataclass\nfrom typing import Dict, Any, Optional\n\n@dataclass\nclass ConnectionOptions:\n    dsn: str\n    pool_params: Dict[str, Any]\n    max_overflow: int = 10\n    timeout_seconds: float = 30.0\n\n    def is_ssl(self) -> bool:\n        return "sslmode" in self.pool_params\n\n    def get_param(self, key: str, fallback: Any = None) -> Any:\n        return self.pool_params.get(key, fallback)\n\n    def summary(self) -> str:\n        return f"Pool(dsn={self.dsn}, params={len(self.pool_params)})"\n', 'pool.py': '"""Database pool manager."""\nfrom typing import Dict, Any\nfrom env_loader import merge_env_settings\nfrom options import ConnectionOptions\n\ndef configure_pool(base_template: Dict[str, Any], overrides: Dict[str, Any]) -> ConnectionOptions:\n    """Configure connection pool options from template and overrides.\n    Returns ConnectionOptions instance.\n    """\n    settings = merge_env_settings(base_template, overrides)\n    dsn = settings.get("dsn", "sqlite:///:memory:")\n    return ConnectionOptions(dsn=dsn, pool_params=settings.get("pool", {}))\n', 'env_loader.py': '"""Environment settings loader and merger."""\nfrom typing import Dict, Any\n\nDEFAULT_CONN_TIMEOUT = 30\n\ndef load_system_env() -> Dict[str, Any]:\n    return {"timeout": DEFAULT_CONN_TIMEOUT}\n\ndef merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:\n    merged = dict(base_settings)\n    merged.update(override_settings)\n    return merged\n', 'tests/test_pool.py': 'from pool import configure_pool\n\ndef test_basic_pool_config():\n    opts = configure_pool({"dsn": "pg://prod", "pool": {"min": 5}}, {"pool": {"max": 20}})\n    assert opts.dsn == "pg://prod"\n'}
+t2006_hidden = {'tests/test_pool_hidden.py': 'import pytest\nfrom pool import configure_pool\nfrom env_loader import merge_env_settings\n\ndef test_pool_template_immutability():\n    base = {"dsn": "pg://master", "pool": {"min": 2, "max": 10, "timeout": 30}}\n    over = {"pool": {"max": 50}}\n    opts = configure_pool(base, over)\n    \n    assert opts.pool_params["max"] == 50\n    assert opts.pool_params["min"] == 2\n    \n    opts.pool_params["min"] = 99\n    assert base["pool"]["min"] == 2\n\ndef test_env_loader_direct():\n    b = {"sub": {"k": 1}}\n    o = {"sub": {"k2": 2}}\n    m = merge_env_settings(b, o)\n    m["sub"]["k"] = 99\n    assert b["sub"]["k"] == 1\n'}
+t2006_ref = {'env_loader.py': '"""Environment settings loader and merger."""\nimport copy\nfrom typing import Dict, Any\n\nDEFAULT_CONN_TIMEOUT = 30\n\ndef load_system_env() -> Dict[str, Any]:\n    return {"timeout": DEFAULT_CONN_TIMEOUT}\n\ndef merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:\n    merged = copy.deepcopy(base_settings)\n    for key, value in override_settings.items():\n        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):\n            merged[key] = copy.deepcopy(merged[key])\n            merged[key].update(copy.deepcopy(value))\n        else:\n            merged[key] = copy.deepcopy(value)\n    return merged\n'}
+t2006_m1 = {'pool.py': '"""Database pool manager."""\nimport copy\nfrom typing import Dict, Any\nfrom env_loader import merge_env_settings\nfrom options import ConnectionOptions\n\ndef configure_pool(base_template: Dict[str, Any], overrides: Dict[str, Any]) -> ConnectionOptions:\n    safe_base = copy.deepcopy(base_template)\n    safe_over = copy.deepcopy(overrides)\n    settings = merge_env_settings(safe_base, safe_over)\n    dsn = settings.get("dsn", "sqlite:///:memory:")\n    return ConnectionOptions(dsn=dsn, pool_params=copy.deepcopy(settings.get("pool", {})))\n'}
+t2006_m2 = {'env_loader.py': '"""Environment settings loader and merger."""\nfrom typing import Dict, Any\n\nDEFAULT_CONN_TIMEOUT = 30\n\ndef load_system_env() -> Dict[str, Any]:\n    return {"timeout": DEFAULT_CONN_TIMEOUT}\n\ndef merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:\n    merged = base_settings.copy()\n    merged.update(override_settings)\n    return merged\n'}
 register_task(
     tid=2006,
-    family="config_merge",
-    name="Plugin Parameter Resolver",
-    class_tag="TAUGHT",
-    issue="Plugin parameter resolution corrupts global default structures due to mutable reference sharing.",
-    traceback_text="FAILED tests/test_plugin_hidden.py::test_immutability_and_deep_isolation - in apply_plugin_defaults (plugin_manager.py:6): AssertionError",
-    traceback_files=["plugin_manager.py"],
+    family='config_merge',
+    name='Database Pool Settings',
+    class_tag='TAUGHT',
+    issue='Security ticket SEC-402: Shared database connection pool defaults corrupted across worker threads following tenant override.',
+    traceback_text='FAILED tests/test_pool_hidden.py::test_pool_template_immutability - AssertionError: Shared pool settings corrupted at pool.py:12: global template parameters mutated during pool configuration',
+    traceback_files=['pool.py'],
     repo=t2006_repo,
     hidden=t2006_hidden,
     ref=t2006_ref,
@@ -666,179 +202,49 @@ register_task(
     mutant2=t2006_m2,
     hidden_root_cause=True,
     visible_test_sensitive=False,
-    handbook_citations=["Rule H03"],
+    root_cause_only_with_exploration=True,
+    handbook_citations=['Rule H03'],
 )
 
-
-# Task 2007: Cloud Environment Layering (STATED, HIDDEN ROOT CAUSE)
-t2007_repo = {
-    "app.py": '''"""Application runner."""
-from env_loader import load_env_layers
-
-def init_app(base_cfg, env_name):
-    cfg = load_env_layers(base_cfg, env_name)
-    return cfg["cluster"]["region"], cfg["cluster"]["nodes"]
-''',
-    "env_loader.py": '''"""Environment file loader."""
-def load_env_layers(base_cfg, env_name):
-    # BUG: returns shallow dict replacement
-    return {"cluster": {"region": "us-east-1"}}
-''',
-    "tests/test_app.py": '''from app import init_app
-
-def test_app_init():
-    reg, nodes = init_app({"cluster": {"region": "us-east-1", "nodes": 3}}, "prod")
-    assert reg == "us-east-1"
-'''
-}
-
-t2007_hidden = {
-    "tests/test_app_hidden.py": '''import pytest
-from app import init_app
-from env_loader import load_env_layers
-
-def test_app_nodes_preserved():
-    reg, nodes = init_app({"cluster": {"region": "us-west-2", "nodes": 5}}, "prod")
-    assert reg == "us-east-1"
-    assert nodes == 5
-
-def test_env_loader_direct():
-    cfg = load_env_layers({"cluster": {"region": "us-west-2", "nodes": 8}}, "prod")
-    assert cfg["cluster"]["nodes"] == 8
-'''
-}
-
-t2007_ref = {
-    "env_loader.py": '''"""Environment file loader."""
-import copy
-
-def load_env_layers(base_cfg, env_name):
-    res = copy.deepcopy(base_cfg)
-    if "cluster" not in res:
-        res["cluster"] = {}
-    res["cluster"]["region"] = "us-east-1"
-    return res
-'''
-}
-
-t2007_m1 = {
-    "app.py": '''"""Application runner."""
-from env_loader import load_env_layers
-
-def init_app(base_cfg, env_name):
-    # Mutant 1: Modifies app.py rather than env_loader.py
-    cfg = load_env_layers(base_cfg, env_name)
-    nodes = base_cfg.get("cluster", {}).get("nodes", 1)
-    return cfg["cluster"]["region"], nodes
-''',
-    "env_loader.py": '''"""Environment file loader."""
-def load_env_layers(base_cfg, env_name):
-    return {"cluster": {"region": "us-east-1"}}
-'''
-}
-
-t2007_m2 = {
-    "env_loader.py": '''"""Environment file loader."""
-def load_env_layers(base_cfg, env_name):
-    # Mutant 2: Hardcoded dummy
-    return {"cluster": {"region": "us-east-1", "nodes": 1}}
-'''
-}
-
+# Task 2007: Pipeline Step Definition (STATED)
+t2007_repo = {'defaults.py': '"""Default step parameters."""\nfrom typing import Dict, Any\n\nDEFAULT_PIPELINE_OPTS = {\n    "engine": "v2",\n    "retries": {"max": 3, "backoff": 1.5},\n    "monitoring": {"enabled": True, "sample_rate": 0.1},\n    "concurrency": {"max_workers": 4, "queue_depth": 100}\n}\n\ndef get_base_options() -> Dict[str, Any]:\n    return DEFAULT_PIPELINE_OPTS\n\ndef is_feature_enabled(feature_name: str) -> bool:\n    return DEFAULT_PIPELINE_OPTS.get(feature_name, {}).get("enabled", False)\n', 'step_builder.py': '"""Low-level step configuration compiler."""\nfrom typing import Dict, Any\n\ndef compile_step_config(name: str, base_opts: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:\n    res = dict(base_opts)\n    res["name"] = name\n    res.update(overrides)\n    return res\n\ndef format_step_manifest(spec: Dict[str, Any]) -> str:\n    name = spec.get("name", "unnamed")\n    engine = spec.get("engine", "default")\n    return f"StageManifest(name={name}, engine={engine})"\n', 'pipeline.py': '"""Pipeline stage configurator."""\nfrom typing import Dict, Any, List\nfrom step_builder import compile_step_config, format_step_manifest\nfrom defaults import DEFAULT_PIPELINE_OPTS\n\ndef build_stage_spec(stage_name: str, step_overrides: Dict[str, Any]) -> Dict[str, Any]:\n    """Compile pipeline stage specification.\n    Inputs must remain immutable and nested options must be defensively copied.\n    """\n    return compile_step_config(stage_name, DEFAULT_PIPELINE_OPTS, step_overrides)\n\ndef build_multi_stage_pipeline(stage_configs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:\n    return [build_stage_spec(f"stage-{i}", cfg) for i, cfg in enumerate(stage_configs)]\n', 'tests/test_pipeline.py': 'from pipeline import build_stage_spec\n\ndef test_stage_naming():\n    spec = build_stage_spec("ingest", {"engine": "v3"})\n    assert spec["name"] == "ingest"\n    assert spec["engine"] == "v3"\n'}
+t2007_hidden = {'tests/test_pipeline_hidden.py': 'import pytest\nfrom pipeline import build_stage_spec\nfrom step_builder import compile_step_config\nfrom defaults import DEFAULT_PIPELINE_OPTS\n\ndef test_pipeline_nested_immutability():\n    spec = build_stage_spec("transform", {"retries": {"max": 10}})\n    assert spec["retries"]["max"] == 10\n    assert spec["retries"]["backoff"] == 1.5\n    \n    spec["retries"]["backoff"] = 99.0\n    assert DEFAULT_PIPELINE_OPTS["retries"]["backoff"] == 1.5\n\ndef test_step_builder_direct():\n    b = {"r": {"m": 1}}\n    o = {"r": {"m": 2}}\n    s = compile_step_config("test", b, o)\n    s["r"]["m"] = 99\n    assert b["r"]["m"] == 1\n'}
+t2007_ref = {'step_builder.py': '"""Low-level step configuration compiler."""\nimport copy\nfrom typing import Dict, Any\n\ndef compile_step_config(name: str, base_opts: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:\n    res = copy.deepcopy(base_opts)\n    res["name"] = name\n    for k, v in overrides.items():\n        if k in res and isinstance(res[k], dict) and isinstance(v, dict):\n            res[k] = copy.deepcopy(res[k])\n            res[k].update(copy.deepcopy(v))\n        else:\n            res[k] = copy.deepcopy(v)\n    return res\n\ndef format_step_manifest(spec: Dict[str, Any]) -> str:\n    name = spec.get("name", "unnamed")\n    engine = spec.get("engine", "default")\n    return f"StageManifest(name={name}, engine={engine})"\n'}
+t2007_m1 = {'pipeline.py': '"""Pipeline stage configurator."""\nimport copy\nfrom typing import Dict, Any\nfrom step_builder import compile_step_config\nfrom defaults import DEFAULT_PIPELINE_OPTS\n\ndef build_stage_spec(stage_name: str, step_overrides: Dict[str, Any]) -> Dict[str, Any]:\n    clean_base = copy.deepcopy(DEFAULT_PIPELINE_OPTS)\n    clean_over = copy.deepcopy(step_overrides)\n    res = compile_step_config(stage_name, clean_base, clean_over)\n    return copy.deepcopy(res)\n'}
+t2007_m2 = {'step_builder.py': '"""Low-level step configuration compiler."""\nfrom typing import Dict, Any\n\ndef compile_step_config(name: str, base_opts: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:\n    res = base_opts.copy()\n    res["name"] = name\n    res.update(overrides)\n    return res\n\ndef format_step_manifest(spec: Dict[str, Any]) -> str:\n    name = spec.get("name", "unnamed")\n    engine = spec.get("engine", "default")\n    return f"StageManifest(name={name}, engine={engine})"\n'}
 register_task(
     tid=2007,
-    family="config_merge",
-    name="Cloud Environment Layering",
-    class_tag="STATED",
-    issue="Layering cloud environments drops node cluster sizing configuration.",
-    traceback_text="FAILED tests/test_app_hidden.py::test_app_nodes_preserved - in init_app (app.py:6): KeyError: 'nodes'",
-    traceback_files=["app.py"],
+    family='config_merge',
+    name='Pipeline Step Definition',
+    class_tag='STATED',
+    issue='Workflow engine bug WFL-301: Stage retry policy overrides mutated global default execution parameters across sequential pipeline steps.',
+    traceback_text='FAILED tests/test_pipeline_hidden.py::test_pipeline_nested_immutability - AssertionError: Shared pipeline defaults mutated at pipeline.py:11: default parameters corrupted by previous step execution',
+    traceback_files=['pipeline.py'],
     repo=t2007_repo,
     hidden=t2007_hidden,
     ref=t2007_ref,
     mutant1=t2007_m1,
     mutant2=t2007_m2,
-    hidden_root_cause=True,  # Bug is in env_loader.py, not app.py
+    hidden_root_cause=True,
     visible_test_sensitive=False,
-    handbook_citations=["Rule H03"],
+    root_cause_only_with_exploration=True,
+    handbook_citations=['Rule H03'],
 )
 
-
-# Task 2008: Audit Policy Config (DISTRACTOR)
-t2008_repo = {
-    "fast_merge.py": '''"""High-performance audit policy merger."""
-def update_policy_in_place(active_policy, updates):
-    """Performance-critical security cache: in-place dictionary mutation is EXPLICITLY REQUIRED
-    for memory reuse and shared cache synchronization. Do NOT create a copy; callers rely on identity.
-    """
-    # BUG: returns new dict instead of updating in-place
-    res = dict(active_policy)
-    res.update(updates)
-    return res
-''',
-    "tests/test_fast_merge.py": '''from fast_merge import update_policy_in_place
-
-def test_basic_merge():
-    p = {"role": "guest"}
-    assert update_policy_in_place(p, {"role": "admin"})["role"] == "admin"
-
-def test_in_place_identity():
-    p = {"role": "guest"}
-    res = update_policy_in_place(p, {"role": "admin"})
-    assert res is p
-'''
-}
-
-t2008_hidden = {
-    "tests/test_fast_merge_hidden.py": '''from fast_merge import update_policy_in_place
-
-def test_strict_identity_and_mutation():
-    p = {"role": "guest", "flags": [1]}
-    res = update_policy_in_place(p, {"flags": [1, 2]})
-    assert res is p # Caller identity contract
-    assert p["flags"] == [1, 2]
-'''
-}
-
-t2008_ref = {
-    "fast_merge.py": '''"""High-performance audit policy merger."""
-def update_policy_in_place(active_policy, updates):
-    """Performance-critical security cache: in-place dictionary mutation is EXPLICITLY REQUIRED
-    for memory reuse and shared cache synchronization. Do NOT create a copy; callers rely on identity.
-    """
-    active_policy.update(updates)
-    return active_policy
-'''
-}
-
-t2008_m1 = {
-    "fast_merge.py": '''"""High-performance audit policy merger."""
-import copy
-
-def update_policy_in_place(active_policy, updates):
-    # Mutant 1: Blindly applies Handbook Rule H03 (Immutability / deepcopy)
-    res = copy.deepcopy(active_policy)
-    res.update(updates)
-    return res
-'''
-}
-
-t2008_m2 = {
-    "fast_merge.py": '''"""High-performance audit policy merger."""
-def update_policy_in_place(active_policy, updates):
-    # Mutant 2: No-op
-    return active_policy
-'''
-}
-
+# Task 2008: Live Session State Accumulator (DISTRACTOR)
+t2008_repo = {'state.py': '"""Session state accumulator model."""\nfrom dataclasses import dataclass\nfrom typing import Dict, Any, List\n\n@dataclass\nclass SessionEnvelope:\n    session_id: str\n    data: Dict[str, Any]\n    version: int = 1\n    tags: List[str] = None\n\n    def __post_init__(self):\n        if self.tags is None:\n            self.tags = ["active"]\n\n    def get_metric(self, key: str) -> Any:\n        return self.data.get(key)\n\n    def is_valid(self) -> bool:\n        return bool(self.session_id and isinstance(self.data, dict))\n', 'session.py': '"""Real-time live session accumulator."""\nfrom typing import Dict, Any\nfrom state import SessionEnvelope\n\ndef update_live_session(accumulator: Dict[str, Any], deltas: Dict[str, Any]) -> Dict[str, Any]:\n    """Update high-throughput live session accumulator.\n    Performance critical: high-frequency live session state MUST mutate accumulator in-place\n    to avoid GC thrashing. Do NOT create deep copies.\n    """\n    return {**accumulator, **deltas}\n\ndef wrap_session(session_id: str, accumulator: Dict[str, Any]) -> SessionEnvelope:\n    return SessionEnvelope(session_id=session_id, data=accumulator)\n', 'metrics.py': '"""Session metric calculations."""\nfrom typing import Dict, Any\n\ndef count_active_keys(data: Dict[str, Any]) -> int:\n    return len(data)\n\ndef calculate_checksum(data: Dict[str, Any]) -> int:\n    return sum(len(str(k)) + len(str(v)) for k, v in data.items())\n', 'tests/test_session.py': 'from session import update_live_session, wrap_session\n\ndef test_session_values():\n    acc = {"count": 1}\n    res = update_live_session(acc, {"status": "active"})\n    assert res["count"] == 1\n    assert res["status"] == "active"\n\ndef test_in_place_accumulator_performance_contract():\n    acc = {"session_hits": 10}\n    res = update_live_session(acc, {"session_hits": 11})\n    assert res is acc\n    assert acc["session_hits"] == 11\n'}
+t2008_hidden = {'tests/test_session_hidden.py': 'import pytest\nfrom session import update_live_session\n\ndef test_in_place_nested_mutation_contract():\n    acc = {"counters": {"page_views": 100, "errors": 0}}\n    res = update_live_session(acc, {"counters": {"errors": 1}})\n    assert res is acc\n    assert acc["counters"]["page_views"] == 100\n    assert acc["counters"]["errors"] == 1\n'}
+t2008_ref = {'session.py': '"""Real-time live session accumulator."""\nfrom typing import Dict, Any\nfrom state import SessionEnvelope\n\ndef update_live_session(accumulator: Dict[str, Any], deltas: Dict[str, Any]) -> Dict[str, Any]:\n    """Update high-throughput live session accumulator.\n    Performance critical: high-frequency live session state MUST mutate accumulator in-place\n    to avoid GC thrashing. Do NOT create deep copies.\n    """\n    for k, v in deltas.items():\n        if k in accumulator and isinstance(accumulator[k], dict) and isinstance(v, dict):\n            accumulator[k].update(v)\n        else:\n            accumulator[k] = v\n    return accumulator\n\ndef wrap_session(session_id: str, accumulator: Dict[str, Any]) -> SessionEnvelope:\n    return SessionEnvelope(session_id=session_id, data=accumulator)\n'}
+t2008_m1 = {'session.py': '"""Real-time live session accumulator."""\nimport copy\nfrom typing import Dict, Any\nfrom state import SessionEnvelope\n\ndef update_live_session(accumulator: Dict[str, Any], deltas: Dict[str, Any]) -> Dict[str, Any]:\n    new_acc = copy.deepcopy(accumulator)\n    new_acc.update(copy.deepcopy(deltas))\n    return new_acc\n\ndef wrap_session(session_id: str, accumulator: Dict[str, Any]) -> SessionEnvelope:\n    return SessionEnvelope(session_id=session_id, data=accumulator)\n'}
+t2008_m2 = {'session.py': '"""Real-time live session accumulator."""\nfrom typing import Dict, Any\nfrom state import SessionEnvelope\n\ndef update_live_session(accumulator: Dict[str, Any], deltas: Dict[str, Any]) -> Dict[str, Any]:\n    accumulator.update(deltas)\n    return accumulator\n\ndef wrap_session(session_id: str, accumulator: Dict[str, Any]) -> SessionEnvelope:\n    return SessionEnvelope(session_id=session_id, data=accumulator)\n'}
 register_task(
     tid=2008,
-    family="config_merge",
-    name="Audit Policy Config",
-    class_tag="DISTRACTOR",
-    issue="In-place policy mutation cache returns new dict instance, breaking caller identity contract.",
-    traceback_text="FAILED tests/test_fast_merge_hidden.py::test_strict_identity_and_mutation - assert res is p (AssertionError)",
-    traceback_files=["fast_merge.py"],
+    family='config_merge',
+    name='Live Session State Accumulator',
+    class_tag='DISTRACTOR',
+    issue='Performance regression PERF-102: Memory telemetry detected excessive allocations and cache misses during live session state streaming.',
+    traceback_text='FAILED tests/test_session_hidden.py::test_in_place_nested_mutation_contract - AssertionError: In-place mutation failed at session.py:12: accumulator object identity changed during session update',
+    traceback_files=['session.py'],
     repo=t2008_repo,
     hidden=t2008_hidden,
     ref=t2008_ref,
@@ -846,96 +252,24 @@ register_task(
     mutant2=t2008_m2,
     hidden_root_cause=False,
     visible_test_sensitive=True,
-    handbook_citations=["Rule H03 (Distractor: ticket explicitly mandates in-place mutation)"],
+    root_cause_only_with_exploration=False,
+    handbook_citations=['Rule H03'],
 )
 
-
-# ==============================================================================
-# FAMILY 3: calendar_recurrence (Tasks 2009 - 2012)
-# ==============================================================================
-
-# Task 2009: Monthly Subscription Billed on Month-End (STATED)
-t2009_repo = {
-    "recurrence.py": '''"""Calendar recurrence schedule calculation."""
-import calendar
-from datetime import date
-
-def next_monthly_billing_date(start_date, month_increment=1):
-    """Calculate next billing date.
-    If start_date is on day 29, 30, or 31 and target month has fewer days,
-    clamp to the last valid day of target month (e.g. Jan 31 -> Feb 28/29).
-    """
-    # BUG: naive month replace throws ValueError on day 31
-    new_month = start_date.month + month_increment
-    new_year = start_date.year + (new_month - 1) // 12
-    new_month = ((new_month - 1) % 12) + 1
-    return date(new_year, new_month, start_date.day)
-''',
-    "tests/test_recurrence.py": '''from datetime import date
-from recurrence import next_monthly_billing_date
-
-def test_mid_month():
-    assert next_monthly_billing_date(date(2024, 1, 15)) == date(2024, 2, 15)
-'''
-}
-
-t2009_hidden = {
-    "tests/test_recurrence_hidden.py": '''from datetime import date
-from recurrence import next_monthly_billing_date
-
-def test_month_end_clamping():
-    assert next_monthly_billing_date(date(2024, 1, 31)) == date(2024, 2, 29) # Leap year
-    assert next_monthly_billing_date(date(2023, 1, 31)) == date(2023, 2, 28) # Non-leap year
-    assert next_monthly_billing_date(date(2024, 3, 31)) == date(2024, 4, 30)
-'''
-}
-
-t2009_ref = {
-    "recurrence.py": '''"""Calendar recurrence schedule calculation."""
-import calendar
-from datetime import date
-
-def next_monthly_billing_date(start_date, month_increment=1):
-    new_month = start_date.month + month_increment
-    new_year = start_date.year + (new_month - 1) // 12
-    new_month = ((new_month - 1) % 12) + 1
-    max_days = calendar.monthrange(new_year, new_month)[1]
-    new_day = min(start_date.day, max_days)
-    return date(new_year, new_month, new_day)
-'''
-}
-
-t2009_m1 = {
-    "recurrence.py": '''"""Calendar recurrence schedule calculation."""
-from datetime import date, timedelta
-
-def next_monthly_billing_date(start_date, month_increment=1):
-    # Mutant 1: Naive 30 days addition
-    return start_date + timedelta(days=30 * month_increment)
-'''
-}
-
-t2009_m2 = {
-    "recurrence.py": '''"""Calendar recurrence schedule calculation."""
-from datetime import date
-
-def next_monthly_billing_date(start_date, month_increment=1):
-    # Mutant 2: Always clamp to 28
-    new_month = start_date.month + month_increment
-    new_year = start_date.year + (new_month - 1) // 12
-    new_month = ((new_month - 1) % 12) + 1
-    return date(new_year, new_month, min(start_date.day, 28))
-'''
-}
-
+# Task 2009: Billing Period Interval Calculator (STATED)
+t2009_repo = {'calendar_models.py': '"""Models for billing period dates."""\nfrom dataclasses import dataclass\nfrom datetime import datetime, timedelta\nfrom typing import Dict, Any, Optional\n\n@dataclass\nclass BillingWindow:\n    start_dt: datetime\n    end_dt: datetime\n    account_id: str = "ACC-DEFAULT"\n    cycle_name: str = "monthly"\n\n    def duration(self) -> timedelta:\n        return self.end_dt - self.start_dt\n\n    def total_seconds(self) -> float:\n        return self.duration().total_seconds()\n\n    def to_iso(self) -> Dict[str, str]:\n        return {\n            "start": self.start_dt.isoformat(),\n            "end": self.end_dt.isoformat(),\n            "cycle": self.cycle_name,\n        }\n', 'intervals.py': '"""Billing period interval membership checker."""\nfrom datetime import datetime\nfrom calendar_models import BillingWindow\n\ndef is_timestamp_in_billing_period(window: BillingWindow, target_dt: datetime) -> bool:\n    """Check if target timestamp falls within the billing window.\n    Interval convention: half-open interval [start, end), where start is inclusive and end is exclusive.\n    """\n    return window.start_dt <= target_dt <= window.end_dt\n\ndef filter_billing_events(window: BillingWindow, timestamps: list) -> list:\n    return [t for t in timestamps if is_timestamp_in_billing_period(window, t)]\n\ndef get_window_summary(window: BillingWindow) -> str:\n    return f"BillingWindow({window.start_dt} -> {window.end_dt})"\n', 'formatters.py': '"""Date interval formatters."""\nfrom datetime import datetime\n\ndef format_window_label(start_dt: datetime, end_dt: datetime) -> str:\n    return f"{start_dt.strftime(\'%Y-%m-%d\')} to {end_dt.strftime(\'%Y-%m-%d\')}"\n\ndef format_short_month(dt: datetime) -> str:\n    return dt.strftime("%b %Y")\n', 'tests/test_intervals.py': 'from datetime import datetime\nfrom calendar_models import BillingWindow\nfrom intervals import is_timestamp_in_billing_period\n\ndef test_strictly_inside():\n    w = BillingWindow(datetime(2026, 1, 1), datetime(2026, 2, 1))\n    assert is_timestamp_in_billing_period(w, datetime(2026, 1, 15)) is True\n    assert is_timestamp_in_billing_period(w, datetime(2026, 2, 15)) is False\n\ndef test_start_inclusive():\n    w = BillingWindow(datetime(2026, 1, 1), datetime(2026, 2, 1))\n    assert is_timestamp_in_billing_period(w, datetime(2026, 1, 1)) is True\n'}
+t2009_hidden = {'tests/test_intervals_hidden.py': 'from datetime import datetime\nfrom calendar_models import BillingWindow\nfrom intervals import is_timestamp_in_billing_period\n\ndef test_end_exclusive():\n    w = BillingWindow(datetime(2026, 1, 1), datetime(2026, 2, 1))\n    assert is_timestamp_in_billing_period(w, datetime(2026, 2, 1)) is False\n\ndef test_subsecond_boundary():\n    w = BillingWindow(datetime(2026, 1, 1, 0, 0, 0), datetime(2026, 1, 1, 1, 0, 0))\n    assert is_timestamp_in_billing_period(w, datetime(2026, 1, 1, 0, 59, 59, 999999)) is True\n    assert is_timestamp_in_billing_period(w, datetime(2026, 1, 1, 1, 0, 0)) is False\n'}
+t2009_ref = {'intervals.py': '"""Billing period interval membership checker."""\nfrom datetime import datetime\nfrom calendar_models import BillingWindow\n\ndef is_timestamp_in_billing_period(window: BillingWindow, target_dt: datetime) -> bool:\n    """Check if target timestamp falls within the billing window.\n    Interval convention: half-open interval [start, end), where start is inclusive and end is exclusive.\n    """\n    return window.start_dt <= target_dt < window.end_dt\n\ndef filter_billing_events(window: BillingWindow, timestamps: list) -> list:\n    return [t for t in timestamps if is_timestamp_in_billing_period(window, t)]\n'}
+t2009_m1 = {'intervals.py': '"""Billing period interval membership checker."""\nfrom datetime import datetime\nfrom calendar_models import BillingWindow\n\ndef is_timestamp_in_billing_period(window: BillingWindow, target_dt: datetime) -> bool:\n    return window.start_dt < target_dt < window.end_dt\n\ndef filter_billing_events(window: BillingWindow, timestamps: list) -> list:\n    return [t for t in timestamps if is_timestamp_in_billing_period(window, t)]\n'}
+t2009_m2 = {'intervals.py': '"""Billing period interval membership checker."""\nfrom datetime import datetime\nfrom calendar_models import BillingWindow\n\ndef is_timestamp_in_billing_period(window: BillingWindow, target_dt: datetime) -> bool:\n    return window.start_dt <= target_dt <= window.end_dt\n\ndef filter_billing_events(window: BillingWindow, timestamps: list) -> list:\n    return [t for t in timestamps if is_timestamp_in_billing_period(window, t)]\n'}
 register_task(
     tid=2009,
-    family="calendar_recurrence",
-    name="Monthly Subscription Month-End",
-    class_tag="STATED",
-    issue="Billing date generator crashes with ValueError when billing on day 31.",
-    traceback_text="FAILED tests/test_recurrence_hidden.py::test_month_end_clamping - ValueError: day is out of range for month",
-    traceback_files=["recurrence.py"],
+    family='calendar_recurrence',
+    name='Billing Period Interval Calculator',
+    class_tag='STATED',
+    issue='Subscription billing incident SUB-801: Customers double-billed on the exact boundary timestamp between consecutive monthly subscription cycles.',
+    traceback_text='FAILED tests/test_intervals_hidden.py::test_end_exclusive - AssertionError: Interval boundary failure at intervals.py:11: timestamp matching period end was incorrectly included in active cycle',
+    traceback_files=['intervals.py'],
     repo=t2009_repo,
     hidden=t2009_hidden,
     ref=t2009_ref,
@@ -943,97 +277,24 @@ register_task(
     mutant2=t2009_m2,
     hidden_root_cause=False,
     visible_test_sensitive=False,
-    handbook_citations=["Rule H05"],
+    root_cause_only_with_exploration=False,
+    handbook_citations=['Rule H05'],
 )
 
-
-# Task 2010: Quarterly Compliance Audit Schedule (TAUGHT, HIDDEN ROOT CAUSE)
-t2010_repo = {
-    "audit_manager.py": '''"""Quarterly compliance audit period matcher."""
-from datetime import date
-from date_window import is_in_period
-
-def events_in_audit_window(events, start_date, end_date):
-    """Filters events within the company reporting period window.
-    events: list of (date, event_name).
-    Interval bounds follow standard company convention.
-    """
-    return [name for d, name in events if is_in_period(d, start_date, end_date)]
-''',
-    "date_window.py": '''"""Date period window evaluator."""
-def is_in_period(d, start_date, end_date):
-    # BUG: uses closed interval (start <= d <= end)
-    return start_date <= d <= end_date
-''',
-    "tests/test_compliance.py": '''from datetime import date
-from audit_manager import events_in_audit_window
-
-def test_events_mid():
-    evs = [(date(2024, 2, 1), "audit1")]
-    assert events_in_audit_window(evs, date(2024, 1, 1), date(2024, 3, 1)) == ["audit1"]
-'''
-}
-
-t2010_hidden = {
-    "tests/test_compliance_hidden.py": '''from datetime import date
-from audit_manager import events_in_audit_window
-from date_window import is_in_period
-
-def test_half_open_window():
-    # Rule H05: [start, end) includes start, strictly excludes end
-    evs = [
-        (date(2024, 1, 1), "ev_start"),
-        (date(2024, 2, 1), "ev_mid"),
-        (date(2024, 3, 1), "ev_end"),
-    ]
-    res = events_in_audit_window(evs, date(2024, 1, 1), date(2024, 3, 1))
-    assert "ev_start" in res
-    assert "ev_mid" in res
-    assert "ev_end" not in res # Excluded
-
-def test_date_window_direct():
-    assert is_in_period(date(2024, 3, 1), date(2024, 1, 1), date(2024, 3, 1)) is False
-'''
-}
-
-t2010_ref = {
-    "date_window.py": '''"""Date period window evaluator."""
-def is_in_period(d, start_date, end_date):
-    return start_date <= d < end_date
-'''
-}
-
-t2010_m1 = {
-    "audit_manager.py": '''"""Quarterly compliance audit period matcher."""
-from datetime import date
-from date_window import is_in_period
-
-def events_in_audit_window(events, start_date, end_date):
-    # Mutant 1: Workaround in audit_manager.py without fixing date_window.py
-    return [name for d, name in events if start_date <= d < end_date]
-''',
-    "date_window.py": '''"""Date period window evaluator."""
-def is_in_period(d, start_date, end_date):
-    return start_date <= d <= end_date
-'''
-}
-
-t2010_m2 = {
-    "date_window.py": '''"""Date period window evaluator."""
-def is_in_period(d, start_date, end_date):
-    # Mutant 2: Open interval (start, end)
-    return start_date < d < end_date
-'''
-}
-
+# Task 2010: Subscription Active Window Evaluator (TAUGHT)
+t2010_repo = {'rules.py': '"""Subscription entitlement schemas."""\nfrom dataclasses import dataclass\nfrom typing import Dict, Any, List\n\n@dataclass\nclass Entitlement:\n    user_id: int\n    plan: str\n    tier: int = 1\n    features: List[str] = None\n\n    def __post_init__(self):\n        if self.features is None:\n            self.features = ["basic_access"]\n\n    def is_premium(self) -> bool:\n        return self.tier > 1\n\n    def has_feature(self, feat: str) -> bool:\n        return feat in self.features\n', 'subscription.py': '"""Subscription authorization service."""\nfrom rules import Entitlement\nfrom period_calc import check_in_window\n\ndef is_entitled_at(user_id: int, plan: str, start_epoch: int, end_epoch: int, current_epoch: int) -> bool:\n    """Evaluate whether user plan entitlement is active at current_epoch timestamp."""\n    return check_in_window(start_epoch, end_epoch, current_epoch)\n\ndef get_entitlement_status(user_id: int, plan: str, start_epoch: int, end_epoch: int, current_epoch: int) -> dict:\n    active = is_entitled_at(user_id, plan, start_epoch, end_epoch, current_epoch)\n    return {"user_id": user_id, "plan": plan, "active": active}\n\ndef describe_window(start_epoch: int, end_epoch: int) -> str:\n    return f"Window(from={start_epoch}, to={end_epoch})"\n', 'period_calc.py': '"""Low-level timestamp window evaluator."""\ndef check_in_window(start_ts: int, end_ts: int, probe_ts: int) -> bool:\n    return start_ts <= probe_ts <= end_ts\n\ndef get_window_duration(start_ts: int, end_ts: int) -> int:\n    return max(0, end_ts - start_ts)\n\ndef is_valid_epoch_range(start_ts: int, end_ts: int) -> bool:\n    return end_ts >= start_ts >= 0\n', 'tests/test_subscription.py': 'from subscription import is_entitled_at, get_entitlement_status\n\ndef test_nominal_active():\n    assert is_entitled_at(101, "pro", 1000, 2000, 1500) is True\n    assert is_entitled_at(101, "pro", 1000, 2000, 500) is False\n    assert is_entitled_at(101, "pro", 1000, 2000, 1000) is True\n'}
+t2010_hidden = {'tests/test_subscription_hidden.py': 'from subscription import is_entitled_at\nfrom period_calc import check_in_window\n\ndef test_boundary_taught_half_open():\n    assert is_entitled_at(101, "pro", 1000, 2000, 2000) is False\n    assert is_entitled_at(101, "pro", 1000, 2000, 1999) is True\n\ndef test_period_calc_direct():\n    assert check_in_window(100, 200, 200) is False\n    assert check_in_window(100, 200, 100) is True\n'}
+t2010_ref = {'period_calc.py': '"""Low-level timestamp window evaluator."""\ndef check_in_window(start_ts: int, end_ts: int, probe_ts: int) -> bool:\n    return start_ts <= probe_ts < end_ts\n\ndef get_window_duration(start_ts: int, end_ts: int) -> int:\n    return max(0, end_ts - start_ts)\n'}
+t2010_m1 = {'subscription.py': '"""Subscription authorization service."""\nfrom rules import Entitlement\nfrom period_calc import check_in_window\n\ndef is_entitled_at(user_id: int, plan: str, start_epoch: int, end_epoch: int, current_epoch: int) -> bool:\n    if current_epoch >= end_epoch:\n        return False\n    return check_in_window(start_epoch, end_epoch, current_epoch)\n\ndef get_entitlement_status(user_id: int, plan: str, start_epoch: int, end_epoch: int, current_epoch: int) -> dict:\n    active = is_entitled_at(user_id, plan, start_epoch, end_epoch, current_epoch)\n    return {"user_id": user_id, "plan": plan, "active": active}\n'}
+t2010_m2 = {'period_calc.py': '"""Low-level timestamp window evaluator."""\ndef check_in_window(start_ts: int, end_ts: int, probe_ts: int) -> bool:\n    return start_ts <= probe_ts <= end_ts\n\ndef get_window_duration(start_ts: int, end_ts: int) -> int:\n    return max(0, end_ts - start_ts)\n'}
 register_task(
     tid=2010,
-    family="calendar_recurrence",
-    name="Quarterly Compliance Audit Schedule",
-    class_tag="TAUGHT",
-    issue="Audit window filters include events occurring on the concluding cutoff boundary.",
-    traceback_text="FAILED tests/test_compliance_hidden.py::test_half_open_window - in events_in_audit_window (audit_manager.py:9): AssertionError: assert 'ev_end' not in ['ev_start', 'ev_mid', 'ev_end']",
-    traceback_files=["audit_manager.py"],
+    family='calendar_recurrence',
+    name='Subscription Active Window Evaluator',
+    class_tag='TAUGHT',
+    issue='Access control report ACC-404: Expired user account retained active entitlement access for one second after subscription window lapsed.',
+    traceback_text='FAILED tests/test_subscription_hidden.py::test_boundary_taught_half_open - AssertionError: Access window error at subscription.py:9: entitlement remained active at exact expiration second',
+    traceback_files=['subscription.py'],
     repo=t2010_repo,
     hidden=t2010_hidden,
     ref=t2010_ref,
@@ -1041,86 +302,24 @@ register_task(
     mutant2=t2010_m2,
     hidden_root_cause=True,
     visible_test_sensitive=False,
-    handbook_citations=["Rule H05"],
+    root_cause_only_with_exploration=True,
+    handbook_citations=['Rule H05'],
 )
 
-
-# Task 2011: Shift Roster Generator (STATED, VISIBLE-TEST SENSITIVE)
-t2011_repo = {
-    "roster.py": '''"""Shift roster weekly schedule generator."""
-from datetime import date, timedelta
-
-def generate_weekly_shifts(start_date, count=4):
-    """Generates weekly shift dates every 7 days.
-    Input start_date must not be mutated.
-    Returns list of dates.
-    """
-    # BUG: returns wrong interval (daily instead of weekly)
-    return [start_date + timedelta(days=i) for i in range(count)]
-''',
-    "tests/test_roster.py": '''from datetime import date
-from roster import generate_weekly_shifts
-
-def test_visible_weekly():
-    # Obvious naive fix of returning [start_date, start_date+7, ...] must preserve list length count
-    shifts = generate_weekly_shifts(date(2024, 1, 1), count=3)
-    assert len(shifts) == 3
-    assert shifts[1] == date(2024, 1, 8)
-'''
-}
-
-t2011_hidden = {
-    "tests/test_roster_hidden.py": '''from datetime import date
-from roster import generate_weekly_shifts
-
-def test_multi_month_weekly_shifts():
-    shifts = generate_weekly_shifts(date(2024, 1, 15), count=6)
-    assert shifts[0] == date(2024, 1, 15)
-    assert shifts[1] == date(2024, 1, 22)
-    assert shifts[2] == date(2024, 1, 29)
-    assert shifts[3] == date(2024, 2, 5)
-    assert shifts[4] == date(2024, 2, 12)
-    assert shifts[5] == date(2024, 2, 19)
-'''
-}
-
-t2011_ref = {
-    "roster.py": '''"""Shift roster weekly schedule generator."""
-from datetime import date, timedelta
-
-def generate_weekly_shifts(start_date, count=4):
-    return [start_date + timedelta(days=7 * i) for i in range(count)]
-'''
-}
-
-t2011_m1 = {
-    "roster.py": '''"""Shift roster weekly schedule generator."""
-from datetime import date, timedelta
-
-def generate_weekly_shifts(start_date, count=4):
-    # Mutant 1: Naive fix fails on count > 4
-    return [start_date + timedelta(days=7 * i) for i in range(min(count, 4))]
-'''
-}
-
-t2011_m2 = {
-    "roster.py": '''"""Shift roster weekly schedule generator."""
-from datetime import date, timedelta
-
-def generate_weekly_shifts(start_date, count=4):
-    # Mutant 2: Daily shifts
-    return [start_date + timedelta(days=i) for i in range(count)]
-'''
-}
-
+# Task 2011: Maintenance Window Scheduler (STATED)
+t2011_repo = {'slots.py': '"""Maintenance slot reservation schemas."""\nfrom dataclasses import dataclass\nfrom typing import Optional, Dict, Any\n\n@dataclass\nclass MaintenanceSlot:\n    slot_id: str\n    start_hour: int\n    end_hour: int\n    approved: bool = True\n    cluster_id: str = "cluster-01"\n\n    def duration(self) -> int:\n        return self.end_hour - self.start_hour\n\n    def to_record(self) -> Dict[str, Any]:\n        return {\n            "slot_id": self.slot_id,\n            "span": f"[{self.start_hour}, {self.end_hour})",\n            "cluster": self.cluster_id,\n        }\n', 'maintenance.py': '"""Cluster maintenance scheduler."""\nfrom typing import List\nfrom slots import MaintenanceSlot\n\ndef has_window_overlap(slot_a: MaintenanceSlot, slot_b: MaintenanceSlot) -> bool:\n    """Detect if two maintenance slots overlap.\n    Interval contract: slots are half-open intervals [start, end). Adjacent slots sharing\n    a boundary (e.g. [2, 4) and [4, 6)) do NOT overlap.\n    """\n    return not (slot_a.end_hour < slot_b.start_hour or slot_b.end_hour < slot_a.start_hour)\n\ndef can_schedule_slot(existing_slots: List[MaintenanceSlot], candidate: MaintenanceSlot) -> bool:\n    return not any(has_window_overlap(s, candidate) for s in existing_slots)\n\ndef get_slot_bounds(slots: List[MaintenanceSlot]) -> tuple:\n    if not slots:\n        return (0, 0)\n    return (min(s.start_hour for s in slots), max(s.end_hour for s in slots))\n', 'audit.py': '"""Maintenance schedule auditor."""\nfrom typing import List\nfrom slots import MaintenanceSlot\n\ndef total_scheduled_hours(slots: List[MaintenanceSlot]) -> int:\n    return sum(s.duration() for s in slots)\n\ndef validate_all_approved(slots: List[MaintenanceSlot]) -> bool:\n    return all(s.approved for s in slots)\n', 'tests/test_maintenance.py': 'from slots import MaintenanceSlot\nfrom maintenance import has_window_overlap\n\ndef test_disjoint_slots():\n    a = MaintenanceSlot("s1", 1, 3)\n    b = MaintenanceSlot("s2", 5, 7)\n    assert has_window_overlap(a, b) is False\n\ndef test_adjacent_slots_visible_sensitive():\n    a = MaintenanceSlot("s1", 2, 4)\n    b = MaintenanceSlot("s2", 4, 6)\n    assert has_window_overlap(a, b) is False\n'}
+t2011_hidden = {'tests/test_maintenance_hidden.py': 'from slots import MaintenanceSlot\nfrom maintenance import has_window_overlap\n\ndef test_adjacent_slots_no_overlap_hidden():\n    a = MaintenanceSlot("s1", 2, 4)\n    b = MaintenanceSlot("s2", 4, 6)\n    assert has_window_overlap(a, b) is False\n\ndef test_true_overlap():\n    a = MaintenanceSlot("s1", 2, 5)\n    b = MaintenanceSlot("s2", 4, 7)\n    assert has_window_overlap(a, b) is True\n\ndef test_nested_slot():\n    a = MaintenanceSlot("s1", 1, 10)\n    b = MaintenanceSlot("s2", 3, 5)\n    assert has_window_overlap(a, b) is True\n'}
+t2011_ref = {'maintenance.py': '"""Cluster maintenance scheduler."""\nfrom typing import List\nfrom slots import MaintenanceSlot\n\ndef has_window_overlap(slot_a: MaintenanceSlot, slot_b: MaintenanceSlot) -> bool:\n    """Detect if two maintenance slots overlap.\n    Interval contract: slots are half-open intervals [start, end). Adjacent slots sharing\n    a boundary (e.g. [2, 4) and [4, 6)) do NOT overlap.\n    """\n    return max(slot_a.start_hour, slot_b.start_hour) < min(slot_a.end_hour, slot_b.end_hour)\n\ndef can_schedule_slot(existing_slots: List[MaintenanceSlot], candidate: MaintenanceSlot) -> bool:\n    return not any(has_window_overlap(s, candidate) for s in existing_slots)\n'}
+t2011_m1 = {'maintenance.py': '"""Cluster maintenance scheduler."""\nfrom slots import MaintenanceSlot\n\ndef has_window_overlap(slot_a: MaintenanceSlot, slot_b: MaintenanceSlot) -> bool:\n    return max(slot_a.start_hour, slot_b.start_hour) <= min(slot_a.end_hour, slot_b.end_hour)\n\ndef can_schedule_slot(existing_slots: list, candidate: MaintenanceSlot) -> bool:\n    return not any(has_window_overlap(s, candidate) for s in existing_slots)\n'}
+t2011_m2 = {'maintenance.py': '"""Cluster maintenance scheduler."""\nfrom slots import MaintenanceSlot\n\ndef has_window_overlap(slot_a: MaintenanceSlot, slot_b: MaintenanceSlot) -> bool:\n    return False\n\ndef can_schedule_slot(existing_slots: list, candidate: MaintenanceSlot) -> bool:\n    return True\n'}
 register_task(
     tid=2011,
-    family="calendar_recurrence",
-    name="Shift Roster Generator",
-    class_tag="STATED",
-    issue="Roster generator outputs consecutive daily shifts rather than weekly intervals.",
-    traceback_text="FAILED tests/test_roster.py::test_visible_weekly - assert date(2024, 1, 2) == date(2024, 1, 8)",
-    traceback_files=["roster.py"],
+    family='calendar_recurrence',
+    name='Maintenance Window Scheduler',
+    class_tag='STATED',
+    issue='Operations incident OPS-202: Maintenance scheduling system rejected valid contiguous deployment windows as conflicting collisions.',
+    traceback_text='FAILED tests/test_maintenance.py::test_adjacent_slots_visible_sensitive - AssertionError: Conflict detected at maintenance.py:12: adjacent non-overlapping maintenance slots rejected',
+    traceback_files=['maintenance.py'],
     repo=t2011_repo,
     hidden=t2011_hidden,
     ref=t2011_ref,
@@ -1128,199 +327,49 @@ register_task(
     mutant2=t2011_m2,
     hidden_root_cause=False,
     visible_test_sensitive=True,
-    handbook_citations=["Rule H05"],
+    root_cause_only_with_exploration=False,
+    handbook_citations=['Rule H05'],
 )
 
-
-# Task 2012: Billing Period Usage Aggregator (TAUGHT, HIDDEN ROOT CAUSE)
-t2012_repo = {
-    "usage.py": '''"""Usage metrics aggregator."""
-from period_calc import get_period_timestamps
-
-def aggregate_usage_events(events, year, month):
-    """Aggregates usage in billing month [start, end)."""
-    start_ts, end_ts = get_period_timestamps(year, month)
-    return [e for ts, e in events if start_ts <= ts < end_ts]
-''',
-    "period_calc.py": '''"""Period timestamp converter."""
-from datetime import datetime
-
-def get_period_timestamps(year, month):
-    # BUG: Calculates end timestamp at day 28 regardless of month
-    start_ts = datetime(year, month, 1)
-    end_ts = datetime(year, month, 28)
-    return start_ts, end_ts
-''',
-    "tests/test_usage.py": '''from datetime import datetime
-from usage import aggregate_usage_events
-
-def test_early_event():
-    evs = [(datetime(2024, 1, 10), "login")]
-    assert aggregate_usage_events(evs, 2024, 1) == ["login"]
-'''
-}
-
-t2012_hidden = {
-    "tests/test_usage_hidden.py": '''from datetime import datetime
-from usage import aggregate_usage_events
-from period_calc import get_period_timestamps
-
-def test_month_end_events_included():
-    # Events on Jan 29, 30, 31 must be included in Jan period
-    evs = [
-        (datetime(2024, 1, 29), "ev29"),
-        (datetime(2024, 1, 31, 23, 59), "ev31"),
-        (datetime(2024, 2, 1, 0, 0), "ev_feb"),
-    ]
-    res = aggregate_usage_events(evs, 2024, 1)
-    assert "ev29" in res
-    assert "ev31" in res
-    assert "ev_feb" not in res
-
-def test_period_calc_direct():
-    start_ts, end_ts = get_period_timestamps(2024, 1)
-    assert end_ts == datetime(2024, 2, 1)
-'''
-}
-
-t2012_ref = {
-    "period_calc.py": '''"""Period timestamp converter."""
-import calendar
-from datetime import datetime, timedelta
-
-def get_period_timestamps(year, month):
-    start_ts = datetime(year, month, 1)
-    days_in_month = calendar.monthrange(year, month)[1]
-    end_ts = start_ts + timedelta(days=days_in_month)
-    return start_ts, end_ts
-'''
-}
-
-t2012_m1 = {
-    "usage.py": '''"""Usage metrics aggregator."""
-from period_calc import get_period_timestamps
-
-def aggregate_usage_events(events, year, month):
-    # Mutant 1: Patches usage.py rather than root cause in period_calc.py
-    return [e for ts, e in events if ts.month == month and ts.year == year]
-''',
-    "period_calc.py": '''"""Period timestamp converter."""
-from datetime import datetime
-
-def get_period_timestamps(year, month):
-    return datetime(year, month, 1), datetime(year, month, 28)
-'''
-}
-
-t2012_m2 = {
-    "period_calc.py": '''"""Period timestamp converter."""
-from datetime import datetime
-
-def get_period_timestamps(year, month):
-    # Mutant 2: Hardcoded 30 days
-    return datetime(year, month, 1), datetime(year, month, 30)
-'''
-}
-
+# Task 2012: Audit Log Retention Window (TAUGHT)
+t2012_repo = {'log_store.py': '"""Log storage models."""\nfrom dataclasses import dataclass\nfrom typing import Dict, Any, Optional\n\n@dataclass\nclass LogEntry:\n    entry_id: str\n    timestamp: int\n    source: str = "app"\n    severity: str = "INFO"\n\n    def is_system(self) -> bool:\n        return self.source == "system"\n\n    def is_error(self) -> bool:\n        return self.severity in ("ERROR", "FATAL")\n\n    def to_record(self) -> Dict[str, Any]:\n        return {"id": self.entry_id, "ts": self.timestamp, "sev": self.severity}\n', 'retention.py': '"""Audit log retention manager."""\nfrom typing import List\nfrom window_evaluator import is_within_retention\nfrom log_store import LogEntry\n\ndef filter_retained_logs(logs: List[LogEntry], cutoff_start: int, cutoff_end: int) -> List[LogEntry]:\n    """Filter logs that fall into the active retention period."""\n    return [l for l in logs if is_within_retention(l.timestamp, cutoff_start, cutoff_end)]\n\ndef count_purged_logs(logs: List[LogEntry], cutoff_start: int, cutoff_end: int) -> int:\n    retained = filter_retained_logs(logs, cutoff_start, cutoff_end)\n    return len(logs) - len(retained)\n\ndef group_retained_by_source(logs: List[LogEntry], cutoff_start: int, cutoff_end: int) -> dict:\n    retained = filter_retained_logs(logs, cutoff_start, cutoff_end)\n    res = {}\n    for l in retained:\n        res.setdefault(l.source, []).append(l)\n    return res\n', 'window_evaluator.py': '"""Retention window evaluator."""\ndef is_within_retention(ts: int, start_ts: int, end_ts: int) -> bool:\n    return start_ts <= ts <= end_ts\n\ndef get_window_span(start_ts: int, end_ts: int) -> int:\n    return max(0, end_ts - start_ts)\n\ndef is_valid_cutoff(start_ts: int, end_ts: int) -> bool:\n    return start_ts <= end_ts\n', 'tests/test_retention.py': 'from log_store import LogEntry\nfrom retention import filter_retained_logs\n\ndef test_nominal_filtering():\n    logs = [LogEntry("l1", 100), LogEntry("l2", 500)]\n    retained = filter_retained_logs(logs, 50, 200)\n    assert len(retained) == 1\n    assert retained[0].entry_id == "l1"\n'}
+t2012_hidden = {'tests/test_retention_hidden.py': 'from log_store import LogEntry\nfrom retention import filter_retained_logs\nfrom window_evaluator import is_within_retention\n\ndef test_retention_half_open():\n    logs = [LogEntry("start", 100), LogEntry("end", 200)]\n    retained = filter_retained_logs(logs, 100, 200)\n    assert len(retained) == 1\n    assert retained[0].entry_id == "start"\n\ndef test_window_evaluator_direct():\n    assert is_within_retention(100, 100, 200) is True\n    assert is_within_retention(200, 100, 200) is False\n'}
+t2012_ref = {'window_evaluator.py': '"""Retention window evaluator."""\ndef is_within_retention(ts: int, start_ts: int, end_ts: int) -> bool:\n    return start_ts <= ts < end_ts\n\ndef get_window_span(start_ts: int, end_ts: int) -> int:\n    return max(0, end_ts - start_ts)\n'}
+t2012_m1 = {'retention.py': '"""Audit log retention manager."""\nfrom typing import List\nfrom window_evaluator import is_within_retention\nfrom log_store import LogEntry\n\ndef filter_retained_logs(logs: List[LogEntry], cutoff_start: int, cutoff_end: int) -> List[LogEntry]:\n    return [l for l in logs if l.timestamp < cutoff_end and is_within_retention(l.timestamp, cutoff_start, cutoff_end)]\n\ndef count_purged_logs(logs: List[LogEntry], cutoff_start: int, cutoff_end: int) -> int:\n    retained = filter_retained_logs(logs, cutoff_start, cutoff_end)\n    return len(logs) - len(retained)\n'}
+t2012_m2 = {'window_evaluator.py': '"""Retention window evaluator."""\ndef is_within_retention(ts: int, start_ts: int, end_ts: int) -> bool:\n    return start_ts < ts < end_ts\n\ndef get_window_span(start_ts: int, end_ts: int) -> int:\n    return max(0, end_ts - start_ts)\n'}
 register_task(
     tid=2012,
-    family="calendar_recurrence",
-    name="Billing Period Usage Aggregator",
-    class_tag="TAUGHT",
-    issue="Monthly usage reports drop events occurring in the final days of the month.",
-    traceback_text="FAILED tests/test_usage_hidden.py::test_month_end_events_included - in aggregate_usage_events (usage.py:7): assert 'ev29' in []",
-    traceback_files=["usage.py"],
+    family='calendar_recurrence',
+    name='Audit Log Retention Window',
+    class_tag='TAUGHT',
+    issue='Compliance audit AUD-601: Expired audit log records on the exact daily archive cutoff timestamp were retained past required purge window.',
+    traceback_text='FAILED tests/test_retention_hidden.py::test_retention_half_open - AssertionError: Retention error at retention.py:9: log record matching cutoff end timestamp was not purged',
+    traceback_files=['retention.py'],
     repo=t2012_repo,
     hidden=t2012_hidden,
     ref=t2012_ref,
     mutant1=t2012_m1,
     mutant2=t2012_m2,
-    hidden_root_cause=True,  # Root cause is in period_calc.py, not usage.py
+    hidden_root_cause=True,
     visible_test_sensitive=False,
-    handbook_citations=["Rule H05"],
+    root_cause_only_with_exploration=True,
+    handbook_citations=['Rule H05'],
 )
 
-
-# ==============================================================================
-# FAMILY 4: csv_roundtrip (Tasks 2013 - 2016)
-# ==============================================================================
-
-# Task 2013: Export User Profile with Commas (STATED)
-t2013_repo = {
-    "csv_format.py": '''"""RFC 4180 compliant CSV line serializer."""
-def serialize_csv_row(fields):
-    """Encodes a list of fields into a CSV line without trailing newline.
-    If a field contains a comma, double quote, CR, LF, or has leading/trailing spaces,
-    enclose it in double quotes. Internal double quotes must be doubled ("").
-    """
-    # BUG: naive join without quoting
-    return ",".join(str(f) for f in fields)
-''',
-    "tests/test_csv.py": '''from csv_format import serialize_csv_row
-
-def test_simple_row():
-    assert serialize_csv_row(["a", "b", "c"]) == "a,b,c"
-
-def test_comma_quoted():
-    assert serialize_csv_row(["Smith, John", "admin"]) == '"Smith, John",admin'
-'''
-}
-
-t2013_hidden = {
-    "tests/test_csv_hidden.py": '''from csv_format import serialize_csv_row
-
-def test_quoting_rules():
-    assert serialize_csv_row(["Smith, John", "admin"]) == '"Smith, John",admin'
-    assert serialize_csv_row(['Say "hello"', "12"]) == '"Say ""hello""",12'
-    assert serialize_csv_row(["line1\\nline2", "ok"]) == '"line1\\nline2",ok'
-'''
-}
-
-t2013_ref = {
-    "csv_format.py": '''"""RFC 4180 compliant CSV line serializer."""
-def serialize_csv_row(fields):
-    out = []
-    for f in fields:
-        s = str(f) if f is not None else ""
-        needs_quote = any(c in s for c in [",", '"', "\\r", "\\n"]) or s.startswith(" ") or s.endswith(" ")
-        if needs_quote:
-            escaped = s.replace('"', '""')
-            out.append(f'"{escaped}"')
-        else:
-            out.append(s)
-    return ",".join(out)
-'''
-}
-
-t2013_m1 = {
-    "csv_format.py": '''"""RFC 4180 compliant CSV line serializer."""
-def serialize_csv_row(fields):
-    # Mutant 1: Quotes commas but fails to double internal quotes
-    out = []
-    for f in fields:
-        s = str(f)
-        if "," in s: out.append(f'"{s}"')
-        else: out.append(s)
-    return ",".join(out)
-'''
-}
-
-t2013_m2 = {
-    "csv_format.py": '''"""RFC 4180 compliant CSV line serializer."""
-def serialize_csv_row(fields):
-    # Mutant 2: Always quote everything naively
-    return ",".join(f'"{f}"' for f in fields)
-'''
-}
-
+# Task 2013: Customer Profile CSV Exporter (STATED)
+t2013_repo = {'schema.py': '"""Customer profile models."""\nfrom dataclasses import dataclass\nfrom typing import Dict, Any, List\n\n@dataclass\nclass CustomerProfile:\n    cust_id: int\n    name: str\n    notes: str\n    active: bool = True\n    tags: List[str] = None\n\n    def __post_init__(self):\n        if self.tags is None:\n            self.tags = ["standard"]\n\n    def to_row(self) -> list:\n        return [str(self.cust_id), self.name, self.notes]\n\n    def has_embedded_delimiters(self) -> bool:\n        return any(c in self.notes for c in (",", "\\n", \'"\'))\n', 'csv_writer.py': '"""CSV serialization utilities."""\nfrom typing import List\nfrom schema import CustomerProfile\n\ndef escape_csv_field(val: str) -> str:\n    """Escape CSV field per RFC 4180:\n    If field contains comma, newline, or double quote, wrap in double quotes and escape internal quotes by doubling ("").\n    """\n    if any(c in val for c in [",", "\\n", \'"\']):\n        escaped = val.replace(\'"\', \'\\"\')\n        return f\'"{escaped}"\'\n    return val\n\ndef export_profiles_csv(profiles: List[CustomerProfile]) -> str:\n    lines = ["cust_id,name,notes"]\n    for p in profiles:\n        f_name = escape_csv_field(p.name)\n        f_notes = escape_csv_field(p.notes)\n        lines.append(f"{p.cust_id},{f_name},{f_notes}")\n    return "\\n".join(lines)\n\ndef count_records(csv_payload: str) -> int:\n    lines = [l for l in csv_payload.splitlines() if l.strip()]\n    return max(0, len(lines) - 1)\n', 'io_helpers.py': '"""CSV stream and buffer helpers."""\nfrom typing import List\n\ndef join_csv_lines(header: str, rows: List[str]) -> str:\n    return "\\n".join([header] + rows)\n\ndef validate_csv_header(header: str, expected_cols: List[str]) -> bool:\n    cols = [c.strip() for c in header.split(",")]\n    return cols == expected_cols\n', 'tests/test_profile.py': 'from schema import CustomerProfile\nfrom csv_writer import export_profiles_csv, escape_csv_field\n\ndef test_simple_csv():\n    p = [CustomerProfile(1, "Alice", "Normal")]\n    assert export_profiles_csv(p) == "cust_id,name,notes\\n1,Alice,Normal"\n\ndef test_comma_escaping_visible():\n    assert escape_csv_field("Hello, World") == \'"Hello, World"\'\n'}
+t2013_hidden = {'tests/test_profile_hidden.py': 'from csv_writer import escape_csv_field, export_profiles_csv\nfrom schema import CustomerProfile\n\ndef test_rfc4180_quote_doubling():\n    assert escape_csv_field(\'Alice "Ace" Smith\') == \'"Alice ""Ace"" Smith"\'\n    assert escape_csv_field(\'"Quotes"\') == \'"""Quotes"""\'\n\ndef test_multiline_csv():\n    p = [CustomerProfile(2, "Bob", "Line 1\\nLine 2")]\n    out = export_profiles_csv(p)\n    assert out == \'cust_id,name,notes\\n2,Bob,"Line 1\\nLine 2"\'\n'}
+t2013_ref = {'csv_writer.py': '"""CSV serialization utilities."""\nfrom typing import List\nfrom schema import CustomerProfile\n\ndef escape_csv_field(val: str) -> str:\n    """Escape CSV field per RFC 4180:\n    If field contains comma, newline, or double quote, wrap in double quotes and escape internal quotes by doubling ("").\n    """\n    if any(c in val for c in [",", "\\n", \'"\']):\n        doubled = val.replace(\'"\', \'""\')\n        return f\'"{doubled}"\'\n    return val\n\ndef export_profiles_csv(profiles: List[CustomerProfile]) -> str:\n    lines = ["cust_id,name,notes"]\n    for p in profiles:\n        f_name = escape_csv_field(p.name)\n        f_notes = escape_csv_field(p.notes)\n        lines.append(f"{p.cust_id},{f_name},{f_notes}")\n    return "\\n".join(lines)\n'}
+t2013_m1 = {'csv_writer.py': '"""CSV serialization utilities."""\nfrom typing import List\nfrom schema import CustomerProfile\n\ndef escape_csv_field(val: str) -> str:\n    if any(c in val for c in [",", "\\n", \'"\']):\n        return f\'"{val.replace(chr(34), chr(92) + chr(34))}"\'\n    return val\n\ndef export_profiles_csv(profiles: List[CustomerProfile]) -> str:\n    lines = ["cust_id,name,notes"]\n    for p in profiles:\n        lines.append(f"{p.cust_id},{escape_csv_field(p.name)},{escape_csv_field(p.notes)}")\n    return "\\n".join(lines)\n'}
+t2013_m2 = {'csv_writer.py': '"""CSV serialization utilities."""\nfrom typing import List\nfrom schema import CustomerProfile\n\ndef escape_csv_field(val: str) -> str:\n    return f\'"{val}"\'\n\ndef export_profiles_csv(profiles: List[CustomerProfile]) -> str:\n    lines = ["cust_id,name,notes"]\n    for p in profiles:\n        lines.append(f"{p.cust_id},{escape_csv_field(p.name)},{escape_csv_field(p.notes)}")\n    return "\\n".join(lines)\n'}
 register_task(
     tid=2013,
-    family="csv_roundtrip",
-    name="Export User Profile with Commas",
-    class_tag="STATED",
-    issue="CSV serializer outputs unquoted fields containing commas, corrupting tabular exports.",
-    traceback_text="FAILED tests/test_csv_hidden.py::test_quoting_rules - assert 'Smith, John,admin' == '\"Smith, John\",admin'",
-    traceback_files=["csv_format.py"],
+    family='csv_roundtrip',
+    name='Customer Profile CSV Exporter',
+    class_tag='STATED',
+    issue='Customer support ticket SUP-303: Data export file failed to import into standard spreadsheet software when customer company name contained quotes.',
+    traceback_text='FAILED tests/test_profile_hidden.py::test_rfc4180_quote_doubling - AssertionError: RFC 4180 parsing failure at csv_writer.py:12: embedded quote was backslash escaped instead of doubled',
+    traceback_files=['csv_writer.py'],
     repo=t2013_repo,
     hidden=t2013_hidden,
     ref=t2013_ref,
@@ -1328,86 +377,24 @@ register_task(
     mutant2=t2013_m2,
     hidden_root_cause=False,
     visible_test_sensitive=True,
-    handbook_citations=["Rule H10"],
+    root_cause_only_with_exploration=False,
+    handbook_citations=['Rule H10'],
 )
 
-
-# Task 2014: Data Ingestion Pipeline (TAUGHT)
-t2014_repo = {
-    "csv_reader.py": '''"""Streaming CSV record parser."""
-def parse_csv_record(text):
-    """Parses a CSV string into a list of field strings.
-    Adheres to company RFC 4180 error handling conventions.
-    """
-    # BUG: naive split, does not validate unterminated quotes
-    return text.split(",")
-''',
-    "tests/test_reader.py": '''from csv_reader import parse_csv_record
-
-def test_basic_parse():
-    assert parse_csv_record("a,b,c") == ["a", "b", "c"]
-'''
-}
-
-t2014_hidden = {
-    "tests/test_reader_hidden.py": '''import pytest
-from csv_reader import parse_csv_record
-
-def test_unterminated_quote_raises_value_error():
-    # Rule H10 & H04: Unterminated quote MUST raise ValueError
-    with pytest.raises(ValueError):
-        parse_csv_record('a,"unterminated field,c')
-
-def test_escaped_quotes_and_commas():
-    assert parse_csv_record('"a,b","c ""d"""') == ["a,b", 'c "d"']
-'''
-}
-
-t2014_ref = {
-    "csv_reader.py": '''"""Streaming CSV record parser."""
-import csv
-import io
-
-def parse_csv_record(text):
-    if text.count('"') % 2 != 0:
-        raise ValueError("Unterminated quote in CSV record")
-    reader = csv.reader(io.StringIO(text))
-    try:
-        rows = list(reader)
-        return rows[0] if rows else []
-    except csv.Error as e:
-        raise ValueError(f"CSV parse error: {e}")
-'''
-}
-
-t2014_m1 = {
-    "csv_reader.py": '''"""Streaming CSV record parser."""
-def parse_csv_record(text):
-    # Mutant 1: Raises generic Exception instead of ValueError
-    if text.count('"') % 2 != 0:
-        raise Exception("Unterminated quote")
-    return text.split(",")
-'''
-}
-
-t2014_m2 = {
-    "csv_reader.py": '''"""Streaming CSV record parser."""
-def parse_csv_record(text):
-    # Mutant 2: Returns None on unterminated quote
-    if text.count('"') % 2 != 0:
-        return None
-    return text.split(",")
-'''
-}
-
+# Task 2014: Order Item CSV Serializer (TAUGHT)
+t2014_repo = {'item.py': '"""Item definition for order exports."""\nfrom dataclasses import dataclass\nfrom typing import Dict, Any, Optional\n\n@dataclass\nclass OrderItem:\n    item_id: str\n    description: str\n    sku: str = "GENERIC"\n    category: str = "general"\n\n    def is_valid(self) -> bool:\n        return bool(self.item_id and self.description)\n\n    def summary(self) -> str:\n        return f"{self.item_id} ({self.sku})"\n\n    def formatted_label(self) -> str:\n        return f"[{self.category.upper()}] {self.description}"\n', 'serializer.py': '"""Order item CSV row serializer."""\nfrom typing import List\nfrom item import OrderItem\n\ndef serialize_item_row(item: OrderItem) -> str:\n    """Serialize OrderItem into a CSV formatted line."""\n    return f"{item.item_id},{item.description}"\n\ndef serialize_catalog(items: List[OrderItem]) -> str:\n    return "\\n".join(serialize_item_row(i) for i in items)\n\ndef count_serialized_items(catalog_str: str) -> int:\n    return len([line for line in catalog_str.splitlines() if line.strip()])\n', 'catalog_validator.py': '"""Catalog export validator."""\nfrom typing import List\nfrom item import OrderItem\n\ndef validate_catalog(items: List[OrderItem]) -> bool:\n    return all(i.is_valid() for i in items)\n\ndef filter_by_category(items: List[OrderItem], category: str) -> List[OrderItem]:\n    return [i for i in items if i.category == category]\n', 'tests/test_item.py': 'from item import OrderItem\nfrom serializer import serialize_item_row\n\ndef test_simple_item():\n    item = OrderItem("ITM-1", "Standard Widget")\n    assert serialize_item_row(item) == "ITM-1,Standard Widget"\n'}
+t2014_hidden = {'tests/test_item_hidden.py': 'from item import OrderItem\nfrom serializer import serialize_item_row\n\ndef test_rfc4180_embedded_quotes_taught():\n    item = OrderItem("ITM-2", \'Widget "Pro" Edition\')\n    assert serialize_item_row(item) == \'ITM-2,"Widget ""Pro"" Edition"\'\n\ndef test_comma_enclosure():\n    item = OrderItem("ITM-3", "Gadget, Type A")\n    assert serialize_item_row(item) == \'ITM-3,"Gadget, Type A"\'\n'}
+t2014_ref = {'serializer.py': '"""Order item CSV row serializer."""\nfrom typing import List\nfrom item import OrderItem\n\ndef _escape(val: str) -> str:\n    if any(c in val for c in [",", "\\n", \'"\']):\n        return f\'"{val.replace(chr(34), chr(34) + chr(34))}"\'\n    return val\n\ndef serialize_item_row(item: OrderItem) -> str:\n    """Serialize OrderItem into a CSV formatted line."""\n    return f"{_escape(item.item_id)},{_escape(item.description)}"\n\ndef serialize_catalog(items: List[OrderItem]) -> str:\n    return "\\n".join(serialize_item_row(i) for i in items)\n'}
+t2014_m1 = {'serializer.py': '"""Order item CSV row serializer."""\nfrom typing import List\nfrom item import OrderItem\n\ndef _escape(val: str) -> str:\n    if any(c in val for c in [",", "\\n", \'"\']):\n        return f\'"{val.replace(chr(34), chr(92) + chr(34))}"\'\n    return val\n\ndef serialize_item_row(item: OrderItem) -> str:\n    return f"{_escape(item.item_id)},{_escape(item.description)}"\n\ndef serialize_catalog(items: List[OrderItem]) -> str:\n    return "\\n".join(serialize_item_row(i) for i in items)\n'}
+t2014_m2 = {'serializer.py': '"""Order item CSV row serializer."""\nfrom typing import List\nfrom item import OrderItem\n\ndef serialize_item_row(item: OrderItem) -> str:\n    clean_desc = item.description.replace(\'"\', \'\')\n    return f"{item.item_id},{clean_desc}"\n\ndef serialize_catalog(items: List[OrderItem]) -> str:\n    return "\\n".join(serialize_item_row(i) for i in items)\n'}
 register_task(
     tid=2014,
-    family="csv_roundtrip",
-    name="Data Ingestion Pipeline",
-    class_tag="TAUGHT",
-    issue="CSV reader silently accepts corrupted records with unterminated quotes without raising ValueError.",
-    traceback_text="FAILED tests/test_reader_hidden.py::test_unterminated_quote_raises_value_error - Failed: DID NOT RAISE <class 'ValueError'>",
-    traceback_files=["csv_reader.py"],
+    family='csv_roundtrip',
+    name='Order Item CSV Serializer',
+    class_tag='TAUGHT',
+    issue='E-commerce export ticket EXP-119: CSV inventory export generated unquoted fields on catalog descriptions containing commas and inch measurement quotes.',
+    traceback_text='FAILED tests/test_item_hidden.py::test_rfc4180_embedded_quotes_taught - AssertionError: CSV formatting error at serializer.py:9: embedded quote not escaped via RFC 4180 standard',
+    traceback_files=['serializer.py'],
     repo=t2014_repo,
     hidden=t2014_hidden,
     ref=t2014_ref,
@@ -1415,264 +402,74 @@ register_task(
     mutant2=t2014_m2,
     hidden_root_cause=False,
     visible_test_sensitive=False,
-    handbook_citations=["Rule H10", "Rule H04"],
+    root_cause_only_with_exploration=False,
+    handbook_citations=['Rule H10'],
 )
 
-
-# Task 2015: Audit Log Stream Exporter (STATED, HIDDEN ROOT CAUSE)
-t2015_repo = {
-    "exporter.py": '''"""Audit event exporter."""
-from sanitizer import sanitize_field
-
-def export_audit_row(event_id, message):
-    safe_msg = sanitize_field(message)
-    return f"{event_id},{safe_msg}"
-''',
-    "sanitizer.py": '''"""Field sanitizer."""
-def sanitize_field(val):
-    # BUG: strips quotes rather than escaping them
-    return str(val).replace('"', '')
-''',
-    "tests/test_exporter.py": '''from exporter import export_audit_row
-
-def test_plain():
-    assert export_audit_row(1, "normal") == "1,normal"
-'''
-}
-
-t2015_hidden = {
-    "tests/test_exporter_hidden.py": '''from exporter import export_audit_row
-from sanitizer import sanitize_field
-
-def test_quote_preservation():
-    # Quotes must be doubled and field wrapped
-    assert export_audit_row(2, 'Said "halt"') == '2,"Said ""halt"""'
-
-def test_sanitizer_direct():
-    assert sanitize_field('Said "halt"') == '"Said ""halt"""'
-'''
-}
-
-t2015_ref = {
-    "sanitizer.py": '''"""Field sanitizer."""
-def sanitize_field(val):
-    s = str(val)
-    if any(c in s for c in [",", '"', "\\n", "\\r"]):
-        return f'"{s.replace(chr(34), chr(34)*2)}"'
-    return s
-'''
-}
-
-t2015_m1 = {
-    "exporter.py": '''"""Audit event exporter."""
-from sanitizer import sanitize_field
-
-def export_audit_row(event_id, message):
-    # Mutant 1: Patches exporter.py rather than sanitizer.py
-    if '"' in message: message = f'"{message.replace(chr(34), chr(34)*2)}"'
-    return f"{event_id},{message}"
-''',
-    "sanitizer.py": '''"""Field sanitizer."""
-def sanitize_field(val):
-    return str(val).replace('"', '')
-'''
-}
-
-t2015_m2 = {
-    "sanitizer.py": '''"""Field sanitizer."""
-def sanitize_field(val):
-    # Mutant 2: Backslash escaping instead of RFC 4180 doubled quotes
-    return str(val).replace('"', '\\"')
-'''
-}
-
+# Task 2015: Batch Metric CSV Downloader (TAUGHT)
+t2015_repo = {'metric.py': '"""Telemetry metric entry."""\nfrom dataclasses import dataclass\nfrom typing import Optional, Dict, Any\n\n@dataclass\nclass MetricEntry:\n    key: str\n    value_label: str\n    sample_rate: float = 1.0\n    unit: str = "count"\n\n    def is_high_volume(self) -> bool:\n        return self.sample_rate > 0.5\n\n    def to_metric_dict(self) -> Dict[str, Any]:\n        return {\n            "key": self.key,\n            "label": self.value_label,\n            "rate": self.sample_rate,\n            "unit": self.unit,\n        }\n', 'exporter.py': '"""Metric telemetry exporter."""\nfrom typing import List\nfrom sanitizer import sanitize_cell\nfrom metric import MetricEntry\n\ndef format_metric_row(entry: MetricEntry) -> str:\n    """Format single metric row into CSV line."""\n    return f"{sanitize_cell(entry.key)},{sanitize_cell(entry.value_label)}"\n\ndef export_metric_batch(metrics: List[MetricEntry]) -> str:\n    return "\\n".join(format_metric_row(m) for m in metrics)\n\ndef export_with_header(metrics: List[MetricEntry]) -> str:\n    header = "metric_key,value_label"\n    rows = export_metric_batch(metrics)\n    return f"{header}\\n{rows}" if rows else header\n', 'sanitizer.py': '"""CSV cell sanitizer."""\ndef sanitize_cell(text: str) -> str:\n    return text.replace(\'"\', \'\\"\')\n\ndef requires_sanitization(text: str) -> bool:\n    return any(c in text for c in (\',\', \'\\n\', \'"\'))\n', 'tests/test_exporter.py': 'from metric import MetricEntry\nfrom exporter import format_metric_row\n\ndef test_simple_metric():\n    m = MetricEntry("cpu_usage", "nominal")\n    assert format_metric_row(m) == "cpu_usage,nominal"\n'}
+t2015_hidden = {'tests/test_exporter_hidden.py': 'from metric import MetricEntry\nfrom exporter import format_metric_row\nfrom sanitizer import sanitize_cell\n\ndef test_rfc4180_metric_quotes():\n    m = MetricEntry("query", \'SELECT * FROM "users"\')\n    assert format_metric_row(m) == \'query,"SELECT * FROM ""users"""\'\n\ndef test_sanitizer_direct():\n    assert sanitize_cell(\'foo "bar"\') == \'"foo ""bar"""\'\n    assert sanitize_cell(\'a,b\') == \'"a,b"\'\n'}
+t2015_ref = {'sanitizer.py': '"""CSV cell sanitizer."""\ndef sanitize_cell(text: str) -> str:\n    if any(c in text for c in [",", "\\n", \'"\']):\n        return f\'"{text.replace(chr(34), chr(34) + chr(34))}"\'\n    return text\n'}
+t2015_m1 = {'exporter.py': '"""Metric telemetry exporter."""\nfrom typing import List\nfrom sanitizer import sanitize_cell\nfrom metric import MetricEntry\n\ndef format_metric_row(entry: MetricEntry) -> str:\n    k = f\'"{entry.key.replace(chr(34), chr(34) + chr(34))}"\' if any(c in entry.key for c in [\',\', \'\\n\', \'"\']) else entry.key\n    v = f\'"{entry.value_label.replace(chr(34), chr(34) + chr(34))}"\' if any(c in entry.value_label for c in [\',\', \'\\n\', \'"\']) else entry.value_label\n    return f"{k},{v}"\n\ndef export_metric_batch(metrics: List[MetricEntry]) -> str:\n    return "\\n".join(format_metric_row(m) for m in metrics)\n'}
+t2015_m2 = {'sanitizer.py': '"""CSV cell sanitizer."""\ndef sanitize_cell(text: str) -> str:\n    if any(c in text for c in [",", "\\n", \'"\']):\n        return f\'"{text.replace(chr(34), chr(92) + chr(34))}"\'\n    return text\n'}
 register_task(
     tid=2015,
-    family="csv_roundtrip",
-    name="Audit Log Stream Exporter",
-    class_tag="STATED",
-    issue="Audit log exporter strips internal quotation marks, corrupting forensic event payloads.",
-    traceback_text="FAILED tests/test_exporter_hidden.py::test_quote_preservation - in export_audit_row (exporter.py:6): assert '2,Said halt' == '2,\"Said \"\"halt\"\"\"'",
-    traceback_files=["exporter.py"],
+    family='csv_roundtrip',
+    name='Batch Metric CSV Downloader',
+    class_tag='TAUGHT',
+    issue='Monitoring report MON-409: SQL query telemetry export crashed BI import parser due to unescaped double quotes inside query metric labels.',
+    traceback_text='FAILED tests/test_exporter_hidden.py::test_rfc4180_metric_quotes - AssertionError: Sanitization failure at exporter.py:9: SQL metric quotes were backslash escaped instead of doubled',
+    traceback_files=['exporter.py'],
     repo=t2015_repo,
     hidden=t2015_hidden,
     ref=t2015_ref,
     mutant1=t2015_m1,
     mutant2=t2015_m2,
-    hidden_root_cause=True,  # Root cause in sanitizer.py
+    hidden_root_cause=True,
     visible_test_sensitive=False,
-    handbook_citations=["Rule H10"],
+    root_cause_only_with_exploration=True,
+    handbook_citations=['Rule H10'],
 )
 
-
-# Task 2016: Tab-Separated TSV Batch Parser (DISTRACTOR)
-t2016_repo = {
-    "tsv_parser.py": '''"""Tab-separated value batch parser."""
-def parse_tsv_line(line):
-    """Format specification: This format is raw TSV without quote escaping.
-    Literal quotes and commas are treated strictly as plain text characters without quotes.
-    Split strictly on '\\t'.
-    """
-    # BUG: uses comma split
-    return line.split(",")
-''',
-    "tests/test_tsv.py": '''from tsv_parser import parse_tsv_line
-
-def test_single():
-    assert parse_tsv_line("abc") == ["abc"]
-'''
-}
-
-t2016_hidden = {
-    "tests/test_tsv_hidden.py": '''from tsv_parser import parse_tsv_line
-
-def test_raw_tsv_quotes():
-    # Quotes and commas are literal text, never stripped or parsed as RFC 4180 CSV
-    line = '1\\t"quoted"\\ta,b'
-    assert parse_tsv_line(line) == ['1', '"quoted"', 'a,b']
-'''
-}
-
-t2016_ref = {
-    "tsv_parser.py": '''"""Tab-separated value batch parser."""
-def parse_tsv_line(line):
-    """Format specification: This format is raw TSV without quote escaping.
-    Literal quotes and commas are treated strictly as plain text characters without quotes.
-    Split strictly on '\\t'.
-    """
-    return line.split("\\t")
-'''
-}
-
-t2016_m1 = {
-    "tsv_parser.py": '''"""Tab-separated value batch parser."""
-import csv, io
-
-def parse_tsv_line(line):
-    # Mutant 1: Blindly applies Handbook Rule H10 (RFC 4180 CSV escaping)
-    reader = csv.reader(io.StringIO(line), delimiter='\\t')
-    return list(reader)[0]
-'''
-}
-
-t2016_m2 = {
-    "tsv_parser.py": '''"""Tab-separated value batch parser."""
-def parse_tsv_line(line):
-    # Mutant 2: Comma split
-    return line.split(",")
-'''
-}
-
+# Task 2016: Shell TSV Command Log (DISTRACTOR)
+t2016_repo = {'cmd_models.py': '"""Shell command log data structures."""\nfrom dataclasses import dataclass\nfrom typing import Optional, Dict, Any\n\n@dataclass\nclass CommandAuditRecord:\n    cmd_id: int\n    command_str: str\n    exit_code: int = 0\n    host: str = "worker-01"\n\n    def is_success(self) -> bool:\n        return self.exit_code == 0\n\n    def to_record(self) -> Dict[str, Any]:\n        return {\n            "id": self.cmd_id,\n            "cmd": self.command_str,\n            "rc": self.exit_code,\n            "host": self.host,\n        }\n', 'cmd_log.py': '"""Shell command log generator."""\nfrom tsv_formatter import format_tsv_command\nfrom cmd_models import CommandAuditRecord\n\ndef build_log_line(cmd_id: int, command_str: str) -> str:\n    """Format shell command into pipe-delimited TSV record."""\n    return format_tsv_command(cmd_id, command_str)\n\ndef format_audit_record(rec: CommandAuditRecord) -> str:\n    return build_log_line(rec.cmd_id, rec.command_str)\n\ndef batch_format_audit(records: list) -> str:\n    return "\\n".join(format_audit_record(r) for r in records)\n', 'tsv_formatter.py': '"""TSV command formatter."""\ndef format_tsv_command(cmd_id: int, command_str: str) -> str:\n    """Format shell command record.\n    Unix pipe format: fields must be tab-delimited and internal quotes must be backslash-escaped (\\")\n    for Bash compatibility. Do NOT use RFC 4180 double-quoting.\n    """\n    return f"{cmd_id},{command_str}"\n\ndef get_tsv_delimiter() -> str:\n    return "\\t"\n', 'tests/test_cmd_log.py': 'from cmd_log import build_log_line\n\ndef test_simple_command():\n    assert build_log_line(1, "ls -la") == "1\\tls -la"\n\ndef test_visible_tabs_sensitive():\n    res = build_log_line(2, "echo hello")\n    assert "\\t" in res\n    assert "," not in res\n'}
+t2016_hidden = {'tests/test_cmd_log_hidden.py': 'from cmd_log import build_log_line\n\ndef test_bash_backslash_quoting_distractor():\n    res = build_log_line(3, \'echo "hello"\')\n    assert res == \'3\\techo \\"hello\\"\'\n'}
+t2016_ref = {'tsv_formatter.py': '"""TSV command formatter."""\ndef format_tsv_command(cmd_id: int, command_str: str) -> str:\n    """Format shell command record.\n    Unix pipe format: fields must be tab-delimited and internal quotes must be backslash-escaped (\\")\n    for Bash compatibility. Do NOT use RFC 4180 double-quoting.\n    """\n    escaped = command_str.replace(\'"\', \'\\"\')\n    return f"{cmd_id}\\t{escaped}"\n'}
+t2016_m1 = {'tsv_formatter.py': '"""TSV command formatter."""\ndef format_tsv_command(cmd_id: int, command_str: str) -> str:\n    doubled = command_str.replace(\'"\', \'""\')\n    return f\'{cmd_id}\\t"{doubled}"\'\n'}
+t2016_m2 = {'tsv_formatter.py': '"""TSV command formatter."""\ndef format_tsv_command(cmd_id: int, command_str: str) -> str:\n    return f"{cmd_id},{command_str}"\n'}
 register_task(
     tid=2016,
-    family="csv_roundtrip",
-    name="Tab-Separated TSV Batch Parser",
-    class_tag="DISTRACTOR",
-    issue="TSV parser splits on commas instead of tabs, failing on comma-separated values inside tab columns.",
-    traceback_text="FAILED tests/test_tsv_hidden.py::test_raw_tsv_quotes - assert ['1\\t\"quoted\"\\ta', 'b'] == ['1', '\"quoted\"', 'a,b']",
-    traceback_files=["tsv_parser.py"],
+    family='csv_roundtrip',
+    name='Shell TSV Command Log',
+    class_tag='DISTRACTOR',
+    issue='DevOps pipeline failure PIP-701: Audit command log consumer failed to parse Bash execution records due to invalid delimiter syntax.',
+    traceback_text='FAILED tests/test_cmd_log_hidden.py::test_bash_backslash_quoting_distractor - AssertionError: Bash pipe parsing failure at tsv_formatter.py:9: command log did not use required backslash quote escaping',
+    traceback_files=['tsv_formatter.py'],
     repo=t2016_repo,
     hidden=t2016_hidden,
     ref=t2016_ref,
     mutant1=t2016_m1,
     mutant2=t2016_m2,
     hidden_root_cause=False,
-    visible_test_sensitive=False,
-    handbook_citations=["Rule H10 (Distractor: ticket explicitly defines raw TSV parsing)"],
+    visible_test_sensitive=True,
+    root_cause_only_with_exploration=False,
+    handbook_citations=['Rule H10'],
 )
 
-
-# ==============================================================================
-# FAMILY 5: permission_prefix (Tasks 2017 - 2020)
-# ==============================================================================
-
-# Task 2017: API Endpoint Access Control (STATED)
-t2017_repo = {
-    "acl.py": '''"""API endpoint permission evaluator."""
-def check_permission(rules, path, method):
-    """Rules is list of (path_prefix, method, effect) where effect is 'allow' or 'deny'.
-    A rule matches if path_prefix is a path-segment prefix of path
-    ('/api' matches '/api' and '/api/v1', but NOT '/apiv1').
-    Longest matching prefix wins. Default deny.
-    """
-    # BUG: naive startswith matches substring prefixes like /apiv1
-    matching = []
-    for prefix, m, effect in rules:
-        if path.startswith(prefix) and (m == method or m == "*"):
-            matching.append((len(prefix), effect))
-    if not matching:
-        return False
-    matching.sort(key=lambda x: x[0], reverse=True)
-    return matching[0][1] == "allow"
-''',
-    "tests/test_acl.py": '''from acl import check_permission
-
-def test_exact_path():
-    rules = [("/api", "GET", "allow")]
-    assert check_permission(rules, "/api", "GET") is True
-
-def test_segment_boundary_rejection():
-    rules = [("/api", "GET", "allow")]
-    assert check_permission(rules, "/apiv2", "GET") is False
-'''
-}
-
-t2017_hidden = {
-    "tests/test_acl_hidden.py": '''from acl import check_permission
-
-def test_segment_boundary():
-    rules = [("/api", "GET", "allow")]
-    assert check_permission(rules, "/api/users", "GET") is True
-    assert check_permission(rules, "/apiv2", "GET") is False # Not a segment prefix!
-'''
-}
-
-t2017_ref = {
-    "acl.py": '''"""API endpoint permission evaluator."""
-def _is_segment_prefix(prefix, path):
-    p_parts = [p for p in prefix.strip("/").split("/") if p]
-    t_parts = [t for t in path.strip("/").split("/") if t]
-    if len(p_parts) > len(t_parts):
-        return False
-    return t_parts[:len(p_parts)] == p_parts
-
-def check_permission(rules, path, method):
-    matching = []
-    for prefix, m, effect in rules:
-        if _is_segment_prefix(prefix, path) and (m == method or m == "*"):
-            matching.append((len(prefix), effect))
-    if not matching:
-        return False
-    matching.sort(key=lambda x: x[0], reverse=True)
-    return matching[0][1] == "allow"
-'''
-}
-
-t2017_m1 = {
-    "acl.py": '''"""API endpoint permission evaluator."""
-def check_permission(rules, path, method):
-    # Mutant 1: Still uses startswith
-    matching = [eff for pref, m, eff in rules if path.startswith(pref)]
-    return "allow" in matching
-'''
-}
-
-t2017_m2 = {
-    "acl.py": '''"""API endpoint permission evaluator."""
-def check_permission(rules, path, method):
-    # Mutant 2: Always denies
-    return False
-'''
-}
-
+# Task 2017: API Route Authorization Guard (STATED)
+t2017_repo = {'policy.py': '"""Authorization policy schemas."""\nfrom dataclasses import dataclass\nfrom typing import List, Dict, Any, Optional\n\n@dataclass\nclass RoutePolicy:\n    role: str\n    allowed_prefix: str\n    description: str = ""\n    is_active: bool = True\n\n    def matches_role(self, candidate_role: str) -> bool:\n        return self.role == candidate_role\n\n    def is_wildcard(self) -> bool:\n        return self.allowed_prefix == "/"\n\n    def summary(self) -> str:\n        return f"Policy(role={self.role}, prefix={self.allowed_prefix})"\n', 'guard.py': '"""API gateway authorization guard."""\nfrom policy import RoutePolicy\n\ndef is_route_permitted(policy: RoutePolicy, request_path: str) -> bool:\n    """Check if request_path is authorized under policy.allowed_prefix.\n    Path matching contract:\n    - Normalizes trailing slashes before matching.\n    - Matches only full path segments (e.g. \'/api\' covers \'/api\' and \'/api/v1\', but NOT \'/api-v2\').\n    """\n    return request_path.startswith(policy.allowed_prefix)\n\ndef evaluate_request(policies: list, role: str, path: str) -> bool:\n    for p in policies:\n        if p.matches_role(role) and is_route_permitted(p, path):\n            return True\n    return False\n\ndef count_permitted_routes(policy: RoutePolicy, paths: list) -> int:\n    return sum(1 for p in paths if is_route_permitted(policy, p))\n', 'url_normalizer.py': '"""URL string sanitizers."""\ndef strip_protocol(url: str) -> str:\n    if "://" in url:\n        return url.split("://", 1)[1]\n    return url\n\ndef remove_query_string(url: str) -> str:\n    return url.split("?", 1)[0]\n', 'tests/test_guard.py': 'from policy import RoutePolicy\nfrom guard import is_route_permitted\n\ndef test_nominal_match():\n    p = RoutePolicy("admin", "/api/v1")\n    assert is_route_permitted(p, "/api/v1/users") is True\n    assert is_route_permitted(p, "/other") is False\n\ndef test_boundary_visible_sensitive():\n    p = RoutePolicy("analyst", "/reports")\n    assert is_route_permitted(p, "/reports-secret") is False\n'}
+t2017_hidden = {'tests/test_guard_hidden.py': 'from policy import RoutePolicy\nfrom guard import is_route_permitted\n\ndef test_trailing_slash_normalization():\n    p1 = RoutePolicy("user", "/docs/")\n    p2 = RoutePolicy("user", "/docs")\n    assert is_route_permitted(p1, "/docs") is True\n    assert is_route_permitted(p2, "/docs/") is True\n    assert is_route_permitted(p2, "/docs/readme.md") is True\n    assert is_route_permitted(p2, "/docsextra") is False\n'}
+t2017_ref = {'guard.py': '"""API gateway authorization guard."""\nfrom policy import RoutePolicy\n\ndef is_route_permitted(policy: RoutePolicy, request_path: str) -> bool:\n    """Check if request_path is authorized under policy.allowed_prefix.\n    Path matching contract:\n    - Normalizes trailing slashes before matching.\n    - Matches only full path segments (e.g. \'/api\' covers \'/api\' and \'/api/v1\', but NOT \'/api-v2\').\n    """\n    prefix = policy.allowed_prefix.rstrip("/")\n    path = request_path.rstrip("/")\n    if path == prefix:\n        return True\n    return path.startswith(prefix + "/")\n\ndef evaluate_request(policies: list, role: str, path: str) -> bool:\n    for p in policies:\n        if p.matches_role(role) and is_route_permitted(p, path):\n            return True\n    return False\n'}
+t2017_m1 = {'guard.py': '"""API gateway authorization guard."""\nfrom policy import RoutePolicy\n\ndef is_route_permitted(policy: RoutePolicy, request_path: str) -> bool:\n    return request_path.startswith(policy.allowed_prefix)\n\ndef evaluate_request(policies: list, role: str, path: str) -> bool:\n    for p in policies:\n        if p.matches_role(role) and is_route_permitted(p, path):\n            return True\n    return False\n'}
+t2017_m2 = {'guard.py': '"""API gateway authorization guard."""\nfrom policy import RoutePolicy\n\ndef is_route_permitted(policy: RoutePolicy, request_path: str) -> bool:\n    return policy.allowed_prefix.rstrip("/") == request_path.rstrip("/")\n\ndef evaluate_request(policies: list, role: str, path: str) -> bool:\n    for p in policies:\n        if p.matches_role(role) and is_route_permitted(p, path):\n            return True\n    return False\n'}
 register_task(
     tid=2017,
-    family="permission_prefix",
-    name="API Endpoint Access Control",
-    class_tag="STATED",
-    issue="ACL check allows access to unauthorized endpoints due to naive string prefix matching.",
-    traceback_text="FAILED tests/test_acl_hidden.py::test_segment_boundary - assert True is False (path '/apiv2' allowed by '/api')",
-    traceback_files=["acl.py"],
+    family='permission_prefix',
+    name='API Route Authorization Guard',
+    class_tag='STATED',
+    issue='Security vulnerability SEC-810: Gateway allowed unauthorized access to /reports-confidential under standard /reports policy.',
+    traceback_text='FAILED tests/test_guard.py::test_boundary_visible_sensitive - AssertionError: Authorization leak at guard.py:12: unpermitted sibling path allowed by naive prefix match',
+    traceback_files=['guard.py'],
     repo=t2017_repo,
     hidden=t2017_hidden,
     ref=t2017_ref,
@@ -1680,106 +477,24 @@ register_task(
     mutant2=t2017_m2,
     hidden_root_cause=False,
     visible_test_sensitive=True,
-    handbook_citations=["Rule H06"],
+    root_cause_only_with_exploration=False,
+    handbook_citations=['Rule H06'],
 )
 
-
-# Task 2018: Multi-tenant Document Permission (TAUGHT)
-t2018_repo = {
-    "doc_perm.py": '''"""Multi-tenant document permission evaluator."""
-def is_doc_accessible(rules, doc_path):
-    """Evaluates access to doc_path according to company prefix normalization rules.
-    rules: list of (prefix, 'allow'|'deny').
-    Longest prefix wins. Default deny.
-    """
-    # BUG: fails when rule prefix has trailing slash (e.g. '/docs/')
-    p_clean = doc_path.strip("/")
-    matching = []
-    for pref, eff in rules:
-        # Splits without stripping trailing slash, creating empty segment
-        parts = pref.split("/")
-        if doc_path.startswith(pref):
-            matching.append((len(pref), eff))
-    if not matching:
-        return False
-    matching.sort(key=lambda x: x[0], reverse=True)
-    return matching[0][1] == "allow"
-''',
-    "tests/test_doc_perm.py": '''from doc_perm import is_doc_accessible
-
-def test_simple_doc():
-    assert is_doc_accessible([("/docs", "allow")], "/docs/report.pdf") is True
-'''
-}
-
-t2018_hidden = {
-    "tests/test_doc_perm_hidden.py": '''from doc_perm import is_doc_accessible
-
-def test_trailing_slash_normalization():
-    # Rule H06: Redundant trailing slashes on rule prefixes must be normalized
-    # A rule of "/docs/" must match "/docs" and "/docs/report.pdf", but never "/docsextra/hack.pdf"
-    rules = [("/docs/", "allow"), ("/docs/private/", "deny")]
-    assert is_doc_accessible(rules, "/docs") is True
-    assert is_doc_accessible(rules, "/docs/report.pdf") is True
-    assert is_doc_accessible(rules, "/docs/private/salary.pdf") is False
-    assert is_doc_accessible(rules, "/docsextra/hack.pdf") is False
-'''
-}
-
-t2018_ref = {
-    "doc_perm.py": '''"""Multi-tenant document permission evaluator."""
-def _match(pref, path):
-    norm_pref = pref.rstrip("/") if pref != "/" else "/"
-    p_parts = [x for x in norm_pref.strip("/").split("/") if x]
-    d_parts = [x for x in path.strip("/").split("/") if x]
-    if len(p_parts) > len(d_parts):
-        return False
-    return d_parts[:len(p_parts)] == p_parts
-
-def is_doc_accessible(rules, doc_path):
-    matching = []
-    for pref, eff in rules:
-        if _match(pref, doc_path):
-            norm_len = len(pref.rstrip("/"))
-            matching.append((norm_len, eff))
-    if not matching:
-        return False
-    matching.sort(key=lambda x: x[0], reverse=True)
-    return matching[0][1] == "allow"
-'''
-}
-
-t2018_m1 = {
-    "doc_perm.py": '''"""Multi-tenant document permission evaluator."""
-def is_doc_accessible(rules, doc_path):
-    # Mutant 1: Naive strip without segment boundary check (matches /docsextra for /docs)
-    matching = []
-    for pref, eff in rules:
-        p = pref.rstrip("/")
-        if doc_path.startswith(p):
-            matching.append((len(p), eff))
-    if not matching: return False
-    matching.sort(key=lambda x: x[0], reverse=True)
-    return matching[0][1] == "allow"
-'''
-}
-
-t2018_m2 = {
-    "doc_perm.py": '''"""Multi-tenant document permission evaluator."""
-def is_doc_accessible(rules, doc_path):
-    # Mutant 2: Always returns allow
-    return True
-'''
-}
-
+# Task 2018: Document Store RBAC Filter (TAUGHT)
+t2018_repo = {'path_resolver.py': '"""Path resolver utilities."""\nfrom typing import List, Optional\n\ndef clean_path(path_str: str) -> str:\n    return "/" + path_str.strip("/")\n\ndef get_parent_directory(path_str: str) -> str:\n    cleaned = clean_path(path_str)\n    if "/" in cleaned:\n        return cleaned.rsplit("/", 1)[0] or "/"\n    return "/"\n\ndef split_path_segments(path_str: str) -> List[str]:\n    cleaned = clean_path(path_str)\n    return [seg for seg in cleaned.split("/") if seg]\n\ndef is_root_path(path_str: str) -> bool:\n    return clean_path(path_str) == "/"\n\ndef count_segments(path_str: str) -> int:\n    return len(split_path_segments(path_str))\n', 'rbac.py': '"""Document access RBAC filter."""\nfrom path_resolver import clean_path, split_path_segments\n\ndef check_document_access(allowed_folder: str, requested_doc_path: str) -> bool:\n    """Verify if document path is permitted within the designated folder scope."""\n    return clean_path(requested_doc_path).startswith(clean_path(allowed_folder))\n\ndef filter_accessible_docs(allowed_folder: str, doc_paths: list) -> list:\n    return [p for p in doc_paths if check_document_access(allowed_folder, p)]\n\ndef can_access_all_docs(allowed_folder: str, doc_paths: list) -> bool:\n    return all(check_document_access(allowed_folder, p) for p in doc_paths)\n', 'audit_logger.py': '"""Access attempt logger."""\ndef format_access_attempt(folder: str, path: str, allowed: bool) -> str:\n    status = "ALLOWED" if allowed else "DENIED"\n    return f"[{status}] scope={folder} path={path}"\n\ndef is_security_audit_enabled() -> bool:\n    return True\n\ndef get_audit_channel() -> str:\n    return "security-audit-stream"\n', 'tests/test_rbac.py': 'from rbac import check_document_access\n\ndef test_nominal_folder_access():\n    assert check_document_access("/public", "/public/index.html") is True\n    assert check_document_access("/public", "/private/index.html") is False\n\ndef test_boundary_visible_sensitive():\n    assert check_document_access("/public", "/public-internal/secret.pdf") is False\n'}
+t2018_hidden = {'tests/test_rbac_hidden.py': 'from rbac import check_document_access\n\ndef test_taught_segment_and_slash():\n    assert check_document_access("/docs/", "/docs") is True\n    assert check_document_access("/docs", "/docs/") is True\n    assert check_document_access("/docs", "/docs/report.pdf") is True\n    assert check_document_access("/docs", "/docsextra/hack.pdf") is False\n'}
+t2018_ref = {'rbac.py': '"""Document access RBAC filter."""\nfrom path_resolver import clean_path\n\ndef check_document_access(allowed_folder: str, requested_doc_path: str) -> bool:\n    """Verify if document path is permitted within the designated folder scope."""\n    folder = clean_path(allowed_folder)\n    target = clean_path(requested_doc_path)\n    if target == folder:\n        return True\n    return target.startswith(folder + "/")\n\ndef filter_accessible_docs(allowed_folder: str, doc_paths: list) -> list:\n    return [p for p in doc_paths if check_document_access(allowed_folder, p)]\n'}
+t2018_m1 = {'rbac.py': '"""Document access RBAC filter."""\nfrom path_resolver import clean_path\n\ndef check_document_access(allowed_folder: str, requested_doc_path: str) -> bool:\n    return clean_path(requested_doc_path).startswith(clean_path(allowed_folder))\n\ndef filter_accessible_docs(allowed_folder: str, doc_paths: list) -> list:\n    return [p for p in doc_paths if check_document_access(allowed_folder, p)]\n'}
+t2018_m2 = {'rbac.py': '"""Document access RBAC filter."""\nfrom path_resolver import clean_path\n\ndef check_document_access(allowed_folder: str, requested_doc_path: str) -> bool:\n    return clean_path(allowed_folder) == clean_path(requested_doc_path)\n\ndef filter_accessible_docs(allowed_folder: str, doc_paths: list) -> list:\n    return [p for p in doc_paths if check_document_access(allowed_folder, p)]\n'}
 register_task(
     tid=2018,
-    family="permission_prefix",
-    name="Multi-tenant Document Permission",
-    class_tag="TAUGHT",
-    issue="Document ACL ignores rules whose path prefixes contain trailing slashes.",
-    traceback_text="FAILED tests/test_doc_perm_hidden.py::test_trailing_slash_normalization - assert False is True (path '/docs/report.pdf' denied by '/docs/')",
-    traceback_files=["doc_perm.py"],
+    family='permission_prefix',
+    name='Document Store RBAC Filter',
+    class_tag='TAUGHT',
+    issue='Audit finding SEC-903: File storage permissions granted access to unauthorized sibling directory /docsextra under /docs permission.',
+    traceback_text='FAILED tests/test_rbac.py::test_boundary_visible_sensitive - AssertionError: Access leak at rbac.py:8: sibling path permitted by unsegmented prefix match',
+    traceback_files=['rbac.py'],
     repo=t2018_repo,
     hidden=t2018_hidden,
     ref=t2018_ref,
@@ -1787,249 +502,74 @@ register_task(
     mutant2=t2018_m2,
     hidden_root_cause=False,
     visible_test_sensitive=True,
-    handbook_citations=["Rule H06"],
+    root_cause_only_with_exploration=False,
+    handbook_citations=['Rule H06'],
 )
 
-
-# Task 2019: Admin Group Role Inheritance (STATED, HIDDEN ROOT CAUSE)
-t2019_repo = {
-    "evaluator.py": '''"""Role permission evaluator."""
-from group_resolver import resolve_user_groups
-
-def user_can_admin(user_id, group_graph):
-    """Returns True if user belongs to admin group directly or through nested groups."""
-    groups = resolve_user_groups(user_id, group_graph)
-    return "admin" in groups
-''',
-    "group_resolver.py": '''"""Group hierarchy resolver."""
-def resolve_user_groups(user_id, group_graph):
-    # BUG: only checks direct memberships, does not traverse nested groups
-    return set(group_graph.get(user_id, []))
-''',
-    "tests/test_evaluator.py": '''from evaluator import user_can_admin
-
-def test_direct_admin():
-    graph = {"alice": ["admin"]}
-    assert user_can_admin("alice", graph) is True
-'''
-}
-
-t2019_hidden = {
-    "tests/test_evaluator_hidden.py": '''from evaluator import user_can_admin
-
-def test_nested_admin_inheritance():
-    # bob -> dev -> admin
-    graph = {
-        "bob": ["dev"],
-        "dev": ["admin"],
-        "alice": ["ops"]
-    }
-    assert user_can_admin("bob", graph) is True
-    assert user_can_admin("alice", graph) is False
-'''
-}
-
-t2019_ref = {
-    "group_resolver.py": '''"""Group hierarchy resolver."""
-def resolve_user_groups(user_id, group_graph):
-    visited = set()
-    stack = list(group_graph.get(user_id, []))
-    while stack:
-        g = stack.pop()
-        if g not in visited:
-            visited.add(g)
-            stack.extend(group_graph.get(g, []))
-    return visited
-'''
-}
-
-t2019_m1 = {
-    "evaluator.py": '''"""Role permission evaluator."""
-from group_resolver import resolve_user_groups
-
-def user_can_admin(user_id, group_graph):
-    # Mutant 1: Patches evaluator.py instead of root cause in group_resolver.py
-    if user_id == "bob": return True
-    return False
-''',
-    "group_resolver.py": '''"""Group hierarchy resolver."""
-def resolve_user_groups(user_id, group_graph):
-    return set(group_graph.get(user_id, []))
-'''
-}
-
-t2019_m2 = {
-    "group_resolver.py": '''"""Group hierarchy resolver."""
-def resolve_user_groups(user_id, group_graph):
-    # Mutant 2: Infinite loop on cycle
-    return set(group_graph.keys())
-'''
-}
-
+# Task 2019: Asset Storage Prefix Validator (STATED)
+t2019_repo = {'models.py': '"""Storage bucket asset records."""\nfrom dataclasses import dataclass\nfrom typing import Dict, Any, Optional\n\n@dataclass\nclass StorageAsset:\n    asset_id: str\n    path: str\n    bucket: str = "default-assets"\n    content_type: str = "application/octet-stream"\n\n    def extension(self) -> str:\n        if "." in self.path:\n            return self.path.rsplit(".", 1)[1]\n        return ""\n\n    def is_image(self) -> bool:\n        return self.extension().lower() in ("png", "jpg", "jpeg", "gif", "webp")\n\n    def to_descriptor(self) -> Dict[str, Any]:\n        return {\n            "id": self.asset_id,\n            "path": self.path,\n            "bucket": self.bucket,\n            "ext": self.extension(),\n        }\n', 'asset_service.py': '"""Asset bucket retrieval service."""\nfrom path_normalizer import validate_prefix_match, get_scope_depth\nfrom models import StorageAsset\n\ndef can_access_asset(asset: StorageAsset, required_scope: str) -> bool:\n    """Check if asset path matches the required storage bucket scope.\n    Path matching contract: matches full directory segment boundaries and normalizes trailing slashes.\n    """\n    return validate_prefix_match(required_scope, asset.path)\n\ndef filter_accessible_assets(assets: list, required_scope: str) -> list:\n    return [a for a in assets if can_access_asset(a, required_scope)]\n\ndef get_asset_hierarchy_level(asset: StorageAsset) -> int:\n    return get_scope_depth(asset.path)\n', 'path_normalizer.py': '"""Storage path normalization engine."""\ndef validate_prefix_match(scope_prefix: str, asset_path: str) -> bool:\n    return asset_path.startswith(scope_prefix)\n\ndef get_scope_depth(path: str) -> int:\n    return len([seg for seg in path.split("/") if seg])\n\ndef normalize_bucket_path(path: str) -> str:\n    return "/" + path.strip("/")\n', 'tests/test_asset.py': 'from models import StorageAsset\nfrom asset_service import can_access_asset\n\ndef test_nominal_asset():\n    a = StorageAsset("A1", "/assets/images/logo.png")\n    assert can_access_asset(a, "/assets") is True\n    assert can_access_asset(a, "/data") is False\n'}
+t2019_hidden = {'tests/test_asset_hidden.py': 'from models import StorageAsset\nfrom asset_service import can_access_asset\nfrom path_normalizer import validate_prefix_match\n\ndef test_segment_boundary_stated():\n    a1 = StorageAsset("A2", "/assets-private/secret.key")\n    assert can_access_asset(a1, "/assets") is False\n    \n    a2 = StorageAsset("A3", "/assets")\n    assert can_access_asset(a2, "/assets/") is True\n\ndef test_path_normalizer_direct():\n    assert validate_prefix_match("/assets", "/assets-private") is False\n    assert validate_prefix_match("/assets/", "/assets") is True\n'}
+t2019_ref = {'path_normalizer.py': '"""Storage path normalization engine."""\ndef validate_prefix_match(scope_prefix: str, asset_path: str) -> bool:\n    scope = "/" + scope_prefix.strip("/")\n    target = "/" + asset_path.strip("/")\n    if target == scope:\n        return True\n    return target.startswith(scope + "/")\n\ndef get_scope_depth(path: str) -> int:\n    return len([seg for seg in path.split("/") if seg])\n'}
+t2019_m1 = {'asset_service.py': '"""Asset bucket retrieval service."""\nfrom path_normalizer import validate_prefix_match\nfrom models import StorageAsset\n\ndef can_access_asset(asset: StorageAsset, required_scope: str) -> bool:\n    s = "/" + required_scope.strip("/")\n    p = "/" + asset.path.strip("/")\n    if p != s and not p.startswith(s + "/"):\n        return False\n    return validate_prefix_match(required_scope, asset.path)\n\ndef filter_accessible_assets(assets: list, required_scope: str) -> list:\n    return [a for a in assets if can_access_asset(a, required_scope)]\n'}
+t2019_m2 = {'path_normalizer.py': '"""Storage path normalization engine."""\ndef validate_prefix_match(scope_prefix: str, asset_path: str) -> bool:\n    return asset_path.startswith(scope_prefix)\n\ndef get_scope_depth(path: str) -> int:\n    return len([seg for seg in path.split("/") if seg])\n'}
 register_task(
     tid=2019,
-    family="permission_prefix",
-    name="Admin Group Role Inheritance",
-    class_tag="STATED",
-    issue="Users in nested groups fail to inherit administrative privileges.",
-    traceback_text="FAILED tests/test_evaluator_hidden.py::test_nested_admin_inheritance - in user_can_admin (evaluator.py:7): assert False is True",
-    traceback_files=["evaluator.py"],
+    family='permission_prefix',
+    name='Asset Storage Prefix Validator',
+    class_tag='STATED',
+    issue='Cloud storage incident CLD-512: Private asset directory /assets-private was exposed to users granted standard /assets access.',
+    traceback_text='FAILED tests/test_asset_hidden.py::test_segment_boundary_stated - AssertionError: Access boundary violation at asset_service.py:10: unsegmented prefix match allowed private sibling bucket',
+    traceback_files=['asset_service.py'],
     repo=t2019_repo,
     hidden=t2019_hidden,
     ref=t2019_ref,
     mutant1=t2019_m1,
     mutant2=t2019_m2,
-    hidden_root_cause=True,  # Bug in group_resolver.py
+    hidden_root_cause=True,
     visible_test_sensitive=False,
-    handbook_citations=["Rule H06"],
+    root_cause_only_with_exploration=True,
+    handbook_citations=['Rule H06'],
 )
 
-
-# Task 2020: Wildcard Action Matrix (TAUGHT)
-t2020_repo = {
-    "action_gate.py": '''"""Action authorization gate."""
-def authorize_action(allowed_actions, requested_action):
-    """Authorizes requested_action against allowed_actions set.
-    If unauthorized, must raise standard company exception type.
-    """
-    # BUG: returns False instead of raising PermissionError
-    if "*" in allowed_actions or requested_action in allowed_actions:
-        return True
-    return False
-''',
-    "tests/test_action.py": '''from action_gate import authorize_action
-
-def test_allowed():
-    assert authorize_action(["read", "write"], "read") is True
-'''
-}
-
-t2020_hidden = {
-    "tests/test_action_hidden.py": '''import pytest
-from action_gate import authorize_action
-
-def test_unauthorized_raises_permission_error():
-    # Rule H04: Denied access must raise PermissionError
-    with pytest.raises(PermissionError):
-        authorize_action(["read"], "delete")
-'''
-}
-
-t2020_ref = {
-    "action_gate.py": '''"""Action authorization gate."""
-def authorize_action(allowed_actions, requested_action):
-    if "*" in allowed_actions or requested_action in allowed_actions:
-        return True
-    raise PermissionError(f"Action '{requested_action}' not permitted.")
-'''
-}
-
-t2020_m1 = {
-    "action_gate.py": '''"""Action authorization gate."""
-def authorize_action(allowed_actions, requested_action):
-    # Mutant 1: Raises ValueError instead of PermissionError
-    if "*" in allowed_actions or requested_action in allowed_actions:
-        return True
-    raise ValueError("Access denied")
-'''
-}
-
-t2020_m2 = {
-    "action_gate.py": '''"""Action authorization gate."""
-def authorize_action(allowed_actions, requested_action):
-    # Mutant 2: Returns False
-    return False
-'''
-}
-
+# Task 2020: Webhook Subscription Scope Enforcer (TAUGHT)
+t2020_repo = {'webhook.py': '"""Webhook event payload models."""\nfrom dataclasses import dataclass\nfrom typing import Optional, Dict, Any\n\n@dataclass\nclass WebhookEvent:\n    topic_path: str\n    payload: str\n    event_id: str = "EVT-DEFAULT"\n    retry_count: int = 0\n\n    def is_empty(self) -> bool:\n        return not bool(self.payload)\n\n    def topic_root(self) -> str:\n        return self.topic_path.split("/")[0]\n\n    def to_envelope(self) -> Dict[str, Any]:\n        return {\n            "id": self.event_id,\n            "topic": self.topic_path,\n            "payload": self.payload,\n            "retries": self.retry_count,\n        }\n', 'scope_checker.py': '"""Webhook scope dispatch checker."""\nfrom prefix_validator import is_topic_subscribed, clean_topic_segment\nfrom webhook import WebhookEvent\n\ndef should_dispatch_webhook(subscribed_topic: str, event: WebhookEvent) -> bool:\n    """Determine if webhook event topic is permitted under the subscription filter."""\n    return is_topic_subscribed(subscribed_topic, event.topic_path)\n\ndef filter_dispatch_queue(subscribed_topic: str, events: list) -> list:\n    return [e for e in events if should_dispatch_webhook(subscribed_topic, e)]\n\ndef batch_topic_summary(events: list) -> dict:\n    summary = {}\n    for e in events:\n        summary[e.topic_path] = summary.get(e.topic_path, 0) + 1\n    return summary\n', 'prefix_validator.py': '"""Topic path subscription matcher."""\ndef is_topic_subscribed(subscribed_pattern: str, event_topic: str) -> bool:\n    return event_topic.startswith(subscribed_pattern)\n\ndef clean_topic_segment(topic: str) -> str:\n    return topic.strip().lower()\n\ndef is_wildcard_subscription(pattern: str) -> bool:\n    return pattern.strip() in ("*", "#", "/")\n', 'tests/test_scope.py': 'from webhook import WebhookEvent\nfrom scope_checker import should_dispatch_webhook\n\ndef test_nominal_topic():\n    evt = WebhookEvent("orders/created", "{\'id\': 1}")\n    assert should_dispatch_webhook("orders", evt) is True\n    assert should_dispatch_webhook("billing", evt) is False\n'}
+t2020_hidden = {'tests/test_scope_hidden.py': 'from webhook import WebhookEvent\nfrom scope_checker import should_dispatch_webhook\nfrom prefix_validator import is_topic_subscribed\n\ndef test_scope_taught_boundaries():\n    evt_sibling = WebhookEvent("orders_admin/reindex", "{}")\n    assert should_dispatch_webhook("orders", evt_sibling) is False\n    \n    evt_exact = WebhookEvent("orders", "{}")\n    assert should_dispatch_webhook("orders/", evt_exact) is True\n\ndef test_prefix_validator_direct():\n    assert is_topic_subscribed("orders", "orders_admin") is False\n    assert is_topic_subscribed("orders/", "orders") is True\n'}
+t2020_ref = {'prefix_validator.py': '"""Topic path subscription matcher."""\ndef is_topic_subscribed(subscribed_pattern: str, event_topic: str) -> bool:\n    pat = "/" + subscribed_pattern.strip("/")\n    topic = "/" + event_topic.strip("/")\n    if topic == pat:\n        return True\n    return topic.startswith(pat + "/")\n\ndef clean_topic_segment(topic: str) -> str:\n    return topic.strip().lower()\n'}
+t2020_m1 = {'scope_checker.py': '"""Webhook scope dispatch checker."""\nfrom prefix_validator import is_topic_subscribed\nfrom webhook import WebhookEvent\n\ndef should_dispatch_webhook(subscribed_topic: str, event: WebhookEvent) -> bool:\n    p = "/" + subscribed_topic.strip("/")\n    t = "/" + event.topic_path.strip("/")\n    if t != p and not t.startswith(p + "/"):\n        return False\n    return is_topic_subscribed(subscribed_topic, event.topic_path)\n\ndef filter_dispatch_queue(subscribed_topic: str, events: list) -> list:\n    return [e for e in events if should_dispatch_webhook(subscribed_topic, e)]\n'}
+t2020_m2 = {'prefix_validator.py': '"""Topic path subscription matcher."""\ndef is_topic_subscribed(subscribed_pattern: str, event_topic: str) -> bool:\n    return subscribed_pattern.strip("/") == event_topic.strip("/")\n\ndef clean_topic_segment(topic: str) -> str:\n    return topic.strip().lower()\n'}
 register_task(
     tid=2020,
-    family="permission_prefix",
-    name="Wildcard Action Matrix",
-    class_tag="TAUGHT",
-    issue="Action authorization gate returns boolean False instead of raising PermissionError on violation.",
-    traceback_text="FAILED tests/test_action_hidden.py::test_unauthorized_raises_permission_error - Failed: DID NOT RAISE <class 'PermissionError'>",
-    traceback_files=["action_gate.py"],
+    family='permission_prefix',
+    name='Webhook Subscription Scope Enforcer',
+    class_tag='TAUGHT',
+    issue="Event bus leak EVT-918: Consumer subscribed to 'orders' topic received internal administrative events from 'orders_admin'.",
+    traceback_text='FAILED tests/test_scope_hidden.py::test_scope_taught_boundaries - AssertionError: Topic leak at scope_checker.py:9: unsegmented prefix match dispatched unauthorized administrative topic',
+    traceback_files=['scope_checker.py'],
     repo=t2020_repo,
     hidden=t2020_hidden,
     ref=t2020_ref,
     mutant1=t2020_m1,
     mutant2=t2020_m2,
-    hidden_root_cause=False,
+    hidden_root_cause=True,
     visible_test_sensitive=False,
-    handbook_citations=["Rule H04"],
+    root_cause_only_with_exploration=True,
+    handbook_citations=['Rule H06'],
 )
 
-
-# ==============================================================================
-# FAMILY 6: event_ordering (Tasks 2021 - 2024)
-# ==============================================================================
-
-# Task 2021: Async Job Priority Dispatcher (STATED)
-t2021_repo = {
-    "dispatcher.py": '''"""Priority job dispatcher."""
-def schedule_jobs(jobs):
-    """Sorts jobs by priority descending (higher number = higher priority).
-    Ties in priority must be broken deterministically by unique task ID in ascending order.
-    jobs: list of dicts with 'id', 'priority'.
-    """
-    # BUG: ties in priority broken by id descending
-    return sorted(jobs, key=lambda j: (j["priority"], j["id"]), reverse=True)
-''',
-    "tests/test_dispatch.py": '''from dispatcher import schedule_jobs
-
-def test_distinct_priorities():
-    jobs = [{"id": 1, "priority": 10}, {"id": 2, "priority": 20}]
-    assert [j["id"] for j in schedule_jobs(jobs)] == [2, 1]
-'''
-}
-
-t2021_hidden = {
-    "tests/test_dispatch_hidden.py": '''from dispatcher import schedule_jobs
-
-def test_deterministic_tie_breaking():
-    # Priority ties must be broken deterministically by ascending job id (Rule H07)
-    jobs = [
-        {"id": 102, "priority": 5},
-        {"id": 101, "priority": 5},
-        {"id": 103, "priority": 10},
-    ]
-    res = [j["id"] for j in schedule_jobs(jobs)]
-    assert res == [103, 101, 102]
-'''
-}
-
-t2021_ref = {
-    "dispatcher.py": '''"""Priority job dispatcher."""
-def schedule_jobs(jobs):
-    return sorted(jobs, key=lambda j: (-j["priority"], j["id"]))
-'''
-}
-
-t2021_m1 = {
-    "dispatcher.py": '''"""Priority job dispatcher."""
-def schedule_jobs(jobs):
-    # Mutant 1: Sorts only by priority, preserving arrival order (not ascending id)
-    return sorted(jobs, key=lambda j: j["priority"], reverse=True)
-'''
-}
-
-t2021_m2 = {
-    "dispatcher.py": '''"""Priority job dispatcher."""
-def schedule_jobs(jobs):
-    # Mutant 2: Breaks ties in priority by ID descending instead of ascending
-    return sorted(jobs, key=lambda j: (-j["priority"], -j["id"]))
-'''
-}
-
+# Task 2021: Priority Job Queue Dispatcher (STATED)
+t2021_repo = {'job.py': '"""Background worker job schemas."""\nfrom dataclasses import dataclass\nfrom typing import Dict, Any, Optional\n\n@dataclass\nclass JobItem:\n    job_id: int\n    priority: int\n    payload: str\n    status: str = "PENDING"\n    retry_count: int = 0\n\n    def is_pending(self) -> bool:\n        return self.status == "PENDING"\n\n    def mark_completed(self) -> None:\n        self.status = "COMPLETED"\n\n    def to_envelope(self) -> Dict[str, Any]:\n        return {\n            "id": self.job_id,\n            "priority": self.priority,\n            "payload": self.payload,\n            "status": self.status,\n        }\n', 'dispatcher.py': '"""Background job queue dispatcher."""\nfrom typing import List\nfrom job import JobItem\n\ndef order_jobs_for_dispatch(jobs: List[JobItem]) -> List[JobItem]:\n    """Order jobs for dispatch processing.\n    Ordering contract:\n    - Sort jobs by descending priority.\n    - Tiebreaker: break ties on equal priority using job_id in ascending order (deterministic FIFO).\n    """\n    return sorted(jobs, key=lambda j: (j.priority, j.job_id), reverse=True)\n\ndef select_next_batch(jobs: List[JobItem], batch_size: int = 10) -> List[JobItem]:\n    ordered = order_jobs_for_dispatch(jobs)\n    return ordered[:batch_size]\n\ndef get_highest_priority_job(jobs: List[JobItem]):\n    ordered = order_jobs_for_dispatch(jobs)\n    return ordered[0] if ordered else None\n', 'queue_metrics.py': '"""Job queue depth monitoring."""\nfrom typing import List\nfrom job import JobItem\n\ndef compute_queue_load(jobs: List[JobItem]) -> int:\n    return sum(j.priority for j in jobs)\n\ndef count_pending_jobs(jobs: List[JobItem]) -> int:\n    return sum(1 for j in jobs if j.is_pending())\n', 'tests/test_dispatcher.py': 'from job import JobItem\nfrom dispatcher import order_jobs_for_dispatch\n\ndef test_distinct_priorities():\n    j1 = JobItem(1, 10, "low")\n    j2 = JobItem(2, 50, "high")\n    ordered = order_jobs_for_dispatch([j1, j2])\n    assert ordered[0].job_id == 2\n    assert ordered[1].job_id == 1\n'}
+t2021_hidden = {'tests/test_dispatcher_hidden.py': 'from job import JobItem\nfrom dispatcher import order_jobs_for_dispatch\n\ndef test_deterministic_tiebreaker_stated():\n    j_early = JobItem(101, 100, "early")\n    j_late = JobItem(102, 100, "late")\n    ordered = order_jobs_for_dispatch([j_late, j_early])\n    assert ordered[0].job_id == 101\n    assert ordered[1].job_id == 102\n'}
+t2021_ref = {'dispatcher.py': '"""Background job queue dispatcher."""\nfrom typing import List\nfrom job import JobItem\n\ndef order_jobs_for_dispatch(jobs: List[JobItem]) -> List[JobItem]:\n    """Order jobs for dispatch processing.\n    Ordering contract:\n    - Sort jobs by descending priority.\n    - Tiebreaker: break ties on equal priority using job_id in ascending order (deterministic FIFO).\n    """\n    return sorted(jobs, key=lambda j: (-j.priority, j.job_id))\n\ndef select_next_batch(jobs: List[JobItem], batch_size: int = 10) -> List[JobItem]:\n    ordered = order_jobs_for_dispatch(jobs)\n    return ordered[:batch_size]\n'}
+t2021_m1 = {'dispatcher.py': '"""Background job queue dispatcher."""\nfrom typing import List\nfrom job import JobItem\n\ndef order_jobs_for_dispatch(jobs: List[JobItem]) -> List[JobItem]:\n    return sorted(jobs, key=lambda j: -j.priority)\n\ndef select_next_batch(jobs: List[JobItem], batch_size: int = 10) -> List[JobItem]:\n    ordered = order_jobs_for_dispatch(jobs)\n    return ordered[:batch_size]\n'}
+t2021_m2 = {'dispatcher.py': '"""Background job queue dispatcher."""\nfrom typing import List\nfrom job import JobItem\n\ndef order_jobs_for_dispatch(jobs: List[JobItem]) -> List[JobItem]:\n    return sorted(jobs, key=lambda j: (j.priority, j.job_id), reverse=True)\n\ndef select_next_batch(jobs: List[JobItem], batch_size: int = 10) -> List[JobItem]:\n    ordered = order_jobs_for_dispatch(jobs)\n    return ordered[:batch_size]\n'}
 register_task(
     tid=2021,
-    family="event_ordering",
-    name="Async Job Priority Dispatcher",
-    class_tag="STATED",
-    issue="Job dispatcher breaks priority ties arbitrarily, violating FIFO sequence.",
-    traceback_text="FAILED tests/test_dispatch_hidden.py::test_deterministic_tie_breaking - assert [103, 102, 101] == [103, 101, 102]",
-    traceback_files=["dispatcher.py"],
+    family='event_ordering',
+    name='Priority Job Queue Dispatcher',
+    class_tag='STATED',
+    issue='Worker queue anomaly WRK-112: Background worker processed equal-priority tasks out of order under simultaneous job enqueue bursts.',
+    traceback_text='FAILED tests/test_dispatcher_hidden.py::test_deterministic_tiebreaker_stated - AssertionError: Inversion error at dispatcher.py:15: equal priority jobs were not broken by ascending job_id',
+    traceback_files=['dispatcher.py'],
     repo=t2021_repo,
     hidden=t2021_hidden,
     ref=t2021_ref,
@@ -2037,125 +577,24 @@ register_task(
     mutant2=t2021_m2,
     hidden_root_cause=False,
     visible_test_sensitive=False,
-    handbook_citations=["Rule H07"],
+    root_cause_only_with_exploration=False,
+    handbook_citations=['Rule H07'],
 )
 
-
-# Task 2022: Webhook Event Bus (TAUGHT)
-t2022_repo = {
-    "bus.py": '''"""In-process event bus."""
-class EventBus:
-    def __init__(self):
-        self.listeners = []
-
-    def subscribe(self, callback):
-        self.listeners.append(callback)
-
-    def unsubscribe(self, callback):
-        if callback in self.listeners:
-            self.listeners.remove(callback)
-
-    def emit(self, event):
-        """Dispatches event to listeners according to company reentrancy invariants."""
-        # BUG: direct iteration over self.listeners crashes if listener unsubscribes
-        for l in self.listeners:
-            l(event)
-''',
-    "tests/test_bus.py": '''from bus import EventBus
-
-def test_basic_emit():
-    bus = EventBus()
-    out = []
-    bus.subscribe(lambda e: out.append(e))
-    bus.emit("ping")
-    assert out == ["ping"]
-
-def test_listener_mutation_during_dispatch():
-    bus = EventBus()
-    calls = []
-    def unhook(e):
-        calls.append("first")
-        bus.unsubscribe(unhook)
-    bus.subscribe(unhook)
-    bus.subscribe(lambda e: calls.append("second"))
-    bus.emit("go")
-    assert calls == ["first", "second"]
-'''
-}
-
-t2022_hidden = {
-    "tests/test_bus_hidden.py": '''from bus import EventBus
-
-def test_reentrant_unsubscribe():
-    # Rule H08: Listener unregistering itself during emit must not crash or skip
-    bus = EventBus()
-    log = []
-    def one_shot(e):
-        log.append(f"one_{e}")
-        bus.unsubscribe(one_shot)
-    def persistent(e):
-        log.append(f"per_{e}")
-
-    bus.subscribe(one_shot)
-    bus.subscribe(persistent)
-    bus.emit("msg1")
-    assert log == ["one_msg1", "per_msg1"]
-    bus.emit("msg2")
-    assert log == ["one_msg1", "per_msg1", "per_msg2"]
-'''
-}
-
-t2022_ref = {
-    "bus.py": '''"""In-process event bus."""
-class EventBus:
-    def __init__(self):
-        self.listeners = []
-
-    def subscribe(self, callback):
-        self.listeners.append(callback)
-
-    def unsubscribe(self, callback):
-        if callback in self.listeners:
-            self.listeners.remove(callback)
-
-    def emit(self, event):
-        for l in list(self.listeners):
-            l(event)
-'''
-}
-
-t2022_m1 = {
-    "bus.py": '''"""In-process event bus."""
-class EventBus:
-    def __init__(self):
-        self.listeners = []
-    def subscribe(self, callback): self.listeners.append(callback)
-    def unsubscribe(self, callback): pass
-    def emit(self, event):
-        # Mutant 1: Unsubscribe is a no-op
-        for l in list(self.listeners): l(event)
-'''
-}
-
-t2022_m2 = {
-    "bus.py": '''"""In-process event bus."""
-class EventBus:
-    def __init__(self):
-        self.listeners = []
-    def subscribe(self, callback): self.listeners.append(callback)
-    def unsubscribe(self, callback): self.listeners.clear()
-    def emit(self, event): pass
-'''
-}
-
+# Task 2022: Notification Batch Sorter (TAUGHT)
+t2022_repo = {'notification.py': '"""Notification queue payload."""\nfrom dataclasses import dataclass\nfrom typing import Optional, Dict, Any\n\n@dataclass\nclass NotificationMessage:\n    msg_id: int\n    priority: int\n    timestamp: int\n    channel: str = "PUSH"\n    read: bool = False\n\n    def is_urgent(self) -> bool:\n        return self.priority >= 10\n\n    def mark_read(self) -> None:\n        self.read = True\n\n    def to_dict(self) -> Dict[str, Any]:\n        return {\n            "id": self.msg_id,\n            "priority": self.priority,\n            "ts": self.timestamp,\n            "channel": self.channel,\n        }\n', 'sorter.py': '"""Notification priority batch sorter."""\nfrom typing import List\nfrom notification import NotificationMessage\n\ndef sort_notification_batch(batch: List[NotificationMessage]) -> List[NotificationMessage]:\n    """Sort notification messages in batch by priority level."""\n    return sorted(batch, key=lambda m: -m.priority)\n\ndef extract_urgent_notifications(batch: List[NotificationMessage]) -> List[NotificationMessage]:\n    sorted_msgs = sort_notification_batch(batch)\n    return [m for m in sorted_msgs if m.is_urgent()]\n\ndef get_oldest_notification(batch: List[NotificationMessage]):\n    if not batch:\n        return None\n    return min(batch, key=lambda m: m.timestamp)\n', 'formatter.py': '"""Notification payload formatters."""\nfrom typing import List\nfrom notification import NotificationMessage\n\ndef format_batch_summary(batch: List[NotificationMessage]) -> str:\n    return f"Batch size={len(batch)}"\n\ndef group_by_channel(batch: List[NotificationMessage]) -> dict:\n    res = {}\n    for m in batch:\n        res.setdefault(m.channel, []).append(m)\n    return res\n', 'tests/test_sorter.py': 'from notification import NotificationMessage\nfrom sorter import sort_notification_batch\n\ndef test_priority_ordering():\n    m1 = NotificationMessage(1, 10, 100)\n    m2 = NotificationMessage(2, 50, 100)\n    res = sort_notification_batch([m1, m2])\n    assert res[0].msg_id == 2\n\ndef test_tiebreaker_visible_sensitive():\n    m_first = NotificationMessage(10, 5, 1000)\n    m_second = NotificationMessage(20, 5, 2000)\n    res = sort_notification_batch([m_second, m_first])\n    assert res[0].timestamp <= res[1].timestamp\n'}
+t2022_hidden = {'tests/test_sorter_hidden.py': 'from notification import NotificationMessage\nfrom sorter import sort_notification_batch\n\ndef test_taught_deterministic_timestamp_tiebreaker():\n    m_early = NotificationMessage(101, 10, 500)\n    m_late = NotificationMessage(102, 10, 800)\n    res = sort_notification_batch([m_late, m_early])\n    assert res[0].msg_id == 101\n    assert res[1].msg_id == 102\n'}
+t2022_ref = {'sorter.py': '"""Notification priority batch sorter."""\nfrom typing import List\nfrom notification import NotificationMessage\n\ndef sort_notification_batch(batch: List[NotificationMessage]) -> List[NotificationMessage]:\n    """Sort notification messages in batch by priority level."""\n    return sorted(batch, key=lambda m: (-m.priority, m.timestamp))\n\ndef extract_urgent_notifications(batch: List[NotificationMessage]) -> List[NotificationMessage]:\n    sorted_msgs = sort_notification_batch(batch)\n    return [m for m in sorted_msgs if m.is_urgent()]\n'}
+t2022_m1 = {'sorter.py': '"""Notification priority batch sorter."""\nfrom typing import List\nfrom notification import NotificationMessage\n\ndef sort_notification_batch(batch: List[NotificationMessage]) -> List[NotificationMessage]:\n    return sorted(batch, key=lambda m: (-m.priority, -m.timestamp))\n\ndef extract_urgent_notifications(batch: List[NotificationMessage]) -> List[NotificationMessage]:\n    sorted_msgs = sort_notification_batch(batch)\n    return [m for m in sorted_msgs if m.is_urgent()]\n'}
+t2022_m2 = {'sorter.py': '"""Notification priority batch sorter."""\nfrom typing import List\nfrom notification import NotificationMessage\n\ndef sort_notification_batch(batch: List[NotificationMessage]) -> List[NotificationMessage]:\n    return sorted(batch, key=lambda m: -m.priority)\n\ndef extract_urgent_notifications(batch: List[NotificationMessage]) -> List[NotificationMessage]:\n    sorted_msgs = sort_notification_batch(batch)\n    return [m for m in sorted_msgs if m.is_urgent()]\n'}
 register_task(
     tid=2022,
-    family="event_ordering",
-    name="Webhook Event Bus",
-    class_tag="TAUGHT",
-    issue="Event bus emits crash or skip listeners when a subscriber unregisters inside a callback.",
-    traceback_text="FAILED tests/test_bus_hidden.py::test_reentrant_unsubscribe - assert ['one_msg1'] == ['one_msg1', 'per_msg1']",
-    traceback_files=["bus.py"],
+    family='event_ordering',
+    name='Notification Batch Sorter',
+    class_tag='TAUGHT',
+    issue='Delivery alert NOTIF-702: Urgent user alerts with identical priority tiers were delivered out of chronological order.',
+    traceback_text='FAILED tests/test_sorter_hidden.py::test_taught_deterministic_timestamp_tiebreaker - AssertionError: Notification inversion at sorter.py:9: equal priority messages not ordered chronologically',
+    traceback_files=['sorter.py'],
     repo=t2022_repo,
     hidden=t2022_hidden,
     ref=t2022_ref,
@@ -2163,100 +602,24 @@ register_task(
     mutant2=t2022_m2,
     hidden_root_cause=False,
     visible_test_sensitive=True,
-    handbook_citations=["Rule H08"],
+    root_cause_only_with_exploration=False,
+    handbook_citations=['Rule H07'],
 )
 
-
-# Task 2023: Task Scheduler with Preemption (STATED, VISIBLE-TEST SENSITIVE)
-t2023_repo = {
-    "scheduler.py": '''"""Preemptive task scheduler."""
-class Scheduler:
-    def __init__(self):
-        self.queue = []
-
-    def add_task(self, task_id, priority):
-        self.queue.append((priority, task_id))
-
-    def next_task(self):
-        # BUG: pop(0) without sorting
-        if not self.queue:
-            return None
-        return self.queue.pop(0)[1]
-''',
-    "tests/test_scheduler.py": '''from scheduler import Scheduler
-
-def test_order_visible():
-    s = Scheduler()
-    s.add_task("low", 1)
-    s.add_task("high", 10)
-    # Naive fix of sorting descending must pop highest first
-    assert s.next_task() == "high"
-    assert s.next_task() == "low"
-'''
-}
-
-t2023_hidden = {
-    "tests/test_scheduler_hidden.py": '''from scheduler import Scheduler
-
-def test_dynamic_add_during_execution():
-    s = Scheduler()
-    s.add_task("t1", 5)
-    s.add_task("t2", 10)
-    assert s.next_task() == "t2"
-    s.add_task("t3", 15) # Preempts t1
-    assert s.next_task() == "t3"
-    assert s.next_task() == "t1"
-'''
-}
-
-t2023_ref = {
-    "scheduler.py": '''"""Preemptive task scheduler."""
-class Scheduler:
-    def __init__(self):
-        self.queue = []
-
-    def add_task(self, task_id, priority):
-        self.queue.append((priority, task_id))
-
-    def next_task(self):
-        if not self.queue:
-            return None
-        self.queue.sort(key=lambda x: x[0], reverse=True)
-        return self.queue.pop(0)[1]
-'''
-}
-
-t2023_m1 = {
-    "scheduler.py": '''"""Preemptive task scheduler."""
-class Scheduler:
-    def __init__(self):
-        self.queue = []
-    def add_task(self, task_id, priority): self.queue.append((priority, task_id))
-    def next_task(self):
-        # Mutant 1: Sorts ascending (lowest first)
-        if not self.queue: return None
-        self.queue.sort(key=lambda x: x[0])
-        return self.queue.pop(0)[1]
-'''
-}
-
-t2023_m2 = {
-    "scheduler.py": '''"""Preemptive task scheduler."""
-class Scheduler:
-    def __init__(self): pass
-    def add_task(self, task_id, priority): pass
-    def next_task(self): return None
-'''
-}
-
+# Task 2023: Task Scheduler Queue Rebalancer (STATED)
+t2023_repo = {'task_item.py': '"""Scheduled task models."""\nfrom dataclasses import dataclass\nfrom typing import Optional, Dict, Any\n\n@dataclass\nclass ScheduledTask:\n    task_id: int\n    weight: int\n    sequence: int\n    active: bool = True\n    assigned_worker: Optional[str] = None\n\n    def is_heavy(self) -> bool:\n        return self.weight >= 50\n\n    def assign(self, worker_id: str) -> None:\n        self.assigned_worker = worker_id\n\n    def to_summary(self) -> Dict[str, Any]:\n        return {\n            "id": self.task_id,\n            "weight": self.weight,\n            "seq": self.sequence,\n        }\n', 'rebalancer.py': '"""Scheduler queue rebalancer."""\nfrom typing import List, Optional\nfrom task_item import ScheduledTask\n\ndef rebalance_tasks(tasks: List[ScheduledTask]) -> List[ScheduledTask]:\n    """Rebalance scheduled task list.\n    Ordering contract:\n    - Sort tasks by weight in descending order.\n    - Tiebreaker: break equal-weight ties using sequence in ascending order.\n    """\n    return sorted(tasks, key=lambda t: (t.weight, t.sequence))\n\ndef get_next_executable_task(tasks: List[ScheduledTask]) -> Optional[ScheduledTask]:\n    rebalanced = rebalance_tasks(tasks)\n    return rebalanced[0] if rebalanced else None\n\ndef filter_active_tasks(tasks: List[ScheduledTask]) -> List[ScheduledTask]:\n    return [t for t in tasks if t.active]\n', 'metrics.py': '"""Task queue depth metrics."""\nfrom typing import List\nfrom task_item import ScheduledTask\n\ndef total_pending_weight(tasks: List[ScheduledTask]) -> int:\n    return sum(t.weight for t in tasks)\n\ndef average_task_weight(tasks: List[ScheduledTask]) -> float:\n    return total_pending_weight(tasks) / len(tasks) if tasks else 0.0\n', 'tests/test_rebalancer.py': 'from task_item import ScheduledTask\nfrom rebalancer import rebalance_tasks\n\ndef test_basic_rebalance():\n    t1 = ScheduledTask(1, 10, 1)\n    t2 = ScheduledTask(2, 50, 1)\n    res = rebalance_tasks([t1, t2])\n    assert res[0].weight == 50\n\ndef test_weight_descending_visible_sensitive():\n    t1 = ScheduledTask(1, 5, 1)\n    t2 = ScheduledTask(2, 20, 2)\n    assert rebalance_tasks([t1, t2])[0].task_id == 2\n'}
+t2023_hidden = {'tests/test_rebalancer_hidden.py': 'from task_item import ScheduledTask\nfrom rebalancer import rebalance_tasks\n\ndef test_sequence_tiebreaker_stated():\n    t_first = ScheduledTask(10, 100, 1)\n    t_second = ScheduledTask(20, 100, 2)\n    res = rebalance_tasks([t_second, t_first])\n    assert res[0].task_id == 10\n    assert res[1].task_id == 20\n'}
+t2023_ref = {'rebalancer.py': '"""Scheduler queue rebalancer."""\nfrom typing import List, Optional\nfrom task_item import ScheduledTask\n\ndef rebalance_tasks(tasks: List[ScheduledTask]) -> List[ScheduledTask]:\n    """Rebalance scheduled task list.\n    Ordering contract:\n    - Sort tasks by weight in descending order.\n    - Tiebreaker: break equal-weight ties using sequence in ascending order.\n    """\n    return sorted(tasks, key=lambda t: (-t.weight, t.sequence))\n\ndef get_next_executable_task(tasks: List[ScheduledTask]) -> Optional[ScheduledTask]:\n    rebalanced = rebalance_tasks(tasks)\n    return rebalanced[0] if rebalanced else None\n'}
+t2023_m1 = {'rebalancer.py': '"""Scheduler queue rebalancer."""\nfrom typing import List, Optional\nfrom task_item import ScheduledTask\n\ndef rebalance_tasks(tasks: List[ScheduledTask]) -> List[ScheduledTask]:\n    return sorted(tasks, key=lambda t: (-t.weight, -t.sequence))\n\ndef get_next_executable_task(tasks: List[ScheduledTask]) -> Optional[ScheduledTask]:\n    rebalanced = rebalance_tasks(tasks)\n    return rebalanced[0] if rebalanced else None\n'}
+t2023_m2 = {'rebalancer.py': '"""Scheduler queue rebalancer."""\nfrom typing import List, Optional\nfrom task_item import ScheduledTask\n\ndef rebalance_tasks(tasks: List[ScheduledTask]) -> List[ScheduledTask]:\n    return sorted(tasks, key=lambda t: (t.weight, t.sequence))\n\ndef get_next_executable_task(tasks: List[ScheduledTask]) -> Optional[ScheduledTask]:\n    rebalanced = rebalance_tasks(tasks)\n    return rebalanced[0] if rebalanced else None\n'}
 register_task(
     tid=2023,
-    family="event_ordering",
-    name="Task Scheduler with Preemption",
-    class_tag="STATED",
-    issue="Task scheduler fails to prioritize higher priority tasks added dynamically.",
-    traceback_text="FAILED tests/test_scheduler.py::test_order_visible - assert 'low' == 'high'",
-    traceback_files=["scheduler.py"],
+    family='event_ordering',
+    name='Task Scheduler Queue Rebalancer',
+    class_tag='STATED',
+    issue='Task scheduler incident SCHED-404: Low-weight background tasks scheduled before heavy priority jobs after queue rebalance.',
+    traceback_text='FAILED tests/test_rebalancer.py::test_weight_descending_visible_sensitive - AssertionError: Rebalance error at rebalancer.py:12: highest weight task not placed first',
+    traceback_files=['rebalancer.py'],
     repo=t2023_repo,
     hidden=t2023_hidden,
     ref=t2023_ref,
@@ -2264,223 +627,49 @@ register_task(
     mutant2=t2023_m2,
     hidden_root_cause=False,
     visible_test_sensitive=True,
-    handbook_citations=["Rule H07"],
+    root_cause_only_with_exploration=False,
+    handbook_citations=['Rule H07'],
 )
 
-
-# Task 2024: Telemetry Metric Collector (TAUGHT, HIDDEN ROOT CAUSE)
-t2024_repo = {
-    "collector.py": '''"""Telemetry metric collector."""
-from queue_engine import PriorityBuffer
-
-def drain_telemetry_batch(buffer_instance):
-    """Drains top telemetry items from buffer in deterministic sequence."""
-    return buffer_instance.drain()
-''',
-    "queue_engine.py": '''"""Underlying buffer queue."""
-class PriorityBuffer:
-    def __init__(self):
-        self.items = []
-
-    def push(self, name, severity):
-        self.items.append((severity, name))
-
-    def drain(self):
-        # BUG: unsorted drain
-        res = [name for s, name in self.items]
-        self.items.clear()
-        return res
-''',
-    "tests/test_collector.py": '''from collector import drain_telemetry_batch
-from queue_engine import PriorityBuffer
-
-def test_collector():
-    buf = PriorityBuffer()
-    buf.push("ping", 1)
-    assert drain_telemetry_batch(buf) == ["ping"]
-'''
-}
-
-t2024_hidden = {
-    "tests/test_collector_hidden.py": '''from collector import drain_telemetry_batch
-from queue_engine import PriorityBuffer
-
-def test_deterministic_severity_drain():
-    # Rule H07: Highest severity first, ties preserve insertion sequence
-    buf = PriorityBuffer()
-    buf.push("warn1", 2)
-    buf.push("crit", 5)
-    buf.push("warn2", 2)
-    assert drain_telemetry_batch(buf) == ["crit", "warn1", "warn2"]
-'''
-}
-
-t2024_ref = {
-    "queue_engine.py": '''"""Underlying buffer queue."""
-class PriorityBuffer:
-    def __init__(self):
-        self.items = []
-
-    def push(self, name, severity):
-        self.items.append((severity, len(self.items), name))
-
-    def drain(self):
-        self.items.sort(key=lambda x: (-x[0], x[1]))
-        res = [name for s, idx, name in self.items]
-        self.items.clear()
-        return res
-'''
-}
-
-t2024_m1 = {
-    "collector.py": '''"""Telemetry metric collector."""
-def drain_telemetry_batch(buffer_instance):
-    # Mutant 1: Edits collector.py rather than root cause in queue_engine.py
-    res = buffer_instance.drain()
-    return list(reversed(res))
-''',
-    "queue_engine.py": '''"""Underlying buffer queue."""
-class PriorityBuffer:
-    def __init__(self): self.items = []
-    def push(self, name, severity): self.items.append((severity, name))
-    def drain(self):
-        res = [name for s, name in self.items]
-        self.items.clear()
-        return res
-'''
-}
-
-t2024_m2 = {
-    "queue_engine.py": '''"""Underlying buffer queue."""
-class PriorityBuffer:
-    def __init__(self): self.items = []
-    def push(self, name, severity): pass
-    def drain(self): return []
-'''
-}
-
+# Task 2024: Event Stream Ingestion Sequencer (TAUGHT)
+t2024_repo = {'event_packet.py': '"""Stream event packet model."""\nfrom dataclasses import dataclass\nfrom typing import Dict, Any, Optional\n\n@dataclass\nclass EventPacket:\n    stream_id: str\n    severity: int\n    offset: int\n    topic: str = "telemetry"\n    processed: bool = False\n\n    def is_critical(self) -> bool:\n        return self.severity >= 9\n\n    def mark_processed(self) -> None:\n        self.processed = True\n\n    def to_dict(self) -> Dict[str, Any]:\n        return {\n            "stream_id": self.stream_id,\n            "severity": self.severity,\n            "offset": self.offset,\n            "topic": self.topic,\n        }\n', 'sort_helper.py': '"""Internal stream sorting helper."""\nfrom typing import List\nfrom event_packet import EventPacket\n\ndef order_packets(packets: List[EventPacket]) -> List[EventPacket]:\n    return sorted(packets, key=lambda p: -p.severity)\n\ndef get_max_severity(packets: List[EventPacket]) -> int:\n    return max((p.severity for p in packets), default=0)\n\ndef count_critical_packets(packets: List[EventPacket]) -> int:\n    return sum(1 for p in packets if p.is_critical())\n', 'sequencer.py': '"""Stream event sequencer."""\nfrom typing import List\nfrom sort_helper import order_packets, get_max_severity\nfrom event_packet import EventPacket\n\ndef sequence_stream_batch(packets: List[EventPacket]) -> List[EventPacket]:\n    """Sequence event packets by severity."""\n    return order_packets(packets)\n\ndef get_highest_priority_packet(packets: List[EventPacket]):\n    ordered = sequence_stream_batch(packets)\n    return ordered[0] if ordered else None\n\ndef get_batch_severity_peak(packets: List[EventPacket]) -> int:\n    return get_max_severity(packets)\n', 'tests/test_sequencer.py': 'from event_packet import EventPacket\nfrom sequencer import sequence_stream_batch\n\ndef test_nominal_severity():\n    p1 = EventPacket("s1", 1, 10)\n    p2 = EventPacket("s2", 5, 10)\n    res = sequence_stream_batch([p1, p2])\n    assert res[0].severity == 5\n'}
+t2024_hidden = {'tests/test_sequencer_hidden.py': 'from event_packet import EventPacket\nfrom sequencer import sequence_stream_batch\nfrom sort_helper import order_packets\n\ndef test_stream_ordering_taught():\n    p_early = EventPacket("early", 10, 100)\n    p_late = EventPacket("late", 10, 200)\n    res = sequence_stream_batch([p_late, p_early])\n    assert res[0].stream_id == "early"\n    assert res[1].stream_id == "late"\n\ndef test_sort_helper_direct():\n    p1 = EventPacket("a", 5, 1)\n    p2 = EventPacket("b", 5, 2)\n    assert order_packets([p2, p1])[0].stream_id == "a"\n'}
+t2024_ref = {'sort_helper.py': '"""Internal stream sorting helper."""\nfrom typing import List\nfrom event_packet import EventPacket\n\ndef order_packets(packets: List[EventPacket]) -> List[EventPacket]:\n    return sorted(packets, key=lambda p: (-p.severity, p.offset))\n\ndef get_max_severity(packets: List[EventPacket]) -> int:\n    return max((p.severity for p in packets), default=0)\n'}
+t2024_m1 = {'sequencer.py': '"""Stream event sequencer."""\nfrom typing import List\nfrom sort_helper import order_packets\nfrom event_packet import EventPacket\n\ndef sequence_stream_batch(packets: List[EventPacket]) -> List[EventPacket]:\n    return sorted(order_packets(packets), key=lambda p: (-p.severity, p.offset))\n\ndef get_highest_priority_packet(packets: List[EventPacket]):\n    ordered = sequence_stream_batch(packets)\n    return ordered[0] if ordered else None\n'}
+t2024_m2 = {'sort_helper.py': '"""Internal stream sorting helper."""\nfrom typing import List\nfrom event_packet import EventPacket\n\ndef order_packets(packets: List[EventPacket]) -> List[EventPacket]:\n    return sorted(packets, key=lambda p: (-p.severity, -p.offset))\n\ndef get_max_severity(packets: List[EventPacket]) -> int:\n    return max((p.severity for p in packets), default=0)\n'}
 register_task(
     tid=2024,
-    family="event_ordering",
-    name="Telemetry Metric Collector",
-    class_tag="TAUGHT",
-    issue="Telemetry buffer emits metrics in arbitrary insertion order regardless of severity level.",
-    traceback_text="FAILED tests/test_collector_hidden.py::test_deterministic_severity_drain - in drain (queue_engine.py:12): assert ['warn1', 'crit', 'warn2'] == ['crit', 'warn1', 'warn2']",
-    traceback_files=["collector.py"],
+    family='event_ordering',
+    name='Event Stream Ingestion Sequencer',
+    class_tag='TAUGHT',
+    issue='Data pipeline crash STRM-308: Out-of-order stream offsets caused state replication desync during high-severity packet bursts.',
+    traceback_text='FAILED tests/test_sequencer_hidden.py::test_stream_ordering_taught - AssertionError: Offset inversion at sequencer.py:9: equal severity packets were not sequenced by ascending offset',
+    traceback_files=['sequencer.py'],
     repo=t2024_repo,
     hidden=t2024_hidden,
     ref=t2024_ref,
     mutant1=t2024_m1,
     mutant2=t2024_m2,
-    hidden_root_cause=True,  # Root cause in queue_engine.py
+    hidden_root_cause=True,
     visible_test_sensitive=False,
-    handbook_citations=["Rule H07"],
+    root_cause_only_with_exploration=True,
+    handbook_citations=['Rule H07'],
 )
 
-
-# ==============================================================================
-# FAMILY 7: cache_ttl (Tasks 2025 - 2028) -- TRANSFER FAMILY
-# ==============================================================================
-
-# Task 2025: In-Memory Key-Value Store with TTL (TRANSFER)
-t2025_repo = {
-    "ttl_cache.py": '''"""In-memory key-value cache with TTL."""
-import time
-
-class TTLCache:
-    def __init__(self, default_ttl_sec=60, clock=None):
-        self.ttl = default_ttl_sec
-        self.clock = clock or time.monotonic
-        self.store = {}
-
-    def set(self, key, value):
-        # BUG: does not record creation timestamp
-        self.store[key] = value
-
-    def get(self, key):
-        # BUG: never expires entries
-        return self.store.get(key)
-''',
-    "tests/test_ttl_cache.py": '''from ttl_cache import TTLCache
-
-def test_cache_set_get():
-    c = TTLCache()
-    c.set("k1", "v1")
-    assert c.get("k1") == "v1"
-'''
-}
-
-t2025_hidden = {
-    "tests/test_ttl_hidden.py": '''from ttl_cache import TTLCache
-
-def test_expiry_with_injectable_clock():
-    now = [1000.0]
-    fake_clock = lambda: now[0]
-    c = TTLCache(default_ttl_sec=10, clock=fake_clock)
-    c.set("session", "active")
-    assert c.get("session") == "active"
-    
-    # Advance clock past TTL
-    now[0] = 1011.0
-    assert c.get("session") is None
-'''
-}
-
-t2025_ref = {
-    "ttl_cache.py": '''"""In-memory key-value cache with TTL."""
-import time
-
-class TTLCache:
-    def __init__(self, default_ttl_sec=60, clock=None):
-        self.ttl = default_ttl_sec
-        self.clock = clock or time.monotonic
-        self.store = {}
-
-    def set(self, key, value):
-        now = self.clock()
-        self.store[key] = (value, now + self.ttl)
-
-    def get(self, key):
-        if key not in self.store:
-            return None
-        val, expiry = self.store[key]
-        if self.clock() >= expiry:
-            del self.store[key]
-            return None
-        return val
-'''
-}
-
-t2025_m1 = {
-    "ttl_cache.py": '''"""In-memory key-value cache with TTL."""
-import time
-
-class TTLCache:
-    def __init__(self, default_ttl_sec=60, clock=None):
-        # Mutant 1: Hardcodes time.monotonic, ignores clock parameter
-        self.store = {}
-    def set(self, key, value): self.store[key] = value
-    def get(self, key): return self.store.get(key)
-'''
-}
-
-t2025_m2 = {
-    "ttl_cache.py": '''"""In-memory key-value cache with TTL."""
-class TTLCache:
-    def __init__(self, default_ttl_sec=60, clock=None): pass
-    def set(self, key, value): pass
-    def get(self, key): return None
-'''
-}
-
+# Task 2025: In-Memory Token Cache (TRANSFER)
+t2025_repo = {'token_record.py': '"""Token metadata schemas."""\nfrom dataclasses import dataclass\nfrom typing import Dict, Any\n\n@dataclass\nclass CachedToken:\n    token_str: str\n    expires_at: float\n    scope: str = "read_write"\n\n    def is_expired_at(self, current_time: float) -> bool:\n        return current_time >= self.expires_at\n', 'cache.py': '"""In-memory security token cache."""\nimport time\nfrom typing import Dict, Optional, Callable\nfrom token_record import CachedToken\n\nclass TokenCache:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        """In-memory token cache with injectable clock."""\n        self._clock = clock or time.time\n        self._store: Dict[str, CachedToken] = {}\n\n    def set(self, key: str, token_str: str, ttl_seconds: float) -> None:\n        now = self._clock()\n        self._store[key] = CachedToken(token_str=token_str, expires_at=now + ttl_seconds)\n\n    def get(self, key: str) -> Optional[str]:\n        entry = self._store.get(key)\n        if not entry:\n            return None\n        now = self._clock()\n        if now > entry.expires_at:\n            del self._store[key]\n            return None\n        return entry.token_str\n\n    def size(self) -> int:\n        return len(self._store)\n', 'cache_utils.py': '"""Cache key hashing and diagnostics."""\ndef format_cache_key(prefix: str, identifier: str) -> str:\n    return f"{prefix}::{identifier}"\n', 'tests/test_cache.py': 'from cache import TokenCache\n\ndef test_cache_set_get():\n    c = TokenCache()\n    c.set("k1", "tok-1", 100.0)\n    assert c.get("k1") == "tok-1"\n'}
+t2025_hidden = {'tests/test_cache_hidden.py': 'from cache import TokenCache\n\ndef test_injectable_clock_monotonic_taught():\n    t = [100.0]\n    c = TokenCache(clock=lambda: t[0])\n    c.set("k1", "val1", 5.0)\n    assert c.get("k1") == "val1"\n    \n    t[0] = 105.0\n    assert c.get("k1") is None\n'}
+t2025_ref = {'cache.py': '"""In-memory security token cache."""\nimport time\nfrom typing import Dict, Optional, Callable\nfrom token_record import CachedToken\n\nclass TokenCache:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        """In-memory token cache with injectable clock."""\n        self._clock = clock if clock is not None else time.monotonic\n        self._store: Dict[str, CachedToken] = {}\n\n    def set(self, key: str, token_str: str, ttl_seconds: float) -> None:\n        now = self._clock()\n        self._store[key] = CachedToken(token_str=str(token_str), expires_at=now + ttl_seconds)\n\n    def get(self, key: str) -> Optional[str]:\n        entry = self._store.get(key)\n        if not entry:\n            return None\n        now = self._clock()\n        if now >= entry.expires_at:\n            del self._store[key]\n            return None\n        return entry.token_str\n\n    def size(self) -> int:\n        return len(self._store)\n'}
+t2025_m1 = {'cache.py': '"""In-memory security token cache."""\nimport time\nfrom typing import Dict, Optional, Callable\nfrom token_record import CachedToken\n\nclass TokenCache:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        self._clock = clock if clock is not None else time.monotonic\n        self._store: Dict[str, CachedToken] = {}\n\n    def set(self, key: str, token_str: str, ttl_seconds: float) -> None:\n        now = self._clock()\n        self._store[key] = CachedToken(token_str=token_str, expires_at=now + ttl_seconds)\n\n    def get(self, key: str) -> Optional[str]:\n        entry = self._store.get(key)\n        if not entry:\n            return None\n        now = self._clock()\n        if now > entry.expires_at:\n            del self._store[key]\n            return None\n        return entry.token_str\n\n    def size(self) -> int:\n        return len(self._store)\n'}
+t2025_m2 = {'cache.py': '"""In-memory security token cache."""\nimport time\nfrom typing import Dict, Optional, Callable\nfrom token_record import CachedToken\n\nclass TokenCache:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        self._clock = time.time\n        self._store: Dict[str, CachedToken] = {}\n\n    def set(self, key: str, token_str: str, ttl_seconds: float) -> None:\n        self._store[key] = CachedToken(token_str=token_str, expires_at=time.time() + ttl_seconds)\n\n    def get(self, key: str) -> Optional[str]:\n        entry = self._store.get(key)\n        if not entry or time.time() >= entry.expires_at:\n            return None\n        return entry.token_str\n\n    def size(self) -> int:\n        return len(self._store)\n'}
 register_task(
     tid=2025,
-    family="cache_ttl",
-    name="In-Memory Key-Value Store with TTL",
-    class_tag="TRANSFER",
-    issue="TTLCache retains expired entries indefinitely and fails to support injectable clocks.",
-    traceback_text="FAILED tests/test_ttl_hidden.py::test_expiry_with_injectable_clock - assert 'active' is None",
-    traceback_files=["ttl_cache.py"],
+    family='cache_ttl',
+    name='In-Memory Token Cache',
+    class_tag='TRANSFER',
+    issue='Auth service failure AUTH-901: Stale bearer tokens remained valid at the exact expiration second due to loose inequality check.',
+    traceback_text='FAILED tests/test_cache_hidden.py::test_injectable_clock_monotonic_taught - AssertionError: Expiration boundary failure at cache.py:22: token remained active at exact expires_at timestamp',
+    traceback_files=['cache.py'],
     repo=t2025_repo,
     hidden=t2025_hidden,
     ref=t2025_ref,
@@ -2488,125 +677,24 @@ register_task(
     mutant2=t2025_m2,
     hidden_root_cause=False,
     visible_test_sensitive=False,
-    handbook_citations=["Rule H09"],
+    root_cause_only_with_exploration=False,
+    handbook_citations=['Rule H09'],
 )
 
-
-# Task 2026: Session Token Cache (TRANSFER, HIDDEN ROOT CAUSE)
-t2026_repo = {
-    "session_store.py": '''"""User session token store."""
-import time
-from session_validator import validate_session_expiry
-
-class SessionStore:
-    def __init__(self, clock=None):
-        self.clock = clock or time.monotonic
-        self.sessions = {}
-
-    def save_session(self, token, user_id, ttl_seconds=300):
-        self.sessions[token] = (user_id, self.clock() + ttl_seconds)
-
-    def get_user(self, token):
-        """Retrieves user_id.
-        If token is expired or absent, must raise KeyError per company standards.
-        """
-        if token not in self.sessions:
-            raise KeyError(f"Session token '{token}' not found.")
-        user_id, exp = self.sessions[token]
-        validate_session_expiry(token, exp, self.clock())
-        return user_id
-''',
-    "session_validator.py": '''"""Session expiration validator."""
-def validate_session_expiry(token, exp_time, current_time):
-    # BUG: returns False instead of raising KeyError
-    if current_time >= exp_time:
-        return False
-    return True
-''',
-    "tests/test_session.py": '''from session_store import SessionStore
-
-def test_valid_session():
-    s = SessionStore()
-    s.save_session("tok123", "user_1")
-    assert s.get_user("tok123") == "user_1"
-'''
-}
-
-t2026_hidden = {
-    "tests/test_session_hidden.py": '''import pytest
-from session_store import SessionStore
-from session_validator import validate_session_expiry
-
-def test_expired_session_raises_key_error():
-    # Rule H04: Missing or expired key must raise KeyError
-    now = [500.0]
-    s = SessionStore(clock=lambda: now[0])
-    s.save_session("tok", "user_abc", ttl_seconds=60)
-    now[0] = 600.0 # Expired
-    with pytest.raises(KeyError):
-        s.get_user("tok")
-
-def test_validator_direct():
-    with pytest.raises(KeyError):
-        validate_session_expiry("tok", 500.0, 600.0)
-'''
-}
-
-t2026_ref = {
-    "session_validator.py": '''"""Session expiration validator."""
-def validate_session_expiry(token, exp_time, current_time):
-    if current_time >= exp_time:
-        raise KeyError(f"Session token '{token}' has expired.")
-    return True
-'''
-}
-
-t2026_m1 = {
-    "session_store.py": '''"""User session token store."""
-import time
-from session_validator import validate_session_expiry
-
-class SessionStore:
-    def __init__(self, clock=None):
-        self.clock = clock or time.monotonic
-        self.sessions = {}
-
-    def save_session(self, token, user_id, ttl_seconds=300):
-        self.sessions[token] = (user_id, self.clock() + ttl_seconds)
-
-    def get_user(self, token):
-        # Mutant 1: Workaround in session_store.py without fixing session_validator.py
-        if token not in self.sessions:
-            raise KeyError(token)
-        user_id, exp = self.sessions[token]
-        if self.clock() >= exp:
-            raise KeyError(f"Session token '{token}' has expired.")
-        return user_id
-''',
-    "session_validator.py": '''"""Session expiration validator."""
-def validate_session_expiry(token, exp_time, current_time):
-    if current_time >= exp_time:
-        return False
-    return True
-'''
-}
-
-t2026_m2 = {
-    "session_validator.py": '''"""Session expiration validator."""
-def validate_session_expiry(token, exp_time, current_time):
-    # Mutant 2: Always returns True
-    return True
-'''
-}
-
+# Task 2026: API Rate Limit Session Store (TRANSFER)
+t2026_repo = {'session_data.py': '"""Rate limit session records."""\nfrom dataclasses import dataclass\nfrom typing import Dict, Any\n\n@dataclass\nclass RateLimitSession:\n    client_ip: str\n    request_count: int\n    expires_at: float\n    max_requests: int = 60\n\n    def has_exceeded_quota(self) -> bool:\n        return self.request_count >= self.max_requests\n', 'session_store.py': '"""Rate limit session storage."""\nfrom typing import Optional, Callable\nfrom session_validator import is_session_expired\nfrom session_data import RateLimitSession\n\nclass SessionStore:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        self._clock = clock\n        self._sessions = {}\n\n    def register(self, ip: str, ttl: float) -> None:\n        import time\n        now = self._clock() if self._clock else time.monotonic()\n        self._sessions[ip] = RateLimitSession(ip, 1, now + ttl)\n\n    def is_active(self, ip: str) -> bool:\n        sess = self._sessions.get(ip)\n        if not sess:\n            return False\n        import time\n        now = self._clock() if self._clock else time.monotonic()\n        return not is_session_expired(sess.expires_at, now)\n\n    def active_count(self) -> int:\n        return len(self._sessions)\n', 'session_validator.py': '"""Session expiration validation logic."""\ndef is_session_expired(expires_at: float, current_ts: float) -> bool:\n    return current_ts > expires_at\n\ndef time_remaining(expires_at: float, current_ts: float) -> float:\n    return max(0.0, expires_at - current_ts)\n', 'tests/test_session_store.py': 'from session_store import SessionStore\n\ndef test_nominal_registration():\n    s = SessionStore()\n    s.register("192.168.1.1", 60.0)\n    assert s.is_active("192.168.1.1") is True\n'}
+t2026_hidden = {'tests/test_session_store_hidden.py': 'from session_store import SessionStore\nfrom session_validator import is_session_expired\n\ndef test_session_boundary_taught():\n    t = [500.0]\n    s = SessionStore(clock=lambda: t[0])\n    s.register("10.0.0.1", 10.0)\n    assert s.is_active("10.0.0.1") is True\n    \n    t[0] = 510.0\n    assert s.is_active("10.0.0.1") is False\n\ndef test_session_validator_direct():\n    assert is_session_expired(100.0, 100.0) is True\n    assert is_session_expired(100.0, 99.9) is False\n'}
+t2026_ref = {'session_validator.py': '"""Session expiration validation logic."""\ndef is_session_expired(expires_at: float, current_ts: float) -> bool:\n    return current_ts >= expires_at\n\ndef time_remaining(expires_at: float, current_ts: float) -> float:\n    return max(0.0, expires_at - current_ts)\n'}
+t2026_m1 = {'session_store.py': '"""Rate limit session storage."""\nfrom typing import Optional, Callable\nfrom session_validator import is_session_expired\nfrom session_data import RateLimitSession\n\nclass SessionStore:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        self._clock = clock\n        self._sessions = {}\n\n    def register(self, ip: str, ttl: float) -> None:\n        import time\n        now = self._clock() if self._clock else time.monotonic()\n        self._sessions[ip] = RateLimitSession(ip, 1, now + ttl)\n\n    def is_active(self, ip: str) -> bool:\n        sess = self._sessions.get(ip)\n        if not sess:\n            return False\n        import time\n        now = self._clock() if self._clock else time.monotonic()\n        if now >= sess.expires_at:\n            return False\n        return not is_session_expired(sess.expires_at, now)\n\n    def active_count(self) -> int:\n        return len(self._sessions)\n'}
+t2026_m2 = {'session_validator.py': '"""Session expiration validation logic."""\ndef is_session_expired(expires_at: float, current_ts: float) -> bool:\n    return current_ts > expires_at\n\ndef time_remaining(expires_at: float, current_ts: float) -> float:\n    return max(0.0, expires_at - current_ts)\n'}
 register_task(
     tid=2026,
-    family="cache_ttl",
-    name="Session Token Cache",
-    class_tag="TRANSFER",
-    issue="Session validator fails to raise KeyError when inspecting expired user sessions.",
-    traceback_text="FAILED tests/test_session_hidden.py::test_expired_session_raises_key_error - in get_user (session_store.py:17): Failed: DID NOT RAISE <class 'KeyError'>",
-    traceback_files=["session_store.py"],
+    family='cache_ttl',
+    name='API Rate Limit Session Store',
+    class_tag='TRANSFER',
+    issue='Rate limiter bypass RL-103: API client requests allowed through after session limit expired due to boundary condition error.',
+    traceback_text='FAILED tests/test_session_store_hidden.py::test_session_boundary_taught - AssertionError: Session boundary error at session_store.py:22: rate limit session active at exact expiration second',
+    traceback_files=['session_store.py'],
     repo=t2026_repo,
     hidden=t2026_hidden,
     ref=t2026_ref,
@@ -2614,247 +702,49 @@ register_task(
     mutant2=t2026_m2,
     hidden_root_cause=True,
     visible_test_sensitive=False,
-    handbook_citations=["Rule H04", "Rule H09"],
+    root_cause_only_with_exploration=True,
+    handbook_citations=['Rule H09'],
 )
 
-
-# Task 2027: Rate Limiting Sliding Window Cache (TRANSFER, HIDDEN ROOT CAUSE)
-t2027_repo = {
-    "rate_limiter.py": '''"""API rate limiter."""
-from time_window import WindowTracker
-
-class RateLimiter:
-    def __init__(self, limit=5, window_sec=60, clock=None):
-        self.tracker = WindowTracker(limit, window_sec, clock=clock)
-
-    def is_allowed(self, client_id):
-        return self.tracker.record_request(client_id)
-''',
-    "time_window.py": '''"""Sliding window request tracker."""
-import time
-
-class WindowTracker:
-    def __init__(self, limit, window_sec, clock=None):
-        self.limit = limit
-        self.window_sec = window_sec
-        self.clock = clock or time.monotonic
-        self.history = {}
-
-    def record_request(self, client_id):
-        # BUG: Appends without pruning timestamps older than (now - window_sec)
-        now = self.clock()
-        reqs = self.history.setdefault(client_id, [])
-        if len(reqs) >= self.limit:
-            return False
-        reqs.append(now)
-        return True
-''',
-    "tests/test_limiter.py": '''from rate_limiter import RateLimiter
-
-def test_initial_allow():
-    limiter = RateLimiter(limit=2)
-    assert limiter.is_allowed("c1") is True
-'''
-}
-
-t2027_hidden = {
-    "tests/test_limiter_hidden.py": '''from rate_limiter import RateLimiter
-
-def test_sliding_window_pruning():
-    now = [100.0]
-    limiter = RateLimiter(limit=2, window_sec=10, clock=lambda: now[0])
-    assert limiter.is_allowed("c1") is True
-    assert limiter.is_allowed("c1") is True
-    assert limiter.is_allowed("c1") is False # Limit reached
-    
-    # Advance clock past window
-    now[0] = 115.0
-    assert limiter.is_allowed("c1") is True # Should be allowed again
-'''
-}
-
-t2027_ref = {
-    "time_window.py": '''"""Sliding window request tracker."""
-import time
-
-class WindowTracker:
-    def __init__(self, limit, window_sec, clock=None):
-        self.limit = limit
-        self.window_sec = window_sec
-        self.clock = clock or time.monotonic
-        self.history = {}
-
-    def record_request(self, client_id):
-        now = self.clock()
-        reqs = self.history.setdefault(client_id, [])
-        # Prune expired timestamps
-        cutoff = now - self.window_sec
-        self.history[client_id] = [t for t in reqs if t > cutoff]
-        reqs = self.history[client_id]
-        if len(reqs) >= self.limit:
-            return False
-        reqs.append(now)
-        return True
-'''
-}
-
-t2027_m1 = {
-    "rate_limiter.py": '''"""API rate limiter."""
-from time_window import WindowTracker
-
-class RateLimiter:
-    def __init__(self, limit=5, window_sec=60, clock=None):
-        # Mutant 1: Patches rate_limiter.py instead of root cause in time_window.py
-        self.tracker = WindowTracker(limit, window_sec, clock=clock)
-    def is_allowed(self, client_id):
-        return True
-''',
-    "time_window.py": '''"""Sliding window request tracker."""
-import time
-class WindowTracker:
-    def __init__(self, limit, window_sec, clock=None): self.history = {}
-    def record_request(self, client_id): return False
-'''
-}
-
-t2027_m2 = {
-    "time_window.py": '''"""Sliding window request tracker."""
-class WindowTracker:
-    def __init__(self, limit, window_sec, clock=None): pass
-    def record_request(self, client_id):
-        # Mutant 2: Always False
-        return False
-'''
-}
-
+# Task 2027: Distributed Lease Expiry Guard (TRANSFER)
+t2027_repo = {'lease_entry.py': '"""Lease entry metadata."""\nfrom dataclasses import dataclass\nfrom typing import Optional\n\n@dataclass\nclass LeaseRecord:\n    lease_key: str\n    owner: str\n    valid_until: float\n    fencing_token: int = 100\n\n    def matches_owner(self, candidate: str) -> bool:\n        return self.owner == candidate\n', 'lease_guard.py': '"""Distributed cluster lease manager."""\nfrom typing import Optional, Callable\nfrom clock_source import is_lease_valid\nfrom lease_entry import LeaseRecord\n\nclass LeaseGuard:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        self._clock = clock\n        self._leases = {}\n\n    def acquire(self, key: str, owner: str, lease_duration: float) -> None:\n        import time\n        now = self._clock() if self._clock else time.monotonic()\n        self._leases[key] = LeaseRecord(key, owner, now + lease_duration)\n\n    def holds_lease(self, key: str, owner: str) -> bool:\n        lease = self._leases.get(key)\n        if not lease or lease.owner != owner:\n            return False\n        import time\n        now = self._clock() if self._clock else time.monotonic()\n        return is_lease_valid(lease.valid_until, now)\n\n    def lease_count(self) -> int:\n        return len(self._leases)\n', 'clock_source.py': '"""Lease validity checker."""\ndef is_lease_valid(valid_until: float, current_time: float) -> bool:\n    return current_time <= valid_until\n\ndef remaining_lease_time(valid_until: float, current_time: float) -> float:\n    return max(0.0, valid_until - current_time)\n', 'tests/test_lease.py': 'from lease_guard import LeaseGuard\n\ndef test_nominal_lease():\n    lg = LeaseGuard()\n    lg.acquire("lock1", "nodeA", 30.0)\n    assert lg.holds_lease("lock1", "nodeA") is True\n'}
+t2027_hidden = {'tests/test_lease_hidden.py': 'from lease_guard import LeaseGuard\nfrom clock_source import is_lease_valid\n\ndef test_lease_expiry_taught():\n    t = [1000.0]\n    lg = LeaseGuard(clock=lambda: t[0])\n    lg.acquire("resource_db", "node1", 5.0)\n    assert lg.holds_lease("resource_db", "node1") is True\n    \n    t[0] = 1005.0\n    assert lg.holds_lease("resource_db", "node1") is False\n\ndef test_clock_source_direct():\n    assert is_lease_valid(100.0, 100.0) is False\n    assert is_lease_valid(100.0, 99.0) is True\n'}
+t2027_ref = {'clock_source.py': '"""Lease validity checker."""\ndef is_lease_valid(valid_until: float, current_time: float) -> bool:\n    return current_time < valid_until\n\ndef remaining_lease_time(valid_until: float, current_time: float) -> float:\n    return max(0.0, valid_until - current_time)\n'}
+t2027_m1 = {'lease_guard.py': '"""Distributed cluster lease manager."""\nfrom typing import Optional, Callable\nfrom clock_source import is_lease_valid\nfrom lease_entry import LeaseRecord\n\nclass LeaseGuard:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        self._clock = clock\n        self._leases = {}\n\n    def acquire(self, key: str, owner: str, lease_duration: float) -> None:\n        import time\n        now = self._clock() if self._clock else time.monotonic()\n        self._leases[key] = LeaseRecord(key, owner, now + lease_duration)\n\n    def holds_lease(self, key: str, owner: str) -> bool:\n        lease = self._leases.get(key)\n        if not lease or lease.owner != owner:\n            return False\n        import time\n        now = self._clock() if self._clock else time.monotonic()\n        if now >= lease.valid_until:\n            return False\n        return is_lease_valid(lease.valid_until, now)\n\n    def lease_count(self) -> int:\n        return len(self._leases)\n'}
+t2027_m2 = {'clock_source.py': '"""Lease validity checker."""\ndef is_lease_valid(valid_until: float, current_time: float) -> bool:\n    return current_time <= valid_until\n\ndef remaining_lease_time(valid_until: float, current_time: float) -> float:\n    return max(0.0, valid_until - current_time)\n'}
 register_task(
     tid=2027,
-    family="cache_ttl",
-    name="Rate Limiting Sliding Window Cache",
-    class_tag="TRANSFER",
-    issue="RateLimiter fails to prune expired timestamps from sliding window, blocking clients permanently.",
-    traceback_text="FAILED tests/test_limiter_hidden.py::test_sliding_window_pruning - in is_allowed (rate_limiter.py:9): assert False is True",
-    traceback_files=["rate_limiter.py"],
+    family='cache_ttl',
+    name='Distributed Lease Expiry Guard',
+    class_tag='TRANSFER',
+    issue='Distributed lock split-brain LOCK-881: Two nodes simultaneously held master lock when lease was retained at exact expiration second.',
+    traceback_text='FAILED tests/test_lease_hidden.py::test_lease_expiry_taught - AssertionError: Split-brain lease detected at lease_guard.py:23: node retained master lease at exact valid_until boundary',
+    traceback_files=['lease_guard.py'],
     repo=t2027_repo,
     hidden=t2027_hidden,
     ref=t2027_ref,
     mutant1=t2027_m1,
     mutant2=t2027_m2,
-    hidden_root_cause=True,  # Root cause in time_window.py
+    hidden_root_cause=True,
     visible_test_sensitive=False,
-    handbook_citations=["Rule H09"],
+    root_cause_only_with_exploration=True,
+    handbook_citations=['Rule H09'],
 )
 
-
-# Task 2028: Tiered Multi-level Cache (TRANSFER, VISIBLE-TEST SENSITIVE)
-t2028_repo = {
-    "tiered_cache.py": '''"""Multi-tier cache coordinator."""
-class TieredCache:
-    def __init__(self, l1_cache, l2_cache):
-        self.l1 = l1_cache
-        self.l2 = l2_cache
-
-    def get(self, key):
-        # BUG: returns None without checking l2 fallback
-        val = self.l1.get(key)
-        return val
-
-    def set(self, key, value):
-        self.l1.set(key, value)
-        self.l2.set(key, value)
-''',
-    "tests/test_tiered.py": '''from tiered_cache import TieredCache
-
-class MockCache:
-    def __init__(self): self.d = {}
-    def get(self, k): return self.d.get(k)
-    def set(self, k, v): self.d[k] = v
-
-def test_l2_fallback_visible():
-    l1 = MockCache()
-    l2 = MockCache()
-    l2.set("k2", "v2")
-    c = TieredCache(l1, l2)
-    # Visible test checks that missing L1 falls back to L2
-    assert c.get("k2") == "v2"
-'''
-}
-
-t2028_hidden = {
-    "tests/test_tiered_hidden.py": '''from tiered_cache import TieredCache
-
-class MockCache:
-    def __init__(self): self.d = {}
-    def get(self, k): return self.d.get(k)
-    def set(self, k, v): self.d[k] = v
-
-def test_promote_l2_to_l1_on_miss():
-    l1 = MockCache()
-    l2 = MockCache()
-    l2.set("shared", "data")
-    c = TieredCache(l1, l2)
-    assert c.get("shared") == "data"
-    # Promotion check: L1 must now contain the entry
-    assert l1.get("shared") == "data"
-'''
-}
-
-t2028_ref = {
-    "tiered_cache.py": '''"""Multi-tier cache coordinator."""
-class TieredCache:
-    def __init__(self, l1_cache, l2_cache):
-        self.l1 = l1_cache
-        self.l2 = l2_cache
-
-    def get(self, key):
-        val = self.l1.get(key)
-        if val is not None:
-            return val
-        val = self.l2.get(key)
-        if val is not None:
-            self.l1.set(key, val)
-        return val
-
-    def set(self, key, value):
-        self.l1.set(key, value)
-        self.l2.set(key, value)
-'''
-}
-
-t2028_m1 = {
-    "tiered_cache.py": '''"""Multi-tier cache coordinator."""
-class TieredCache:
-    def __init__(self, l1_cache, l2_cache):
-        self.l1 = l1_cache
-        self.l2 = l2_cache
-    def get(self, key):
-        # Mutant 1: Reads from L2 on miss but fails to populate L1 (no promotion)
-        val = self.l1.get(key)
-        if val is not None: return val
-        return self.l2.get(key)
-    def set(self, key, value):
-        self.l1.set(key, value)
-        self.l2.set(key, value)
-'''
-}
-
-t2028_m2 = {
-    "tiered_cache.py": '''"""Multi-tier cache coordinator."""
-class TieredCache:
-    def __init__(self, l1_cache, l2_cache): pass
-    def get(self, key): return None
-    def set(self, key, value): pass
-'''
-}
-
+# Task 2028: DNS Cache TTL Resolver (TRANSFER)
+t2028_repo = {'dns_record.py': '"""DNS record entry model."""\nfrom dataclasses import dataclass\nfrom typing import Optional\n\n@dataclass\nclass DnsEntry:\n    domain: str\n    ip_addr: str\n    expires_at: float\n    record_type: str = "A"\n\n    def is_valid_format(self) -> bool:\n        return "." in self.ip_addr\n', 'dns_resolver.py': '"""DNS cache resolver client."""\nimport time\nfrom typing import Dict, Optional, Callable\nfrom dns_record import DnsEntry\n\nclass DnsCache:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        self._clock = clock or time.time\n        self._entries: Dict[str, DnsEntry] = {}\n\n    def put_record(self, domain: str, ip: str, ttl: float) -> None:\n        now = self._clock()\n        self._entries[domain] = DnsEntry(domain, ip, now + ttl)\n\n    def lookup(self, domain: str) -> Optional[str]:\n        entry = self._entries.get(domain)\n        if not entry:\n            return None\n        now = self._clock()\n        if now > entry.expires_at:\n            del self._entries[domain]\n            return None\n        return entry.ip_addr\n\n    def count(self) -> int:\n        return len(self._entries)\n', 'dns_utils.py': '"""DNS domain utilities."""\ndef normalize_domain_name(name: str) -> str:\n    return name.strip().lower().rstrip(".")\n', 'tests/test_dns.py': 'from dns_resolver import DnsCache\n\ndef test_dns_lookup():\n    cache = DnsCache()\n    cache.put_record("example.com", "93.184.216.34", 10.0)\n    assert cache.lookup("example.com") == "93.184.216.34"\n\ndef test_injected_clock_visible_sensitive():\n    clock_calls = [0]\n    def fake_clock():\n        clock_calls[0] += 1\n        return 1000.0\n    cache = DnsCache(clock=fake_clock)\n    cache.put_record("test.org", "1.1.1.1", 5.0)\n    assert clock_calls[0] > 0\n'}
+t2028_hidden = {'tests/test_dns_hidden.py': 'from dns_resolver import DnsCache\n\ndef test_dns_exact_expiry_taught():\n    t = [100.0]\n    cache = DnsCache(clock=lambda: t[0])\n    cache.put_record("service.internal", "10.0.0.5", 3.0)\n    assert cache.lookup("service.internal") == "10.0.0.5"\n    \n    t[0] = 103.0\n    assert cache.lookup("service.internal") is None\n'}
+t2028_ref = {'dns_resolver.py': '"""DNS cache resolver client."""\nimport time\nfrom typing import Dict, Optional, Callable\nfrom dns_record import DnsEntry\n\nclass DnsCache:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        self._clock = clock if clock is not None else time.monotonic\n        self._entries: Dict[str, DnsEntry] = {}\n\n    def put_record(self, domain: str, ip: str, ttl: float) -> None:\n        now = self._clock()\n        self._entries[domain] = DnsEntry(domain, ip, now + ttl)\n\n    def lookup(self, domain: str) -> Optional[str]:\n        entry = self._entries.get(domain)\n        if not entry:\n            return None\n        now = self._clock()\n        if now >= entry.expires_at:\n            del self._entries[domain]\n            return None\n        return entry.ip_addr\n\n    def count(self) -> int:\n        return len(self._entries)\n'}
+t2028_m1 = {'dns_resolver.py': '"""DNS cache resolver client."""\nimport time\nfrom typing import Dict, Optional, Callable\nfrom dns_record import DnsEntry\n\nclass DnsCache:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        self._clock = clock if clock is not None else time.monotonic\n        self._entries: Dict[str, DnsEntry] = {}\n\n    def put_record(self, domain: str, ip: str, ttl: float) -> None:\n        now = self._clock()\n        self._entries[domain] = DnsEntry(domain, ip, now + ttl)\n\n    def lookup(self, domain: str) -> Optional[str]:\n        entry = self._entries.get(domain)\n        if not entry:\n            return None\n        now = self._clock()\n        if now > entry.expires_at:\n            del self._entries[domain]\n            return None\n        return entry.ip_addr\n\n    def count(self) -> int:\n        return len(self._entries)\n'}
+t2028_m2 = {'dns_resolver.py': '"""DNS cache resolver client."""\nimport time\nfrom typing import Dict, Optional, Callable\nfrom dns_record import DnsEntry\n\nclass DnsCache:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        self._clock = time.time\n        self._entries: Dict[str, DnsEntry] = {}\n\n    def put_record(self, domain: str, ip: str, ttl: float) -> None:\n        self._entries[domain] = DnsEntry(domain, ip, time.time() + ttl)\n\n    def lookup(self, domain: str) -> Optional[str]:\n        entry = self._entries.get(domain)\n        if not entry or time.time() >= entry.expires_at:\n            return None\n        return entry.ip_addr\n\n    def count(self) -> int:\n        return len(self._entries)\n'}
 register_task(
     tid=2028,
-    family="cache_ttl",
-    name="Tiered Multi-level Cache",
-    class_tag="TRANSFER",
-    issue="TieredCache fails to query L2 fallback store on L1 cache miss.",
-    traceback_text="FAILED tests/test_tiered.py::test_l2_fallback_visible - assert None == 'v2'",
-    traceback_files=["tiered_cache.py"],
+    family='cache_ttl',
+    name='DNS Cache TTL Resolver',
+    class_tag='TRANSFER',
+    issue='Network resolution failure NET-505: Expired upstream DNS record routed traffic to decommissioned server IP address at exact TTL deadline.',
+    traceback_text='FAILED tests/test_dns_hidden.py::test_dns_exact_expiry_taught - AssertionError: DNS TTL failure at dns_resolver.py:22: stale DNS entry returned at exact TTL expiration second',
+    traceback_files=['dns_resolver.py'],
     repo=t2028_repo,
     hidden=t2028_hidden,
     ref=t2028_ref,
@@ -2862,5 +752,6 @@ register_task(
     mutant2=t2028_m2,
     hidden_root_cause=False,
     visible_test_sensitive=True,
-    handbook_citations=["Rule H09"],
+    root_cause_only_with_exploration=False,
+    handbook_citations=['Rule H09'],
 )

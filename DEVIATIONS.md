@@ -108,3 +108,29 @@ This is an append-only, timestamped log recording all operational decisions, har
   6. **Independent Subagent Audit:**
      - Verified independently by research subagent `777b137c-b756-4313-a077-141bcc415bd0`. Zero defects detected.
 - **Impact:** Deliverable 1 is complete and verified strictly offline (zero model API calls made). Submitted for Claude Gate S formal review. Calibration run (Gate A2) remains locked until Gate S passes.
+
+
+### [2026-10-24T23:15:00Z] Research Terminology Harmonization & Mapping
+- **Context:** Claude Round 9 review required ceasing use of gate labels ("Gate A / A2 / S / P / B / H / R") across project status, deviations, and commit messages in favor of standard experimental research terminology.
+- **Terminology Mapping:**
+  - *Benchmark validation:* fairness and construct-validity review of the task suite (formerly Gate S).
+  - *Pilot calibration:* difficulty, ceiling/floor check, run-to-run noise (formerly Gate A / A2).
+  - *Pre-registration:* formal registration of hypotheses, statistical tests, $\theta^*$ selection rule, and stopping rules committed prior to confirmatory runs (formerly Gate P).
+  - *Screening experiment:* 16-cell Resolution-V fractional factorial ($2^{5-1}$) on the tuning task split (formerly Gate B).
+  - *Confirmatory study:* primary hypothesis evaluation on the held-out task split.
+  - *Replication:* confirmatory study executed on an independent second model family.
+  - *Agent harness:* the five experimental factors varied ($s, p, u, r, k$).
+  - *Evaluation runner:* `runner/agent_runner.py` and `runner/grader.py`.
+- **Impact:** Historical log entries retain original gate references for provenance; all forward-facing tracking, documentation, and commit messages conform strictly to standard research terminology.
+
+### [2026-10-24T23:45:00Z] Benchmark Validation: S-1 through S-6 Fixes for suite_e5
+- **Context:** In Round 9 review, `suite_e5` required construct-validity fixes across six areas (S-1 through S-6) strictly offline with zero model calls.
+- **Action & Resolution:**
+  1. **S-1 (Hint Comment Removal):** Removed every `# BUG:`, `# FIX:`, `# TODO:`, and `# HACK:` comment across all 28 task source files. Added parameterized unit test `test_no_hint_comments_in_provided_files` in `tests/test_suite_e5_preflight.py` asserting zero regex matches for `/#\s*(BUG|FIX|TODO|HACK)/i` across all provided non-test files (28/28 passing).
+  2. **S-2 (Realistic Codebases & Symptom Tickets):** Expanded repositories from minimal stubs to realistic systems with 40–120 non-test lines across 2–4 files per task. Rewrote tickets as user-visible incident reports without root-cause disclosures. Sanitized tracebacks to eliminate expected value giveaways.
+  3. **S-3 (Rigorous Audit of TAUGHT Class):** Audited and established 11 true `TAUGHT` tasks ($\ge 8$ target: 2002, 2003, 2006, 2010, 2012, 2014, 2015, 2018, 2020, 2022, 2024), 10 `STATED`, 3 `DISTRACTOR`, 4 `TRANSFER`. For all TAUGHT tasks, docstrings/tickets do NOT disclose the rule, and tests verify handbook-mandated conventions against reasonable competing alternatives.
+  4. **S-4 (Per-Assertion Fairness Table):** Rewrote `benchmarks/FAIRNESS_e5.md` as a comprehensive per-assertion table documenting assertion name, visible source, derivability without handbook (Y/N), and class tag.
+  5. **S-5 (Tune / Held-Out Split):** Partitioned and committed `benchmarks/splits_e5.json` into 12 Tune tasks (screening experiment) and 16 Held-out tasks (confirmatory study), stratified across families and class tags, with 100% of TRANSFER tasks held out.
+  6. **S-6 (Root Cause & Factor u Exploration):** All 12 Hidden Root Cause tasks (42.9%) are tagged `root_cause_only_with_exploration = True`. Documented that symptom patches in traceback files cannot pass helper assertions, requiring Factor $u$ ("repository exploration + test running").
+  7. **Modular Generator Architecture:** Decomposed generation into dedicated modules in `runner/`: `family1_money.py` through `family7_cache.py`, orchestrated deterministically by `build_complete_suite_e5.py`.
+- **Preflight Verification:** All 143 unit tests in `tests/test_suite_e5_preflight.py` passing (28 unpatched fail, 28 gold pass, 28 mutant1 fail, 28 mutant2 fail, 28 no hints, token balance pass, tag distribution pass, split invariants pass). Zero model calls made.

@@ -1,144 +1,111 @@
 # Project Status & Execution Tracker (`STATUS.md`)
 
-**Current Phase:** Gate S (Offline Suite, Controls & Pre-Flight Verification — Awaiting Claude Gate S Review)  
-**Phase State:** **Gate S Complete & Hermetically Verified (114/114 Preflight Tests Passing; Zero Model Calls Made)**  
-**Frozen SHA:** `915711b` (Phase 0/Gate A runner baseline) -> *Gate S Deliverable Commit in Progress*  
+**Current Phase:** Benchmark Validation (`suite_e5` Offline Suite, Invariants & Fairness Review — Awaiting Claude Round 10 Review)  
+**Phase State:** **Benchmark Validation Complete & Hermetically Verified (143/143 Preflight Tests Passing; Zero Model Calls Made)**  
+**Frozen SHA:** `915711b` (Baseline evaluation runner / pilot calibration) -> *Benchmark Validation Fixes Commit in Progress*  
 **Model Specifications:**  
-- **Model ID:** `gemini-2.5-flash` (for upcoming Gate A2 calibration upon Gate S approval)  
+- **Model ID:** `gemini-2.5-flash` (for upcoming pilot calibration upon benchmark validation approval)  
 - **Sampling Settings:** `temperature=0.0`, `max_output_tokens=16384`, `thinking_budget=2048`  
 - **Concurrency:** 6 parallel worker threads with thread-safe file locking  
 - **Execution Backend:** Direct Google Gemini API with mandatory startup probe (`startup_self_check`)  
 
 ---
 
-## 1. Phase Execution State Table
+## 1. Experimental Campaign Phase State Table
+
+*Terminology Note:* Conforming to standard research protocol:
+- **Benchmark validation:** fairness and construct-validity review of the task suite (formerly Gate S).
+- **Pilot calibration:** difficulty, ceiling/floor check, run-to-run noise (formerly Gate A / A2).
+- **Pre-registration:** hypotheses, statistical tests, $\theta^*$ selection rule, and stopping rules committed before confirmatory run (formerly Gate P).
+- **Screening experiment:** 16-cell Resolution-V fractional factorial ($2^{5-1}$) on the tuning tasks (formerly Gate B).
+- **Confirmatory study:** held-out task evaluation for primary hypothesis testing.
+- **Replication:** confirmatory study on a second model family.
+- **Agent harness:** the five factors varied ($s, p, u, r, k$).
+- **Evaluation runner:** `runner/agent_runner.py` and `runner/grader.py`.
 
 | Phase | Description | State | Commit SHA | Notes / Deliverables |
 |:---|:---|:---:|:---:|:---|
-| **Phase 0** | Infrastructure & Protocol Setup | **Complete and Verified** | `c81d851` | Runner (`agent_runner.py`), Grader (`grader.py`), 16 cell briefs (`briefs/DIFF.md`), exact token accounting, Resolution-V parity, interactive tool calling loop, standardized task envelope, audit trail, 10 hermetic unit tests. Live dry run verified on `gemini-2.5-flash`. |
-| **Phase 1** | Difficulty Gate A (Calibration Only) | **Complete (Difficulty Calibrated)** | `915711b` | 12 multi-module tasks (`suite_e4`), 120 live attempts ($C0000=56.7\%$, $C1111=61.7\%$, $p=0.8750$). Established as difficulty calibration only (ceiling broken); per-task effects did not replicate across runs. |
-| **Gate S**  | Template Suite $e5$, Controls & Invariants | **Complete (114/114 Verified)** | *Current Commit* | Strictly offline. 28 template-generated instances across 7 families (`benchmarks/suite_e5.py`), `HANDBOOK.md` vs `PLACEBO.md` token balance (761 vs 754, 0.920% diff <= 3%), 2 worked examples (`briefs/P3.md`), full audit table (`benchmarks/FAIRNESS_e5.md`), 114/114 passing preflight tests (`tests/test_suite_e5_preflight.py`). |
-| **Gate A2** | Baseline B0 Calibration Run | **LOCKED (Pending Gate S Approval)** | — | Live B0 calibration on `suite_e5` (frozen runner config, >= 10 runs per instance, 280 attempts). Calibrates baseline difficulty without scaffolding bias. |
-| **Gate P**  | Formal Pre-Registration | **LOCKED (Pending Gate A2)** | — | Primary hypothesis, instance-clustered permutation tests, theta* selection rule, secondary metrics. |
-| **Gate B**  | Tune-Set Factorial ($2^{5-1}$) | **LOCKED (Pending Gate P)** | — | 16 cells $\times \ge 5$ runs on gated tune split. |
-| **Held-Out**| Final Confirmation & Multi-Model Replication | **LOCKED** | — | Held-out confirmation and second-model replication as budget allows. |
+| **Phase 0** | Infrastructure & Protocol Setup | **Complete and Verified** | `c81d851` | Evaluation runner (`agent_runner.py`), grader (`grader.py`), 16 cell briefs (`briefs/DIFF.md`), exact token accounting, Resolution-V parity, interactive tool loop, standardized task envelope, audit trail, 10 hermetic unit tests. Live dry run verified on `gemini-2.5-flash`. |
+| **Pilot Calibration (suite_e4)** | Difficulty Calibration Only | **Complete (Difficulty Calibrated)** | `915711b` | 12 multi-module tasks (`suite_e4`), 120 live attempts ($C0000=56.7\%$, $C1111=61.7\%$, $p=0.8750$). Established as difficulty calibration only (ceiling broken); per-task effects did not replicate across runs. |
+| **Benchmark Validation (suite_e5)** | Modular Task Suite $e5$, Invariants & Preflight | **Complete (143/143 Verified)** | *Current Commit* | Strictly offline. 28 modular instances across 7 families (`benchmarks/suite_e5.py`), `HANDBOOK.md` vs `PLACEBO.md` token balance (761 vs 754, 0.920% diff $\le 3\%$), 2 worked examples (`briefs/P3.md`), per-assertion audit table (`benchmarks/FAIRNESS_e5.md`), tune/held-out split (`benchmarks/splits_e5.json`), 143/143 passing preflight tests (`tests/test_suite_e5_preflight.py`). S-1..S-6 resolved. |
+| **Pilot Calibration (suite_e5)** | Baseline B0 Calibration Run | **LOCKED (Pending Benchmark Validation Approval)** | — | Live B0 calibration on `suite_e5` (frozen runner config, $\ge 10$ runs per instance on tune split). Calibrates baseline difficulty without scaffolding bias. Zero model calls until validation passes. |
+| **Pre-Registration** | Formal Pre-Registration Document | **LOCKED (Pending Pilot Calibration)** | — | Primary hypothesis, instance-clustered permutation tests, $\theta^*$ selection rule, secondary metrics committed before screening experiment. |
+| **Screening Experiment** | Tune-Set Factorial ($2^{5-1}$) | **LOCKED (Pending Pre-Registration)** | — | 16 cells $\times \ge 5$ runs on the 12 tune tasks (`benchmarks/splits_e5.json`). |
+| **Confirmatory Study** | Held-Out Confirmation & Multi-Model Replication | **LOCKED** | — | Confirmatory evaluation on 16 held-out tasks and second-model replication as budget allows. |
 
 ---
 
-## 2. Gate S Offline Deliverables & Verification Summary
+## 2. Benchmark Validation Resolution: S-1 through S-6 Fixes
 
-Per Section 8 Addendum v2 of `REAL_TEST_REQUIREMENTS.md`, Gate S establishes the clean-slate benchmark suite, balanced controls, and structural invariants prior to any model inference. All deliverables have been created and verified offline:
+In response to Round 9 review, all six blocking construct-validity requirements have been fully addressed offline with zero model calls:
 
-### A. Balanced Controls: `briefs/HANDBOOK.md` vs `briefs/PLACEBO.md`
-- **Token Accounting (`cl100k_base` / `tiktoken`):**
-  - `HANDBOOK.md`: **761 tokens** (10 numbered house rules: banker's rounding, immutability, error types, half-open intervals, trailing slash normalization, stable ordering, safe iteration, injectable clocks, RFC 4180 CSV serialization).
-  - `PLACEBO.md`: **754 tokens** (10 corresponding software engineering hygiene rules: formatting, docstrings, variable naming, typing, imports, logging, error messages, dead code, profiling, licensing).
-  - **Token Difference:** 7 tokens (**0.920%**, strictly $\le 3.0\%$).
-- **Content Purity:** Verified 0 / 9 domain concept overlap; `PLACEBO.md` contains purely general software hygiene rules without task-relevant domain invariants.
+### S-1: Hint Comment Elimination & Invariant Enforcement
+- Removed every `# BUG:`, `# FIX:`, `# TODO:`, and `# HACK:` comment across all 28 task repositories.
+- Implemented automated preflight test `test_no_hint_comments_in_provided_files` parameterized across all 28 tasks asserting zero matches for `/#\s*(BUG|FIX|TODO|HACK)/i` in any provided non-test source file.
 
-### B. Practice Examples: `briefs/P3.md`
-- Contains exactly 2 complete worked examples (Ticket $\to$ Root Cause $\to$ Production Patch $\to$ Architectural Rationale).
-- Covers `money_rounding` (`calculate_discounted_line` in `billing/discount.py`) and `config_merge` (`merge_tenant_routing` in `routing/config.py`).
-- **Isolation:** Uses codebases and function names completely distinct from evaluated tasks 2001–2028 (zero file or function collisions).
+### S-2: Realistic Codebases & Symptom-Level Tickets
+- Expanded repositories from minimal stubs to realistic modular systems (40–120 non-test lines across 2–4 files per task).
+- All tickets are written strictly as user-visible incident reports (e.g. billing discrepancies, cache staleness under concurrency, CSV export corruption, privilege bypass), completely free of root-cause disclosures.
+- Sanitized all traceback outputs to eliminate expected value giveaways.
 
-### C. Benchmark Suite: `benchmarks/suite_e5.py`
-- Total evaluated instances: **28 instances** across **7 bug families** (4 instances per family):
-  1. `money_rounding` (Tasks 2001–2004)
-  2. `config_merge` (Tasks 2005–2008)
-  3. `calendar_recurrence` (Tasks 2009–2012)
-  4. `csv_roundtrip` (Tasks 2013–2016)
-  5. `permission_prefix` (Tasks 2017–2020)
-  6. `event_ordering` (Tasks 2021–2024)
-  7. `cache_ttl` (Tasks 2025–2028)
-- **Tag Distribution:**
-  - `STATED`: **11 instances** (39.3% $\ge 4$)
-  - `TAUGHT`: **10 instances** (35.7% $\ge 4$)
-  - `DISTRACTOR`: **3 instances** (10.7% $\ge 2$, Tasks 2004, 2008, 2016)
-  - `TRANSFER`: **4 instances** (14.3% $\ge 3$, Tasks 2025, 2026, 2027, 2028)
-- **Structural Variants:**
-  - Hidden Root Cause (outside traceback file): **11 instances (39.3% $\ge 33.3\%$)**
-  - Visible-Test-Sensitive (naive fix fails visible test): **11 instances (39.3% $\ge 33.3\%$)**
-- **TRANSFER Domain Disjointness:** All TRANSFER tasks belong to `cache_ttl`, completely disjoint from the P3 practice families (`money_rounding` and `config_merge`).
+### S-3: Rigorous Audit of TAUGHT Class
+- Re-audited all tasks to ensure strict construct validity:
+  - **11 true `TAUGHT` tasks** (Target $\ge 8$: 2002, 2003, 2006, 2010, 2012, 2014, 2015, 2018, 2020, 2022, 2024). In every TAUGHT task, hidden assertions enforce house handbook conventions (e.g. banker's rounding on half-cents, shallow vs deep immutability, half-open interval boundaries, RFC-4180 quote doubling, prefix trailing slash normalization, stable sequence tie-breaking) against plausible competing alternatives that models would naturally choose, and neither the docstrings nor tickets reveal the rule.
+  - **10 `STATED` tasks**: the convention or specification is explicitly documented in the docstring or visible interface.
+  - **3 `DISTRACTOR` tasks** (2004, 2008, 2016): handbook mentions a rule or principle, but the task requires the opposite or a local exception clearly noted in the repo context.
+  - **4 `TRANSFER` tasks** (2025, 2026, 2027, 2028): testing generalisation to the cache domain where the handbook provides general architectural principles without an explicit rule recipe.
 
-### D. Fairness Documentation: `benchmarks/FAIRNESS_e5.md`
-- Complete audit table mapping all 28 instances to their bug family, class tag, visible source / handbook rule citation, hidden root cause flag, visible-test sensitivity flag, and minimal context package (traceback files provided to baseline B0).
+### S-4: Per-Assertion Fairness Table (`benchmarks/FAIRNESS_e5.md`)
+- Authored a comprehensive per-assertion audit table mapping every hidden assertion to:
+  - Task ID & Bug Family
+  - Assertion Name
+  - Visible Source (ticket sentence / docstring / handbook rule)
+  - Derivable Without Handbook (Y/N)
+  - Class Tag (`TAUGHT`, `STATED`, `DISTRACTOR`, `TRANSFER`)
+  - Hidden Root Cause Flag
+  - Root Cause Only With Exploration Flag
 
-### E. Hermetic Pre-Flight Validation Suite: `tests/test_suite_e5_preflight.py`
-- Executed via `uv run pytest repo_push/tests/test_suite_e5_preflight.py -v`:
-  - `test_unpatched_baseline_fails`: 28/28 PASSED (100% fail hidden tests; 0 false positives).
-  - `test_gold_reference_passes`: 28/28 PASSED (100% strict pass; 0 violations, no tamper).
-  - `test_mutant1_fails`: 28/28 PASSED (100% fail hidden tests).
-  - `test_mutant2_fails`: 28/28 PASSED (100% fail hidden tests).
+### S-5: Committed Tune / Held-Out Partition (`benchmarks/splits_e5.json`)
+- Partitioned the 28 tasks into:
+  - **12 Tune Tasks** (Screening Experiment): 2001, 2002, 2005, 2006, 2009, 2010, 2013, 2014, 2017, 2018, 2021, 2022.
+  - **16 Held-Out Tasks** (Confirmatory Study): 2003, 2004, 2007, 2008, 2011, 2012, 2015, 2016, 2019, 2020, 2023, 2024, 2025, 2026, 2027, 2028.
+- Partition is stratified by bug family and class tag, with 100% of `TRANSFER` tasks (2025–2028) held out for confirmatory testing.
+- Committed prior to any model execution.
+
+### S-6: Root-Cause Exploration & Factor $u$ Definition
+- For all 12 Hidden Root Cause tasks (42.9%), the defect resides outside the traceback file. A symptom-level patch in the traceback file fails core module assertions.
+- All 12 tasks are tagged `root_cause_only_with_exploration = True`.
+- Factor $u$ is explicitly defined and evaluated as "repository exploration + test running".
+
+---
+
+## 3. Modular Architecture & Preflight Test Status
+
+- **Modular Generator Architecture:** Decomposed into dedicated modules in `runner/`:
+  - `runner/family1_money.py` (Tasks 2001–2004)
+  - `runner/family2_config.py` (Tasks 2005–2008)
+  - `runner/family3_calendar.py` (Tasks 2009–2012)
+  - `runner/family4_csv.py` (Tasks 2013–2016)
+  - `runner/family5_permission.py` (Tasks 2017–2020)
+  - `runner/family6_ordering.py` (Tasks 2021–2024)
+  - `runner/family7_cache.py` (Tasks 2025–2028)
+  - Orchestrated deterministically by `runner/build_complete_suite_e5.py`.
+- **Preflight Test Results (`tests/test_suite_e5_preflight.py`):**
+  - `test_unpatched_baseline_fails`: 28/28 PASSED (100% failure rate; 0 false positives).
+  - `test_gold_reference_passes`: 28/28 PASSED (100% strict pass; 0 violations).
+  - `test_mutant1_fails`: 28/28 PASSED (100% failure rate).
+  - `test_mutant2_fails`: 28/28 PASSED (100% failure rate).
+  - `test_no_hint_comments_in_provided_files`: 28/28 PASSED (0 hint regex matches).
   - `test_handbook_placebo_token_balance`: PASSED (0.920% difference $\le 3.0\%$).
   - `test_e5_tag_distribution`: PASSED (all structural and class tag invariants satisfied).
-  - **Overall Preflight Result:** **114 passed in 382.34s (0 failures)**.
+  - `test_tune_heldout_split_invariants`: PASSED (tune/held-out stratification and TRANSFER hold-out confirmed).
+  - **Total:** **143 / 143 passed (100%)**.
 
 ---
 
-## 3. Gate A Difficulty Calibration Summary (Historical / Calibration Reference)
+## 4. Historical Reference: Pilot Calibration on suite_e4 (Difficulty Calibration Only)
 
-Target criteria from `REAL_TEST_REQUIREMENTS.md` Section 1.4:
-- **Criterion 1 (Cell 0000 pass rate in [0.20, 0.60]):** **56.7%** (34/60) — **PASSED** (Baseline difficulty calibrated: ceiling is completely broken; $56.7\% \in [20\%, 60\%]$).
-- **Criterion 2 (Cell 1111 pass rate in [0.60, 0.95]):** **61.7%** (37/60) — **PASSED**.
-- **Criterion 3 (Scaffolding Separation Check):** Observed $\Delta = +5.0\%$ (+3 net passing attempts out of 60).
-  - Wilson 95% CIs: $C0000 \in [44.1\%, 68.4\%]$, $C1111 \in [49.0\%, 72.9\%]$ (substantially overlapping).
-  - Exact paired sign-flip permutation test: $p = 0.8750$ ($p \gg 0.05$).
-  - **Verdict:** Scaffolding superiority is **NOT** statistically supported on this 12-task benchmark. Gate A serves strictly as a **difficulty calibration gate** (baseline ceiling broken), not as empirical evidence that educational scaffolding improves performance.
-- **Criterion 4 (Ceiling Persistence Check):** $C0000 = 56.7\% < 85\%$ — **PASSED**.
-
-### Task-by-Task Performance Summary
-
-| Task ID | Task Name | Files | C0000 (Bare) | C1111 (Scaffolded) | Difference ($\Delta$) | Discrimination Class |
-|:---|:---|:---:|:---:|:---:|:---:|:---|
-| **1001** | Invoice totals off by a cent | 5 | 2/5 (40%) | 1/5 (20%) | **-20%** | Separating |
-| **1002** | Config overrides lose sibling keys | 4 | 0/5 (0%) | 5/5 (100%) | **+100%** | Separating |
-| **1003** | Recurring events skip or repeat days | 3 | 5/5 (100%) | 5/5 (100%) | +0% | Saturated (Ceiling) |
-| **1004** | Exported CSV breaks on some customers | 3 | 2/5 (40%) | 0/5 (0%) | **-40%** | Separating |
-| **1005** | Users keep access after being removed | 4 | 0/5 (0%) | 0/5 (0%) | +0% | Saturated (Floor) |
-| **1006** | Usage reports disagree with the ledger | 4 | 0/5 (0%) | 1/5 (20%) | **+20%** | Separating |
-| **1007** | Shop pipeline: five reported problems | 7 | 5/5 (100%) | 5/5 (100%) | +0% | Saturated (Ceiling) |
-| **1008** | Middleware Pipeline Onion Architecture | 5 | 5/5 (100%) | 5/5 (100%) | +0% | Saturated (Ceiling) |
-| **1009** | Token Bucket Rate Limiter with Clock | 4 | 5/5 (100%) | 5/5 (100%) | +0% | Saturated (Ceiling) |
-| **1010** | Prioritized Event Dispatcher with Cancel | 4 | 0/5 (0%) | 0/5 (0%) | +0% | Saturated (Floor) |
-| **1011** | KV Storage Engine with WAL Compaction | 5 | 5/5 (100%) | 5/5 (100%) | +0% | Saturated (Ceiling) |
-| **1012** | Distributed Lease & Fencing Token | 4 | 5/5 (100%) | 5/5 (100%) | +0% | Saturated (Ceiling) |
-
-### Comprehensive Token Accounting (Averaged Per Attempt)
-- **C0000 (Bare Baseline):**
-  - Prompt tokens in: 981.5
-  - Candidate tokens out: 776.0
-  - Hidden reasoning (`thoughts_tokens`): 1,531.2
-  - **Total Billed Tokens:** **3,288.7 tokens / attempt**
-- **C1111 (Full Scaffolding):**
-  - Prompt tokens in: 11,855.9
-  - Candidate tokens out: 1,636.1
-  - Hidden reasoning (`thoughts_tokens`): 5,023.0
-  - **Total Billed Tokens:** **18,515.0 tokens / attempt**
-- **Token Cost Footprint:** $C1111$ consumes $5.63\times$ more billed tokens per attempt than $C0000$ for a $+5.0\%$ net separation ($p = 0.8750$).
-
----
-
-## 3. Responses to Claude Round 7 Review Items (H-1 through H-4)
-
-### H-1: Unified Run Configuration & Rerun Provenance
-- **Full Rerun Completed:** All 120 Gate A attempts were re-executed from scratch under a single, unified frozen runner configuration stamped with commit SHA `915711b`. Zero attempts were recycled or mixed across different configurations.
-- **Superseded Artifacts Preserved:** All previous raw generation files, grades, and rows are preserved intact under `results/gate_a/superseded/` and logged in `DEVIATIONS.md`.
-- **Token Accounting:** Every row in `results/gate_a/rows.json` and turn record in `_transcript.json` now includes `thoughts_tokens` (from `usage_metadata.thoughts_token_count`) and `total_billed_tokens`. 100% of rows completed with `stop_reason = FinishReason.STOP`.
-
-### H-2: Formal Pre-Registration of Factors $k$ and $u$ (Choice B)
-- **Pre-Registration Decision:** Choice (B) has been formalized and committed in `REAL_TEST_REQUIREMENTS.md`:
-  - **Factor $u$ (Interactive In-Turn Test Tool):** Grants real-time workspace pytest execution during the authoring phase across up to 5 turns before patch submission.
-  - **Factor $k$ (Post-Submission Feedback Retry):** Implements an automated CI/CD grader check on initial submission; if the attempt modifies protected files or fails visible unit tests, the grader returns the failure traceback for exactly one corrective retry turn ($k_2$).
-  - In $u=0, k=1$ cells, agents receive test feedback only upon failure of their initial submission, cleanly separating reactive CI/CD feedback from proactive sandbox exploration.
-
-### H-3: Verified Tool Execution & Symmetric Format Constraints
-- **Harmonized Formatting:** `STANDARD_TASK_ENVELOPE_HEADER` and `TOOL_TASK_ENVELOPE_HEADER` now contain identical patch syntax constraints: `"Output ONLY the patch in exactly this format: ... Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks."` Format permissiveness is identical across all cells.
-- **Active Tool Use Verified:** With the workflow instruction incorporated into `TOOL_INSTRUCTION_ENVELOPE`, `tool_used = True` in **59 out of 60 attempts (98.3%)** in $C1111$, logging 59 real pytest execution calls with live exit codes and failure tracebacks.
-
-### H-4: Task Fairness vs. Difficulty & Phase 2 Tune/Held-Out Split Plan
-- **Fairness vs. Difficulty Confirmation:**
-  - **Task 1004 (CSV IO):** The docstring explicitly specifies RFC 4180 quoting rules. Failure to parse multiline quoted fields in `read_rows` was a genuine model deficiency on an unexercised branch. Adding visible round-trip tests would be a difficulty reduction, not an unstated convention fix.
-  - **Task 1005 (RBAC ACL):** The docstring states `"/a" covers "/a" and "/a/b" but NOT "/ab"`. It does not explicitly state whether rule prefixes may contain trailing slashes (e.g. `"/a/"`), which led models to fail segment matching when splitting on `/`.
-- **Tune / Held-Out Split Plan for Phase 2:**
-  - To prevent selection bias and regression-to-the-mean artifacts, the 12 Gate A tasks are designated strictly as the **Tuning / Calibration Suite** ($\mathcal{D}_{\text{tune}}$).
-  - Main factorial claims for Phase 2 will be evaluated on a fresh, pre-registered **Held-Out Evaluation Suite** ($\mathcal{D}_{\text{heldout}}$) of 6–8 tasks, gated solely on baseline difficulty ($C0000 \in [15\%, 85\%]$) without prior knowledge of scaffolding separation $\Delta$.
+- $C0000$: 34/60 (56.7%, Wilson [44.1%, 68.4%]). Baseline ceiling broken ($56.7\% \in [20\%, 60\%]$).
+- $C1111$: 37/60 (61.7%, Wilson [49.0%, 72.9%]).
+- $\Delta = +5.0\%$ (+3 net passes out of 60 attempts). Exact paired sign-flip permutation test: $p = 0.8750$.
+- Established strictly as difficulty calibration; per-task effects did not replicate across runs.

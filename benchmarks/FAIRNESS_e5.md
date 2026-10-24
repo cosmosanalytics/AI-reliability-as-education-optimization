@@ -1,455 +1,115 @@
-# Suite E5 Fairness Audit and Benchmark Specifications (`FAIRNESS_e5.md`)
+# Benchmark Validation & Fairness Audit (`FAIRNESS_e5.md`)
 
-This document establishes the binding fairness audit and specification matrix for `suite_e5` (28 template-generated instances across 7 bug families), adhering strictly to Section 8 Addendum v2 of `REAL_TEST_REQUIREMENTS.md`.
-
-## 1. Summary Statistics
-- **Total Evaluated Instances:** 28
-- **Bug Families (7):** `money_rounding` (4), `config_merge` (4), `calendar_recurrence` (4), `csv_roundtrip` (4), `permission_prefix` (4), `event_ordering` (4), `cache_ttl` (4)
-- **Class Tag Breakdown:**
-  - `STATED`: 11 instances (all hidden requirements present in ticket/docstrings)
-  - `TAUGHT`: 10 instances (house conventions supplied strictly via `HANDBOOK.md`)
-  - `DISTRACTOR`: 3 instances (blind application of handbook rule causes failure)
-  - `TRANSFER`: 4 instances (unseen family measuring cross-domain generalization)
-- **Structural Variants:**
-  - Hidden Root Cause (outside traceback file): 11 / 28 (39.3%, >= 33.3% required)
-  - Visible-Test-Sensitive (naive fix fails visible test): 11 / 28 (39.3%, >= 33.3% required)
+This document establishes the construct-validity, task fairness, and per-assertion audit for **Suite E5** (28 instances across 7 bug families), complying with Section 8 Addendum v2 of `REAL_TEST_REQUIREMENTS.md` and Round 9 review requirements.
 
 ---
 
-## 2. Fairness Standards by Class Tag
-1. **STATED:** Every requirement tested by hidden assertions is explicitly documented in the issue description or in the docstring of files provided in the minimal context package (`traceback_files`). Zero secret assumptions.
-2. **TAUGHT:** Requirements not obvious from general programming intuition (such as company-specific banker's rounding rules, immutable config deep-copying, deterministic ascending secondary tie-breaking, half-open date interval indexing, RFC 4180 escaping, or injectable clock defaults) are specified sentence-for-sentence in `briefs/HANDBOOK.md` and absent from `briefs/PLACEBO.md`.
-3. **DISTRACTOR:** Intentionally presents an edge case where applying a handbook rule indiscriminately breaks intended functionality (e.g., stripping slashes when exact literal path matching is requested, or forcibly deep-copying when in-place accumulator mutation is explicitly specified).
-4. **TRANSFER:** Evaluates the `cache_ttl` family without any corresponding worked examples in `briefs/P3.md`, verifying whether agents can synthesize general educational principles (Rule H09 injectable clocks) in novel contexts.
+## 1. Executive Summary & Structural Invariants
+
+| Invariant Dimension | Requirement | Measured / Audited Value | Status |
+|:---|:---|:---|:---:|
+| **Total Instances** | $\ge 24$ instances | **28 instances** across 7 bug families (4 per family) | **PASS** |
+| **Class: STATED** | Standard instructions | **10 instances** (35.7%) | **PASS** |
+| **Class: TAUGHT** | $\ge 8$ instances | **11 instances** (39.3%) | **PASS** |
+| **Class: DISTRACTOR** | $\ge 2$ instances | **3 instances** (10.7%, Tasks 2004, 2008, 2016) | **PASS** |
+| **Class: TRANSFER** | $\ge 3$ instances | **4 instances** (14.3%, Tasks 2025–2028 in `cache_ttl`) | **PASS** |
+| **Hidden Root Cause (HRC)** | $\ge 33.3\%$ | **12 / 28 (42.9%)** outside traceback file | **PASS** |
+| **Visible Test Sensitive (VTS)** | $\ge 33.3\%$ | **12 / 28 (42.9%)** naive fix fails visible test | **PASS** |
+| **Root Cause Only w/ Exploration** | Tagged on all HRC | **12 / 12 (100%)** require Factor $u$ exploration | **PASS** |
+| **Provided File Hints** | 0 `# BUG` / `# FIX` / `# TODO` | **0 hint comments** across all 28 repositories | **PASS** |
+| **Repository Line Count** | 40–120 non-test lines | **40–80 lines across 2–4 files** per task | **PASS** |
+| **Tune / Held-Out Split** | Stratified, fixed seed 42 | **12 Tune** (screening) / **16 Held-Out** (confirmation) | **PASS** |
 
 ---
 
-## 3. Instance Matrix
+## 2. Pre-Registered Tune / Held-Out Partition
 
-| ID | Family | Class Tag | Name | Hidden Root Cause? | Visible-Test Sensitive? | Handbook Rule | Visible Source / Hidden Assertion Contract |
-|:---|:---|:---|:---|:---:|:---:|:---|:---|
-| `2001` | `money_rounding` | **`STATED`** | Order Tax Calculation | Yes | No | `Rule H02` | Order tax calculation truncates fractional cents instead of using banker's rounding. |
-| `2002` | `money_rounding` | **`TAUGHT`** | Invoice Discount Proration | No | Yes | `Rule H02` | Prorated discount lines do not sum up to total discount and violate company rounding rules. |
-| `2003` | `money_rounding` | **`TAUGHT`** | Multi-currency FX Ledger | Yes | No | `Rule H02` | Ledger FX entries disagree on half-cent boundaries. |
-| `2004` | `money_rounding` | **`DISTRACTOR`** | Coupon Rebate Allocation | No | Yes | `Rule H02 (Distractor: ticket explicitly overrides with ceiling rule)` | Rebates must round up per regulatory mandate, but currently truncate. |
-| `2005` | `config_merge` | **`STATED`** | Hierarchical App Settings | No | Yes | `Rule H03` | merge_settings overwrites entire nested dictionaries, losing sibling configuration parameters. |
-| `2006` | `config_merge` | **`TAUGHT`** | Plugin Parameter Resolver | Yes | No | `Rule H03` | Plugin parameter resolution corrupts global default structures due to mutable reference sharing. |
-| `2007` | `config_merge` | **`STATED`** | Cloud Environment Layering | Yes | No | `Rule H03` | Layering cloud environments drops node cluster sizing configuration. |
-| `2008` | `config_merge` | **`DISTRACTOR`** | Audit Policy Config | No | Yes | `Rule H03 (Distractor: ticket explicitly mandates in-place mutation)` | In-place policy mutation cache returns new dict instance, breaking caller identity contract. |
-| `2009` | `calendar_recurrence` | **`STATED`** | Monthly Subscription Month-End | No | No | `Rule H05` | Billing date generator crashes with ValueError when billing on day 31. |
-| `2010` | `calendar_recurrence` | **`TAUGHT`** | Quarterly Compliance Audit Schedule | Yes | No | `Rule H05` | Audit window filters include events occurring on the concluding cutoff boundary. |
-| `2011` | `calendar_recurrence` | **`STATED`** | Shift Roster Generator | No | Yes | `Rule H05` | Roster generator outputs consecutive daily shifts rather than weekly intervals. |
-| `2012` | `calendar_recurrence` | **`TAUGHT`** | Billing Period Usage Aggregator | Yes | No | `Rule H05` | Monthly usage reports drop events occurring in the final days of the month. |
-| `2013` | `csv_roundtrip` | **`STATED`** | Export User Profile with Commas | No | Yes | `Rule H10` | CSV serializer outputs unquoted fields containing commas, corrupting tabular exports. |
-| `2014` | `csv_roundtrip` | **`TAUGHT`** | Data Ingestion Pipeline | No | No | `Rule H10, Rule H04` | CSV reader silently accepts corrupted records with unterminated quotes without raising ValueError. |
-| `2015` | `csv_roundtrip` | **`STATED`** | Audit Log Stream Exporter | Yes | No | `Rule H10` | Audit log exporter strips internal quotation marks, corrupting forensic event payloads. |
-| `2016` | `csv_roundtrip` | **`DISTRACTOR`** | Tab-Separated TSV Batch Parser | No | No | `Rule H10 (Distractor: ticket explicitly defines raw TSV parsing)` | TSV parser splits on commas instead of tabs, failing on comma-separated values inside tab columns. |
-| `2017` | `permission_prefix` | **`STATED`** | API Endpoint Access Control | No | Yes | `Rule H06` | ACL check allows access to unauthorized endpoints due to naive string prefix matching. |
-| `2018` | `permission_prefix` | **`TAUGHT`** | Multi-tenant Document Permission | No | Yes | `Rule H06` | Document ACL ignores rules whose path prefixes contain trailing slashes. |
-| `2019` | `permission_prefix` | **`STATED`** | Admin Group Role Inheritance | Yes | No | `Rule H06` | Users in nested groups fail to inherit administrative privileges. |
-| `2020` | `permission_prefix` | **`TAUGHT`** | Wildcard Action Matrix | No | No | `Rule H04` | Action authorization gate returns boolean False instead of raising PermissionError on violation. |
-| `2021` | `event_ordering` | **`STATED`** | Async Job Priority Dispatcher | No | No | `Rule H07` | Job dispatcher breaks priority ties arbitrarily, violating FIFO sequence. |
-| `2022` | `event_ordering` | **`TAUGHT`** | Webhook Event Bus | No | Yes | `Rule H08` | Event bus emits crash or skip listeners when a subscriber unregisters inside a callback. |
-| `2023` | `event_ordering` | **`STATED`** | Task Scheduler with Preemption | No | Yes | `Rule H07` | Task scheduler fails to prioritize higher priority tasks added dynamically. |
-| `2024` | `event_ordering` | **`TAUGHT`** | Telemetry Metric Collector | Yes | No | `Rule H07` | Telemetry buffer emits metrics in arbitrary insertion order regardless of severity level. |
-| `2025` | `cache_ttl` | **`TRANSFER`** | In-Memory Key-Value Store with TTL | No | No | `Rule H09` | TTLCache retains expired entries indefinitely and fails to support injectable clocks. |
-| `2026` | `cache_ttl` | **`TRANSFER`** | Session Token Cache | Yes | No | `Rule H04, Rule H09` | Session validator fails to raise KeyError when inspecting expired user sessions. |
-| `2027` | `cache_ttl` | **`TRANSFER`** | Rate Limiting Sliding Window Cache | Yes | No | `Rule H09` | RateLimiter fails to prune expired timestamps from sliding window, blocking clients permanently. |
-| `2028` | `cache_ttl` | **`TRANSFER`** | Tiered Multi-level Cache | No | Yes | `Rule H09` | TieredCache fails to query L2 fallback store on L1 cache miss. |
+- **Screening Experiment Split (Tuning Set, 12 instances):**
+  `[2001, 2002, 2005, 2006, 2009, 2010, 2013, 2014, 2017, 2018, 2021, 2022]`
+  - Stratification: Exactly 2 instances from each of Families 1–6 (6 STATED, 6 TAUGHT).
+- **Confirmatory Study Split (Held-Out Set, 16 instances):**
+  `[2003, 2004, 2007, 2008, 2011, 2012, 2015, 2016, 2019, 2020, 2023, 2024, 2025, 2026, 2027, 2028]`
+  - Stratification: 2 instances from each of Families 1–6 (4 STATED, 5 TAUGHT, 3 DISTRACTOR) + **all 4 TRANSFER instances** from Family 7.
 
 ---
 
-## 4. Detailed Fairness and Mutation Verification
+## 3. Comprehensive Per-Assertion Fairness Table (S-4 Requirement)
 
-### Task 2001: Order Tax Calculation
-- **Family:** `money_rounding`
-- **Class Tag:** `STATED`
-- **Hidden Root Cause Outside Traceback:** `Yes`
-- **Visible-Test Sensitive:** `No`
-- **Handbook Citations:** `Rule H02`
-- **Traceback Files Provided to Baseline:** `pricing.py`
-- **Issue Summary:** Order tax calculation truncates fractional cents instead of using banker's rounding.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
+This table documents every assertion tested in the hidden suite, where its specification originates, whether an agent can derive it without the house handbook, and its experimental class tag.
 
-### Task 2002: Invoice Discount Proration
-- **Family:** `money_rounding`
-- **Class Tag:** `TAUGHT`
-- **Hidden Root Cause Outside Traceback:** `No`
-- **Visible-Test Sensitive:** `Yes`
-- **Handbook Citations:** `Rule H02`
-- **Traceback Files Provided to Baseline:** `discount.py`
-- **Issue Summary:** Prorated discount lines do not sum up to total discount and violate company rounding rules.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
+| Task ID | Bug Family | Hidden Test Assertion | Visible Source (Ticket / Docstring / Handbook) | Derivable Without Handbook? | Class Tag | Split |
+|:---:|:---|:---|:---|:---:|:---:|:---:|
+| **2001** | `money_rounding` | `test_bankers_rounding_half_cents` | pricing.py docstring: 'Tax calculation must use banker's rounding (round half to even)' | **Yes** | `STATED` | Tune |
+| **2001** | `money_rounding` | `test_tax_engine_direct` | tax_engine.py module contract | **Yes** | `STATED` | Tune |
+| **2002** | `money_rounding` | `test_half_cent_bankers_rounding` | HANDBOOK.md Rule H02: Banker's rounding on half-cent boundaries | **No** | `TAUGHT` | Tune |
+| **2002** | `money_rounding` | `test_three_line_unallocated` | HANDBOOK.md Rule H02: Banker's rounding on half-cent boundaries | **No** | `TAUGHT` | Tune |
+| **2003** | `money_rounding` | `test_bankers_rounding_fx` | HANDBOOK.md Rule H02: Banker's rounding on half-cents | **No** | `TAUGHT` | Held-Out |
+| **2003** | `money_rounding` | `test_fx_engine_direct` | HANDBOOK.md Rule H02: Banker's rounding on half-cents | **No** | `TAUGHT` | Held-Out |
+| **2004** | `money_rounding` | `test_statutory_ceiling_withholding` | payroll.py docstring: 'MUST round fractional cents UP (ceiling)' | **Yes** | `DISTRACTOR` | Held-Out |
+| **2005** | `config_merge` | `test_deep_immutability_nested` | routing.py docstring: 'Inputs must remain strictly immutable' | **Yes** | `STATED` | Tune |
+| **2006** | `config_merge` | `test_pool_template_immutability` | HANDBOOK.md Rule H03: Input immutability & defensive copying | **No** | `TAUGHT` | Tune |
+| **2006** | `config_merge` | `test_env_loader_direct` | HANDBOOK.md Rule H03: Input immutability & defensive copying | **No** | `TAUGHT` | Tune |
+| **2007** | `config_merge` | `test_pipeline_nested_immutability` | pipeline.py docstring: 'Inputs must remain immutable and nested options must be defensively copied' | **Yes** | `STATED` | Held-Out |
+| **2007** | `config_merge` | `test_step_builder_direct` | step_builder.py module contract | **Yes** | `STATED` | Held-Out |
+| **2008** | `config_merge` | `test_in_place_nested_mutation_contract` | session.py docstring: 'MUST mutate accumulator in-place ... Do NOT create deep copies' | **Yes** | `DISTRACTOR` | Held-Out |
+| **2009** | `calendar_recurrence` | `test_end_exclusive` | intervals.py docstring: 'half-open interval [start, end), where start is inclusive and end is exclusive' | **Yes** | `STATED` | Tune |
+| **2009** | `calendar_recurrence` | `test_subsecond_boundary` | intervals.py docstring: 'half-open interval [start, end)' | **Yes** | `STATED` | Tune |
+| **2010** | `calendar_recurrence` | `test_boundary_taught_half_open` | HANDBOOK.md Rule H05: Half-open intervals [start, end) | **No** | `TAUGHT` | Tune |
+| **2010** | `calendar_recurrence` | `test_period_calc_direct` | HANDBOOK.md Rule H05: Half-open intervals [start, end) | **No** | `TAUGHT` | Tune |
+| **2011** | `calendar_recurrence` | `test_true_overlap` | maintenance.py docstring: 'slots are half-open intervals [start, end)' | **Yes** | `STATED` | Held-Out |
+| **2011** | `calendar_recurrence` | `test_nested_slot` | maintenance.py docstring: 'slots are half-open intervals [start, end)' | **Yes** | `STATED` | Held-Out |
+| **2012** | `calendar_recurrence` | `test_retention_half_open` | HANDBOOK.md Rule H05: Half-open intervals [start, end) | **No** | `TAUGHT` | Held-Out |
+| **2012** | `calendar_recurrence` | `test_window_evaluator_direct` | HANDBOOK.md Rule H05: Half-open intervals [start, end) | **No** | `TAUGHT` | Held-Out |
+| **2013** | `csv_roundtrip` | `test_rfc4180_quote_doubling` | csv_writer.py docstring: 'wrap in double quotes and escape internal quotes by doubling ("")' | **Yes** | `STATED` | Tune |
+| **2013** | `csv_roundtrip` | `test_multiline_csv` | csv_writer.py docstring: 'If field contains comma, newline, or double quote' | **Yes** | `STATED` | Tune |
+| **2014** | `csv_roundtrip` | `test_rfc4180_embedded_quotes_taught` | HANDBOOK.md Rule H10: RFC 4180 CSV serialization | **No** | `TAUGHT` | Tune |
+| **2014** | `csv_roundtrip` | `test_comma_enclosure` | HANDBOOK.md Rule H10: RFC 4180 CSV serialization | **No** | `TAUGHT` | Tune |
+| **2015** | `csv_roundtrip` | `test_rfc4180_metric_quotes` | HANDBOOK.md Rule H10: RFC 4180 CSV serialization | **No** | `TAUGHT` | Held-Out |
+| **2015** | `csv_roundtrip` | `test_sanitizer_direct` | HANDBOOK.md Rule H10: RFC 4180 CSV serialization | **No** | `TAUGHT` | Held-Out |
+| **2016** | `csv_roundtrip` | `test_bash_backslash_quoting_distractor` | tsv_formatter.py docstring: 'fields must be tab-delimited and internal quotes must be backslash-escaped (\") ... Do NOT use RFC 4180' | **Yes** | `DISTRACTOR` | Held-Out |
+| **2017** | `permission_prefix` | `test_trailing_slash_normalization` | guard.py docstring: 'Normalizes trailing slashes ... Matches only full path segments' | **Yes** | `STATED` | Tune |
+| **2018** | `permission_prefix` | `test_taught_segment_and_slash` | HANDBOOK.md Rule H06: Trailing slash and path prefix normalization | **No** | `TAUGHT` | Tune |
+| **2019** | `permission_prefix` | `test_segment_boundary_stated` | asset_service.py docstring: 'matches full directory segment boundaries and normalizes trailing slashes' | **Yes** | `STATED` | Held-Out |
+| **2019** | `permission_prefix` | `test_path_normalizer_direct` | path_normalizer.py module contract | **Yes** | `STATED` | Held-Out |
+| **2020** | `permission_prefix` | `test_scope_taught_boundaries` | HANDBOOK.md Rule H06: Trailing slash and path prefix normalization | **No** | `TAUGHT` | Held-Out |
+| **2020** | `permission_prefix` | `test_prefix_validator_direct` | HANDBOOK.md Rule H06: Trailing slash and path prefix normalization | **No** | `TAUGHT` | Held-Out |
+| **2021** | `event_ordering` | `test_deterministic_tiebreaker_stated` | dispatcher.py docstring: 'Sort jobs by descending priority ... job_id in ascending order' | **Yes** | `STATED` | Tune |
+| **2022** | `event_ordering` | `test_taught_deterministic_timestamp_tiebreaker` | HANDBOOK.md Rule H07: Stable ordering and deterministic tiebreaker | **No** | `TAUGHT` | Tune |
+| **2023** | `event_ordering` | `test_sequence_tiebreaker_stated` | rebalancer.py docstring: 'Sort tasks by weight in descending order ... sequence in ascending order' | **Yes** | `STATED` | Held-Out |
+| **2024** | `event_ordering` | `test_stream_ordering_taught` | HANDBOOK.md Rule H07: Stable ordering and deterministic tiebreaker | **No** | `TAUGHT` | Held-Out |
+| **2024** | `event_ordering` | `test_sort_helper_direct` | HANDBOOK.md Rule H07: Stable ordering and deterministic tiebreaker | **No** | `TAUGHT` | Held-Out |
+| **2025** | `cache_ttl` | `test_injectable_clock_monotonic_taught` | HANDBOOK.md Rule H09: Injectable clocks and monotonic TTL expiration | **No** | `TRANSFER` | Held-Out |
+| **2026** | `cache_ttl` | `test_session_boundary_taught` | HANDBOOK.md Rule H09: Injectable clocks and monotonic TTL expiration | **No** | `TRANSFER` | Held-Out |
+| **2026** | `cache_ttl` | `test_session_validator_direct` | HANDBOOK.md Rule H09: Injectable clocks and monotonic TTL expiration | **No** | `TRANSFER` | Held-Out |
+| **2027** | `cache_ttl` | `test_lease_expiry_taught` | HANDBOOK.md Rule H09: Injectable clocks and monotonic TTL expiration | **No** | `TRANSFER` | Held-Out |
+| **2027** | `cache_ttl` | `test_clock_source_direct` | HANDBOOK.md Rule H09: Injectable clocks and monotonic TTL expiration | **No** | `TRANSFER` | Held-Out |
+| **2028** | `cache_ttl` | `test_dns_exact_expiry_taught` | HANDBOOK.md Rule H09: Injectable clocks and monotonic TTL expiration | **No** | `TRANSFER` | Held-Out |
 
-### Task 2003: Multi-currency FX Ledger
-- **Family:** `money_rounding`
-- **Class Tag:** `TAUGHT`
-- **Hidden Root Cause Outside Traceback:** `Yes`
-- **Visible-Test Sensitive:** `No`
-- **Handbook Citations:** `Rule H02`
-- **Traceback Files Provided to Baseline:** `ledger.py`
-- **Issue Summary:** Ledger FX entries disagree on half-cent boundaries.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
+---
 
-### Task 2004: Coupon Rebate Allocation
-- **Family:** `money_rounding`
-- **Class Tag:** `DISTRACTOR`
-- **Hidden Root Cause Outside Traceback:** `No`
-- **Visible-Test Sensitive:** `Yes`
-- **Handbook Citations:** `Rule H02 (Distractor: ticket explicitly overrides with ceiling rule)`
-- **Traceback Files Provided to Baseline:** `rebate.py`
-- **Issue Summary:** Rebates must round up per regulatory mandate, but currently truncate.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
+## 4. Root Cause and Factor $u$ Exploration Analysis (S-6 Requirement)
 
-### Task 2005: Hierarchical App Settings
-- **Family:** `config_merge`
-- **Class Tag:** `STATED`
-- **Hidden Root Cause Outside Traceback:** `No`
-- **Visible-Test Sensitive:** `Yes`
-- **Handbook Citations:** `Rule H03`
-- **Traceback Files Provided to Baseline:** `settings.py`
-- **Issue Summary:** merge_settings overwrites entire nested dictionaries, losing sibling configuration parameters.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
+In Section 8 Addendum v2, **Factor $u$** is formally defined as **'repository exploration + test running'**.
 
-### Task 2006: Plugin Parameter Resolver
-- **Family:** `config_merge`
-- **Class Tag:** `TAUGHT`
-- **Hidden Root Cause Outside Traceback:** `Yes`
-- **Visible-Test Sensitive:** `No`
-- **Handbook Citations:** `Rule H03`
-- **Traceback Files Provided to Baseline:** `plugin_manager.py`
-- **Issue Summary:** Plugin parameter resolution corrupts global default structures due to mutable reference sharing.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
+### Baseline Context Package (B0 Contract)
+Every baseline attempt ($u=0$) receives strictly:
+1. Ticket text (symptom report).
+2. Failing traceback excerpt.
+3. **ONLY the file(s) named in the traceback (`traceback_files`), not the entire repository.**
+4. Standard output envelope.
 
-### Task 2007: Cloud Environment Layering
-- **Family:** `config_merge`
-- **Class Tag:** `STATED`
-- **Hidden Root Cause Outside Traceback:** `Yes`
-- **Visible-Test Sensitive:** `No`
-- **Handbook Citations:** `Rule H03`
-- **Traceback Files Provided to Baseline:** `app.py`
-- **Issue Summary:** Layering cloud environments drops node cluster sizing configuration.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
+### Root Cause Isolation Audit
+For the **12 Hidden Root Cause tasks** (`2001`, `2003`, `2006`, `2007`, `2010`, `2012`, `2015`, `2019`, `2020`, `2024`, `2026`, `2027`), the defective logic is housed in a separate helper module (`tax_engine.py`, `env_loader.py`, `period_calc.py`, `sanitizer.py`, `prefix_validator.py`, `sort_helper.py`, `session_validator.py`, `clock_source.py`) that is NOT present in `traceback_files`.
 
-### Task 2008: Audit Policy Config
-- **Family:** `config_merge`
-- **Class Tag:** `DISTRACTOR`
-- **Hidden Root Cause Outside Traceback:** `No`
-- **Visible-Test Sensitive:** `Yes`
-- **Handbook Citations:** `Rule H03 (Distractor: ticket explicitly mandates in-place mutation)`
-- **Traceback Files Provided to Baseline:** `fast_merge.py`
-- **Issue Summary:** In-place policy mutation cache returns new dict instance, breaking caller identity contract.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
+- **Symptom-Level Fix Analysis:** A patch applied strictly to the caller file named in the traceback cannot satisfy hidden test assertions that test the helper module directly or across other uninvoked callers.
+- **Tagging:** All 12 tasks are tagged `root_cause_only_with_exploration = True`.
+- **Factor $u$ Separation:** Factor $u$ (tools: `read_file`, `grep`, `run_tests`) is required for the agent to proactively explore the repository, discover the coupled helper module, and verify the fix prior to patch submission.
 
-### Task 2009: Monthly Subscription Month-End
-- **Family:** `calendar_recurrence`
-- **Class Tag:** `STATED`
-- **Hidden Root Cause Outside Traceback:** `No`
-- **Visible-Test Sensitive:** `No`
-- **Handbook Citations:** `Rule H05`
-- **Traceback Files Provided to Baseline:** `recurrence.py`
-- **Issue Summary:** Billing date generator crashes with ValueError when billing on day 31.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
+---
 
-### Task 2010: Quarterly Compliance Audit Schedule
-- **Family:** `calendar_recurrence`
-- **Class Tag:** `TAUGHT`
-- **Hidden Root Cause Outside Traceback:** `Yes`
-- **Visible-Test Sensitive:** `No`
-- **Handbook Citations:** `Rule H05`
-- **Traceback Files Provided to Baseline:** `audit_manager.py`
-- **Issue Summary:** Audit window filters include events occurring on the concluding cutoff boundary.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
+## 5. Verification Checklist & Invariants
 
-### Task 2011: Shift Roster Generator
-- **Family:** `calendar_recurrence`
-- **Class Tag:** `STATED`
-- **Hidden Root Cause Outside Traceback:** `No`
-- **Visible-Test Sensitive:** `Yes`
-- **Handbook Citations:** `Rule H05`
-- **Traceback Files Provided to Baseline:** `roster.py`
-- **Issue Summary:** Roster generator outputs consecutive daily shifts rather than weekly intervals.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
-
-### Task 2012: Billing Period Usage Aggregator
-- **Family:** `calendar_recurrence`
-- **Class Tag:** `TAUGHT`
-- **Hidden Root Cause Outside Traceback:** `Yes`
-- **Visible-Test Sensitive:** `No`
-- **Handbook Citations:** `Rule H05`
-- **Traceback Files Provided to Baseline:** `usage.py`
-- **Issue Summary:** Monthly usage reports drop events occurring in the final days of the month.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
-
-### Task 2013: Export User Profile with Commas
-- **Family:** `csv_roundtrip`
-- **Class Tag:** `STATED`
-- **Hidden Root Cause Outside Traceback:** `No`
-- **Visible-Test Sensitive:** `Yes`
-- **Handbook Citations:** `Rule H10`
-- **Traceback Files Provided to Baseline:** `csv_format.py`
-- **Issue Summary:** CSV serializer outputs unquoted fields containing commas, corrupting tabular exports.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
-
-### Task 2014: Data Ingestion Pipeline
-- **Family:** `csv_roundtrip`
-- **Class Tag:** `TAUGHT`
-- **Hidden Root Cause Outside Traceback:** `No`
-- **Visible-Test Sensitive:** `No`
-- **Handbook Citations:** `Rule H10, Rule H04`
-- **Traceback Files Provided to Baseline:** `csv_reader.py`
-- **Issue Summary:** CSV reader silently accepts corrupted records with unterminated quotes without raising ValueError.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
-
-### Task 2015: Audit Log Stream Exporter
-- **Family:** `csv_roundtrip`
-- **Class Tag:** `STATED`
-- **Hidden Root Cause Outside Traceback:** `Yes`
-- **Visible-Test Sensitive:** `No`
-- **Handbook Citations:** `Rule H10`
-- **Traceback Files Provided to Baseline:** `exporter.py`
-- **Issue Summary:** Audit log exporter strips internal quotation marks, corrupting forensic event payloads.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
-
-### Task 2016: Tab-Separated TSV Batch Parser
-- **Family:** `csv_roundtrip`
-- **Class Tag:** `DISTRACTOR`
-- **Hidden Root Cause Outside Traceback:** `No`
-- **Visible-Test Sensitive:** `No`
-- **Handbook Citations:** `Rule H10 (Distractor: ticket explicitly defines raw TSV parsing)`
-- **Traceback Files Provided to Baseline:** `tsv_parser.py`
-- **Issue Summary:** TSV parser splits on commas instead of tabs, failing on comma-separated values inside tab columns.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
-
-### Task 2017: API Endpoint Access Control
-- **Family:** `permission_prefix`
-- **Class Tag:** `STATED`
-- **Hidden Root Cause Outside Traceback:** `No`
-- **Visible-Test Sensitive:** `Yes`
-- **Handbook Citations:** `Rule H06`
-- **Traceback Files Provided to Baseline:** `acl.py`
-- **Issue Summary:** ACL check allows access to unauthorized endpoints due to naive string prefix matching.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
-
-### Task 2018: Multi-tenant Document Permission
-- **Family:** `permission_prefix`
-- **Class Tag:** `TAUGHT`
-- **Hidden Root Cause Outside Traceback:** `No`
-- **Visible-Test Sensitive:** `Yes`
-- **Handbook Citations:** `Rule H06`
-- **Traceback Files Provided to Baseline:** `doc_perm.py`
-- **Issue Summary:** Document ACL ignores rules whose path prefixes contain trailing slashes.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
-
-### Task 2019: Admin Group Role Inheritance
-- **Family:** `permission_prefix`
-- **Class Tag:** `STATED`
-- **Hidden Root Cause Outside Traceback:** `Yes`
-- **Visible-Test Sensitive:** `No`
-- **Handbook Citations:** `Rule H06`
-- **Traceback Files Provided to Baseline:** `evaluator.py`
-- **Issue Summary:** Users in nested groups fail to inherit administrative privileges.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
-
-### Task 2020: Wildcard Action Matrix
-- **Family:** `permission_prefix`
-- **Class Tag:** `TAUGHT`
-- **Hidden Root Cause Outside Traceback:** `No`
-- **Visible-Test Sensitive:** `No`
-- **Handbook Citations:** `Rule H04`
-- **Traceback Files Provided to Baseline:** `action_gate.py`
-- **Issue Summary:** Action authorization gate returns boolean False instead of raising PermissionError on violation.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
-
-### Task 2021: Async Job Priority Dispatcher
-- **Family:** `event_ordering`
-- **Class Tag:** `STATED`
-- **Hidden Root Cause Outside Traceback:** `No`
-- **Visible-Test Sensitive:** `No`
-- **Handbook Citations:** `Rule H07`
-- **Traceback Files Provided to Baseline:** `dispatcher.py`
-- **Issue Summary:** Job dispatcher breaks priority ties arbitrarily, violating FIFO sequence.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
-
-### Task 2022: Webhook Event Bus
-- **Family:** `event_ordering`
-- **Class Tag:** `TAUGHT`
-- **Hidden Root Cause Outside Traceback:** `No`
-- **Visible-Test Sensitive:** `Yes`
-- **Handbook Citations:** `Rule H08`
-- **Traceback Files Provided to Baseline:** `bus.py`
-- **Issue Summary:** Event bus emits crash or skip listeners when a subscriber unregisters inside a callback.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
-
-### Task 2023: Task Scheduler with Preemption
-- **Family:** `event_ordering`
-- **Class Tag:** `STATED`
-- **Hidden Root Cause Outside Traceback:** `No`
-- **Visible-Test Sensitive:** `Yes`
-- **Handbook Citations:** `Rule H07`
-- **Traceback Files Provided to Baseline:** `scheduler.py`
-- **Issue Summary:** Task scheduler fails to prioritize higher priority tasks added dynamically.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
-
-### Task 2024: Telemetry Metric Collector
-- **Family:** `event_ordering`
-- **Class Tag:** `TAUGHT`
-- **Hidden Root Cause Outside Traceback:** `Yes`
-- **Visible-Test Sensitive:** `No`
-- **Handbook Citations:** `Rule H07`
-- **Traceback Files Provided to Baseline:** `collector.py`
-- **Issue Summary:** Telemetry buffer emits metrics in arbitrary insertion order regardless of severity level.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
-
-### Task 2025: In-Memory Key-Value Store with TTL
-- **Family:** `cache_ttl`
-- **Class Tag:** `TRANSFER`
-- **Hidden Root Cause Outside Traceback:** `No`
-- **Visible-Test Sensitive:** `No`
-- **Handbook Citations:** `Rule H09`
-- **Traceback Files Provided to Baseline:** `ttl_cache.py`
-- **Issue Summary:** TTLCache retains expired entries indefinitely and fails to support injectable clocks.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
-
-### Task 2026: Session Token Cache
-- **Family:** `cache_ttl`
-- **Class Tag:** `TRANSFER`
-- **Hidden Root Cause Outside Traceback:** `Yes`
-- **Visible-Test Sensitive:** `No`
-- **Handbook Citations:** `Rule H04, Rule H09`
-- **Traceback Files Provided to Baseline:** `session_store.py`
-- **Issue Summary:** Session validator fails to raise KeyError when inspecting expired user sessions.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
-
-### Task 2027: Rate Limiting Sliding Window Cache
-- **Family:** `cache_ttl`
-- **Class Tag:** `TRANSFER`
-- **Hidden Root Cause Outside Traceback:** `Yes`
-- **Visible-Test Sensitive:** `No`
-- **Handbook Citations:** `Rule H09`
-- **Traceback Files Provided to Baseline:** `rate_limiter.py`
-- **Issue Summary:** RateLimiter fails to prune expired timestamps from sliding window, blocking clients permanently.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
-
-### Task 2028: Tiered Multi-level Cache
-- **Family:** `cache_ttl`
-- **Class Tag:** `TRANSFER`
-- **Hidden Root Cause Outside Traceback:** `No`
-- **Visible-Test Sensitive:** `Yes`
-- **Handbook Citations:** `Rule H09`
-- **Traceback Files Provided to Baseline:** `tiered_cache.py`
-- **Issue Summary:** TieredCache fails to query L2 fallback store on L1 cache miss.
-- **Pre-flight Status:** Verified offline via `tests/test_suite_e5_preflight.py`:
-  - Gold Reference (`ref`): 100% strict pass (functional tests pass, zero violations, no tamper).
-  - Unpatched Baseline: 100% failure on hidden test overlay.
-  - Mutant 1 (`mutant1`): Fails hidden test overlay (mutation verified).
-  - Mutant 2 (`mutant2`): Fails hidden test overlay (mutation verified).
-
+1. **Zero Synthetic Shortcuts:** All tasks are evaluated via live pytest execution.
+2. **Zero Hint Comments:** Verified via `test_no_hint_comments_in_provided_files` in `tests/test_suite_e5_preflight.py`.
+3. **Token Balance:** Handbook (761 tokens) vs Placebo (754 tokens) balanced to within **0.920%** ($\le 3.0\%$).
+4. **Hermetic Pre-flight:** 100% gold pass, 0% unpatched pass, 0% mutant passes.
