@@ -83,3 +83,28 @@ This is an append-only, timestamped log recording all operational decisions, har
   3. **H-3 Tool Execution Verification:** Harmonized `STANDARD_TASK_ENVELOPE_HEADER` and `TOOL_TASK_ENVELOPE_HEADER` to have identical formatting restrictions (eliminating format permissiveness asymmetry). In the 120 rerun attempts, $C1111$ achieved **59/60 active tool invocations (98.3%)** with 59 live pytest execution logs recorded under `results/gate_a/raw/*_tool_log.json`.
   4. **H-4 Fairness vs. Difficulty & Split Plan:** Confirmed 1004 failure was model capability on unexercised code paths (RFC 4180 docstring exists), while 1005 had an unstated trailing slash convention. Established Phase 2 Split Plan: the 12 Gate A tasks serve strictly as the Tuning Suite ($\mathcal{D}_{\text{tune}}$); Phase 2 headline claims will evaluate a fresh Held-Out Suite ($\mathcal{D}_{\text{heldout}}$) calibrated on baseline difficulty alone.
 - **Impact:** All 120 Gate A attempts generated from one single frozen configuration under SHA `915711b`. Gate A difficulty calibrated ($56.7\% \in [20\%, 60\%]$); Phase 2 pre-registration ready for Round 3 review.
+
+### [2026-10-24T22:25:00Z] Round 8 Deliverable 1: Gate S Offline Benchmark Suite (suite_e5), Controls, and Invariant Verification
+- **Context:** Claude Round 8 review ruled that Gate A on `suite_e4` served as a difficulty calibration (56.7% vs 61.7%, $p=0.8750$, ~5.6x billed tokens, per-task effects not reproducible across runs). Per Section 8 Addendum v2 of `REAL_TEST_REQUIREMENTS.md`, Deliverable 1 mandates an offline, template-generated benchmark suite (`suite_e5`), balanced controls, worked examples, and pre-flight validation prior to any model calls.
+- **Action & Deliverables:**
+  1. **House Handbook (`briefs/HANDBOOK.md`) & Placebo Control (`briefs/PLACEBO.md`):**
+     - Authored 10 house rules covering real conventions: banker's rounding, immutability, error types, half-open intervals, trailing slash normalization, stable ordering, safe iteration, injectable clocks, RFC 4180 CSV serialization.
+     - Authored 10 corresponding software hygiene rules in `PLACEBO.md`.
+     - Verified exact token balance using `tiktoken` (`cl100k_base`): `HANDBOOK.md` = 761 tokens, `PLACEBO.md` = 754 tokens (difference = 7 tokens, **0.920%**, strictly $\le 3.0\%$).
+     - Verified zero domain concept leakage or overlap across both briefs.
+  2. **Worked Examples (`briefs/P3.md`):**
+     - Created 2 complete practice examples (Ticket $\to$ Root Cause $\to$ Production Patch $\to$ Architectural Rationale) covering `money_rounding` and `config_merge`.
+     - Verified instance isolation: zero file or function collisions against evaluated benchmark tasks 2001–2028.
+  3. **Benchmark Suite (`benchmarks/suite_e5.py`):**
+     - Created 28 template-generated instances across 7 bug families (4 instances each): `money_rounding` (2001-2004), `config_merge` (2005-2008), `calendar_recurrence` (2009-2012), `csv_roundtrip` (2013-2016), `permission_prefix` (2017-2020), `event_ordering` (2021-2024), and `cache_ttl` (2025-2028).
+     - Tag distribution: 11 STATED, 10 TAUGHT, 3 DISTRACTOR, 4 TRANSFER.
+     - Structural variants: 11 Hidden-root-cause (39.3% $\ge 33.3\%$) and 11 Visible-test-sensitive (39.3% $\ge 33.3\%$).
+     - All 4 TRANSFER tasks are in `cache_ttl`, completely disjoint from P3 practice families (`money_rounding`, `config_merge`).
+  4. **Fairness Audit Matrix (`benchmarks/FAIRNESS_e5.md`):**
+     - Full 28-task audit table documenting family, class tag, visible source, handbook citation, hidden assertion contracts, and baseline context files.
+  5. **Hermetic Pre-Flight Validation (`tests/test_suite_e5_preflight.py`):**
+     - Executed 114 tests: unpatched baseline fails 28/28 (0 false positives), gold passes 28/28 (100% strict pass, no tamper), mutant 1 fails 28/28, mutant 2 fails 28/28, token balance passes (0.920% $\le 3\%$), tag distributions pass.
+     - 100% passing (114/114 passed in 382.34s).
+  6. **Independent Subagent Audit:**
+     - Verified independently by research subagent `777b137c-b756-4313-a077-141bcc415bd0`. Zero defects detected.
+- **Impact:** Deliverable 1 is complete and verified strictly offline (zero model API calls made). Submitted for Claude Gate S formal review. Calibration run (Gate A2) remains locked until Gate S passes.

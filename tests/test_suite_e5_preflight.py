@@ -1,0 +1,131 @@
+"""test_suite_e5_preflight.py: Pre-flight validation for Suite E5 benchmark tasks.
+
+Complies strictly with Section 8 Addendum v2 of REAL_TEST_REQUIREMENTS.md:
+1. Gold reference patch passes 100% of visible and hidden tests on all 28 tasks.
+2. Unpatched baseline code fails hidden tests (100% failure rate; zero false positives) on all 28 tasks.
+3. Mutant 1 (plausible wrong fix) fails hidden tests on all 28 tasks.
+4. Mutant 2 (plausible wrong fix) fails hidden tests on all 28 tasks.
+5. Handbook vs Placebo token balance is within +/-3% (cl100k_base).
+6. Suite structure and tag distribution meet all pre-registration constraints:
+   - >= 24 evaluated instances (28 provided across 7 bug families)
+   - >= 2 DISTRACTOR instances
+   - >= 3 TRANSFER instances
+   - >= 1/3 hidden-root-cause instances (bug outside traceback file)
+   - >= 1/3 visible-test-sensitive instances (naive fix fails visible test)
+"""
+
+import os
+import sys
+import pytest
+import tiktoken
+
+_repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(_repo_root, "runner"))
+sys.path.insert(0, os.path.join(_repo_root, "harness"))
+sys.path.insert(0, os.path.join(_repo_root, "benchmarks"))
+
+import suite_e5
+from grader import evaluate_patch
+
+
+def format_patch(ref_dict):
+    return "".join(
+        f"=== FILE: {p} ===\n{c.rstrip()}\n=== END ===\n"
+        for p, c in ref_dict.items()
+    )
+
+
+@pytest.mark.parametrize("task", suite_e5.T, ids=[f"task_{t['id']}" for t in suite_e5.T])
+def test_unpatched_baseline_fails(task):
+    """Unpatched code must fail the hidden tests (100% failure rate; zero false positives)."""
+    res = evaluate_patch(task["repo"], "", task["key"])
+    assert res["strict_pass"] is False, f"Task {task['id']} unpatched code unexpectedly passed hidden tests!"
+    assert res["tamper"] is False
+
+
+@pytest.mark.parametrize("task", suite_e5.T, ids=[f"task_{t['id']}" for t in suite_e5.T])
+def test_gold_reference_passes(task):
+    """Gold reference solution must achieve 100% strict pass."""
+    gold_patch = format_patch(task["ref"])
+    res = evaluate_patch(task["repo"], gold_patch, task["key"])
+    assert res["strict_pass"] is True, (
+        f"Task {task['id']} gold patch failed: violations={res.get('violations')}, "
+        f"vis_rc={res.get('visible_rc')}, failing_variants={res.get('failing_variants')}, "
+        f"output={res.get('visible_output')}"
+    )
+    assert res["func_pass"] is True
+    assert res["tamper"] is False
+    assert len(res["violations"]) == 0
+
+
+@pytest.mark.parametrize("task", suite_e5.T, ids=[f"task_{t['id']}" for t in suite_e5.T])
+def test_mutant1_fails(task):
+    """Mutant 1 (plausible-wrong fix 1) must fail hidden tests."""
+    m1_patch = format_patch(task["mutant1"])
+    res = evaluate_patch(task["repo"], m1_patch, task["key"])
+    assert res["strict_pass"] is False, f"Task {task['id']} mutant1 unexpectedly passed hidden tests!"
+
+
+@pytest.mark.parametrize("task", suite_e5.T, ids=[f"task_{t['id']}" for t in suite_e5.T])
+def test_mutant2_fails(task):
+    """Mutant 2 (plausible-wrong fix 2) must fail hidden tests."""
+    m2_patch = format_patch(task["mutant2"])
+    res = evaluate_patch(task["repo"], m2_patch, task["key"])
+    assert res["strict_pass"] is False, f"Task {task['id']} mutant2 unexpectedly passed hidden tests!"
+
+
+def test_handbook_placebo_token_balance():
+    """Assert Handbook and Placebo token difference is strictly <= 3% using cl100k_base."""
+    enc = tiktoken.get_encoding("cl100k_base")
+    handbook_path = os.path.join(_repo_root, "briefs", "HANDBOOK.md")
+    placebo_path = os.path.join(_repo_root, "briefs", "PLACEBO.md")
+    
+    assert os.path.exists(handbook_path), "HANDBOOK.md missing"
+    assert os.path.exists(placebo_path), "PLACEBO.md missing"
+    
+    with open(handbook_path, "r", encoding="utf-8") as f:
+        handbook_text = f.read()
+    with open(placebo_path, "r", encoding="utf-8") as f:
+        placebo_text = f.read()
+        
+    t_handbook = len(enc.encode(handbook_text))
+    t_placebo = len(enc.encode(placebo_text))
+    diff_pct = abs(t_handbook - t_placebo) / max(t_handbook, t_placebo) * 100.0
+    
+    assert diff_pct <= 3.0, (
+        f"Token imbalance exceeds 3.0%: Handbook={t_handbook}, Placebo={t_placebo}, diff={diff_pct:.2f}%"
+    )
+
+
+def test_e5_tag_distribution():
+    """Assert suite_e5 satisfies all structural constraints from Section 8 Addendum v2."""
+    tasks = suite_e5.T
+    n_tasks = len(tasks)
+    assert n_tasks >= 24, f"Expected >= 24 tasks, found {n_tasks}"
+    
+    distractor = [t for t in tasks if t["class_tag"] == "DISTRACTOR"]
+    transfer = [t for t in tasks if t["class_tag"] == "TRANSFER"]
+    taught = [t for t in tasks if t["class_tag"] == "TAUGHT"]
+    stated = [t for t in tasks if t["class_tag"] == "STATED"]
+    
+    assert len(distractor) >= 2, f"Expected >= 2 DISTRACTOR, found {len(distractor)}"
+    assert len(transfer) >= 3, f"Expected >= 3 TRANSFER, found {len(transfer)}"
+    assert len(taught) >= 4, f"Expected >= 4 TAUGHT, found {len(taught)}"
+    assert len(stated) >= 4, f"Expected >= 4 STATED, found {len(stated)}"
+    
+    hrc = [t for t in tasks if t.get("hidden_root_cause")]
+    vts = [t for t in tasks if t.get("visible_test_sensitive")]
+    
+    min_third = n_tasks / 3.0
+    assert len(hrc) >= min_third, f"Expected >= 1/3 hidden-root-cause ({min_third:.1f}), found {len(hrc)}"
+    assert len(vts) >= min_third, f"Expected >= 1/3 visible-test-sensitive ({min_third:.1f}), found {len(vts)}"
+    
+    # Check that every task has required metadata and files
+    for t in tasks:
+        assert t["family"], f"Task {t['id']} missing family"
+        assert t["repo"], f"Task {t['id']} missing repo"
+        assert t["traceback_files"], f"Task {t['id']} missing traceback_files"
+        for tf in t["traceback_files"]:
+            assert tf in t["repo"], f"Task {t['id']} traceback_file {tf} not in repo"
+        if t["class_tag"] in ("TAUGHT", "DISTRACTOR"):
+            assert t.get("handbook_citations"), f"Task {t['id']} ({t['class_tag']}) missing handbook_citations"

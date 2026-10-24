@@ -1,15 +1,12 @@
 # Project Status & Execution Tracker (`STATUS.md`)
 
-**Current Phase:** Phase 1 (Difficulty Gate A Evaluated under Unified Frozen Config — Awaiting Round 3 Review)  
-**Phase State:** **Difficulty Gate A Evaluated (Ceiling Broken: C0000 = 56.7% ∈ [20%, 60%]; Scaffolding Gain Not Statistically Significant, p = 0.8750)**  
-**Frozen SHA:** `915711b` (unified runner configuration frozen; 100% of Gate A rows generated under this exact SHA)  
+**Current Phase:** Gate S (Offline Suite, Controls & Pre-Flight Verification — Awaiting Claude Gate S Review)  
+**Phase State:** **Gate S Complete & Hermetically Verified (114/114 Preflight Tests Passing; Zero Model Calls Made)**  
+**Frozen SHA:** `915711b` (Phase 0/Gate A runner baseline) -> *Gate S Deliverable Commit in Progress*  
 **Model Specifications:**  
-- **Model ID:** `gemini-2.5-flash`  
+- **Model ID:** `gemini-2.5-flash` (for upcoming Gate A2 calibration upon Gate S approval)  
 - **Sampling Settings:** `temperature=0.0`, `max_output_tokens=16384`, `thinking_budget=2048`  
 - **Concurrency:** 6 parallel worker threads with thread-safe file locking  
-- **Stop Reason Verification:** `stop_reason` recorded per turn; 120/120 attempts completed cleanly with `FinishReason.STOP` (0 truncated rows)  
-- **Interactive Tool Execution:** 59/60 attempts in $C1111$ actively executed the tool runner (`tool_used=True`, 59 total pytest tool calls logged)  
-- **Randomization Seed:** `42` (logged in `schedule_order.json` and `rows.json`)  
 - **Execution Backend:** Direct Google Gemini API with mandatory startup probe (`startup_self_check`)  
 
 ---
@@ -19,19 +16,66 @@
 | Phase | Description | State | Commit SHA | Notes / Deliverables |
 |:---|:---|:---:|:---:|:---|
 | **Phase 0** | Infrastructure & Protocol Setup | **Complete and Verified** | `c81d851` | Runner (`agent_runner.py`), Grader (`grader.py`), 16 cell briefs (`briefs/DIFF.md`), exact token accounting, Resolution-V parity, interactive tool calling loop, standardized task envelope, audit trail, 10 hermetic unit tests. Live dry run verified on `gemini-2.5-flash`. |
-| **Phase 1** | New Benchmark & Difficulty Gate | **Complete (Re-run under Unified Frozen Config)** | `915711b` / *Current* | 12 multi-module repository tasks (`benchmarks/suite_e4.py`), full fairness table (`benchmarks/FAIRNESS_e4.md`), pre-flight validation (35/35 pass, `tests/test_suite_e4_preflight.py`), Gate A executed (120 attempts, `results/gate_a/`). Baseline ceiling broken ($C0000 = 56.7\% \in [20\%, 60\%]$). |
-| **Phase 2** | Main Experiment $E4a$ ($2^{5-1}$ Factorial) | **LOCKED (Pending Gate A Approval & Pre-Registration Review)** | — | 16 cells $\times \ge 5$ runs $\times$ gated tasks; binary logistic/LPM analysis, permutation tests, bootstrap CIs |
-| **Phase 3.1**| One-at-a-Time Ablation ($E4b$) | Not Started | — | 8 designs ($B, S_1, S_2, S_4, P_2, P_3, U_2, R_2$) on new gated benchmark |
-| **Phase 3.2**| Untested Factor Levels | Not Started | — | $u_3$ (grep), $u_4$ (vector), $u_5$ (graph), $r_3$ (independent critic), $k_3$ (two retries), $s_5$ (tuned book) |
-| **Phase 3.3**| $s_5$ Knapsack MIP Construction | Not Started | — | Leave-one-rule-out ablation on tuning tickets; evaluated strictly on held-out tickets |
-| **Phase 3.4**| Retry-Feedback Confound Test | Not Started | — | Policy-only vs Policy + visible pytest feedback across factorial subset |
-| **Phase 3.5**| Tools Offered vs. Tools Used | Not Started | — | Observational analysis of tool adoption vs performance |
-| **Phase 4** | Search & Generalization (RQ3) | Not Started | — | MIP surrogate optimization under token budgets vs baselines and successive halving |
-| **Phase 5** | Replication & Robustness | Not Started | — | Cross-model replication, extreme cell fairness check, book-version inversion test |
+| **Phase 1** | Difficulty Gate A (Calibration Only) | **Complete (Difficulty Calibrated)** | `915711b` | 12 multi-module tasks (`suite_e4`), 120 live attempts ($C0000=56.7\%$, $C1111=61.7\%$, $p=0.8750$). Established as difficulty calibration only (ceiling broken); per-task effects did not replicate across runs. |
+| **Gate S**  | Template Suite $e5$, Controls & Invariants | **Complete (114/114 Verified)** | *Current Commit* | Strictly offline. 28 template-generated instances across 7 families (`benchmarks/suite_e5.py`), `HANDBOOK.md` vs `PLACEBO.md` token balance (761 vs 754, 0.920% diff <= 3%), 2 worked examples (`briefs/P3.md`), full audit table (`benchmarks/FAIRNESS_e5.md`), 114/114 passing preflight tests (`tests/test_suite_e5_preflight.py`). |
+| **Gate A2** | Baseline B0 Calibration Run | **LOCKED (Pending Gate S Approval)** | — | Live B0 calibration on `suite_e5` (frozen runner config, >= 10 runs per instance, 280 attempts). Calibrates baseline difficulty without scaffolding bias. |
+| **Gate P**  | Formal Pre-Registration | **LOCKED (Pending Gate A2)** | — | Primary hypothesis, instance-clustered permutation tests, theta* selection rule, secondary metrics. |
+| **Gate B**  | Tune-Set Factorial ($2^{5-1}$) | **LOCKED (Pending Gate P)** | — | 16 cells $\times \ge 5$ runs on gated tune split. |
+| **Held-Out**| Final Confirmation & Multi-Model Replication | **LOCKED** | — | Held-out confirmation and second-model replication as budget allows. |
 
 ---
 
-## 2. Gate A Verification Results (120 Fresh Attempts under SHA `915711b`)
+## 2. Gate S Offline Deliverables & Verification Summary
+
+Per Section 8 Addendum v2 of `REAL_TEST_REQUIREMENTS.md`, Gate S establishes the clean-slate benchmark suite, balanced controls, and structural invariants prior to any model inference. All deliverables have been created and verified offline:
+
+### A. Balanced Controls: `briefs/HANDBOOK.md` vs `briefs/PLACEBO.md`
+- **Token Accounting (`cl100k_base` / `tiktoken`):**
+  - `HANDBOOK.md`: **761 tokens** (10 numbered house rules: banker's rounding, immutability, error types, half-open intervals, trailing slash normalization, stable ordering, safe iteration, injectable clocks, RFC 4180 CSV serialization).
+  - `PLACEBO.md`: **754 tokens** (10 corresponding software engineering hygiene rules: formatting, docstrings, variable naming, typing, imports, logging, error messages, dead code, profiling, licensing).
+  - **Token Difference:** 7 tokens (**0.920%**, strictly $\le 3.0\%$).
+- **Content Purity:** Verified 0 / 9 domain concept overlap; `PLACEBO.md` contains purely general software hygiene rules without task-relevant domain invariants.
+
+### B. Practice Examples: `briefs/P3.md`
+- Contains exactly 2 complete worked examples (Ticket $\to$ Root Cause $\to$ Production Patch $\to$ Architectural Rationale).
+- Covers `money_rounding` (`calculate_discounted_line` in `billing/discount.py`) and `config_merge` (`merge_tenant_routing` in `routing/config.py`).
+- **Isolation:** Uses codebases and function names completely distinct from evaluated tasks 2001–2028 (zero file or function collisions).
+
+### C. Benchmark Suite: `benchmarks/suite_e5.py`
+- Total evaluated instances: **28 instances** across **7 bug families** (4 instances per family):
+  1. `money_rounding` (Tasks 2001–2004)
+  2. `config_merge` (Tasks 2005–2008)
+  3. `calendar_recurrence` (Tasks 2009–2012)
+  4. `csv_roundtrip` (Tasks 2013–2016)
+  5. `permission_prefix` (Tasks 2017–2020)
+  6. `event_ordering` (Tasks 2021–2024)
+  7. `cache_ttl` (Tasks 2025–2028)
+- **Tag Distribution:**
+  - `STATED`: **11 instances** (39.3% $\ge 4$)
+  - `TAUGHT`: **10 instances** (35.7% $\ge 4$)
+  - `DISTRACTOR`: **3 instances** (10.7% $\ge 2$, Tasks 2004, 2008, 2016)
+  - `TRANSFER`: **4 instances** (14.3% $\ge 3$, Tasks 2025, 2026, 2027, 2028)
+- **Structural Variants:**
+  - Hidden Root Cause (outside traceback file): **11 instances (39.3% $\ge 33.3\%$)**
+  - Visible-Test-Sensitive (naive fix fails visible test): **11 instances (39.3% $\ge 33.3\%$)**
+- **TRANSFER Domain Disjointness:** All TRANSFER tasks belong to `cache_ttl`, completely disjoint from the P3 practice families (`money_rounding` and `config_merge`).
+
+### D. Fairness Documentation: `benchmarks/FAIRNESS_e5.md`
+- Complete audit table mapping all 28 instances to their bug family, class tag, visible source / handbook rule citation, hidden root cause flag, visible-test sensitivity flag, and minimal context package (traceback files provided to baseline B0).
+
+### E. Hermetic Pre-Flight Validation Suite: `tests/test_suite_e5_preflight.py`
+- Executed via `uv run pytest repo_push/tests/test_suite_e5_preflight.py -v`:
+  - `test_unpatched_baseline_fails`: 28/28 PASSED (100% fail hidden tests; 0 false positives).
+  - `test_gold_reference_passes`: 28/28 PASSED (100% strict pass; 0 violations, no tamper).
+  - `test_mutant1_fails`: 28/28 PASSED (100% fail hidden tests).
+  - `test_mutant2_fails`: 28/28 PASSED (100% fail hidden tests).
+  - `test_handbook_placebo_token_balance`: PASSED (0.920% difference $\le 3.0\%$).
+  - `test_e5_tag_distribution`: PASSED (all structural and class tag invariants satisfied).
+  - **Overall Preflight Result:** **114 passed in 382.34s (0 failures)**.
+
+---
+
+## 3. Gate A Difficulty Calibration Summary (Historical / Calibration Reference)
 
 Target criteria from `REAL_TEST_REQUIREMENTS.md` Section 1.4:
 - **Criterion 1 (Cell 0000 pass rate in [0.20, 0.60]):** **56.7%** (34/60) — **PASSED** (Baseline difficulty calibrated: ceiling is completely broken; $56.7\% \in [20\%, 60\%]$).
