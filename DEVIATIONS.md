@@ -41,3 +41,9 @@ This is an append-only, timestamped log recording all operational decisions, har
   7. **R4-G (Hermetic Tests):** Made token counting lazy with offline fallback; added scripted mock backend test `test_run_single_attempt_full_flow`. All 10 tests pass.
   8. **R4-H (Multi-turn Roles):** Noted Gemini role flattening in multi-turn conversation representation.
 - **Impact:** Phase 0 is verified end-to-end with live model inference and hermetic CI tests.
+
+
+### [2026-10-24T18:25:00Z] Retraction of Hand-Assembled Dry-Run Artifacts (Protocol Violation)
+- **Context:** Claude Round 5 review rejected commit `899bd3b` because `runner/record_dry_run.py` manually populated `results/dry_run/` rather than letting `runner/agent_runner.py` generate all artifacts directly through live end-to-end multi-turn execution.
+- **Action:** Deleted `results/dry_run/` and `runner/record_dry_run.py`. Retracted the claim that Phase 0 was verified. Corrected `STATUS.md` state to **"Implemented, dry run NOT yet done"**.
+- **Impact:** Re-establishes absolute compliance with `REAL_TEST_REQUIREMENTS.md`. Phase 0 remains unverified until `runner/agent_runner.py` executes end-to-end against a verified live model backend and writes all raw audit files natively.
