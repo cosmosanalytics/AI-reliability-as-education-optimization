@@ -60,7 +60,7 @@ In $E1$–$E3b$, agents processed batches of 12 tickets within a single shared c
 
 ## 5. Specification of Educational Factors ($s, p, u, r, k$)
 
-The 16 cells of the $2^{5-1}$ resolution-V design are defined by the relation $I = s \cdot p \cdot u \cdot r \cdot k \implies k = s \cdot p \cdot u \cdot r$:
+The 16 cells of the $2^{5-1}$ resolution-V design are defined by the relation $I = s \cdot p \cdot u \cdot r \cdot k \implies k = s \cdot p \cdot u \cdot r$ in $\pm 1$ sign coding ($k=1$ if $(s+p+u+r)$ is even in $\{0,1\}$ indicator space):
 
 | Coordinate | Negative State ($-$) | Positive State ($+$) | Operational Mechanism |
 | :--- | :--- | :--- | :--- |
@@ -69,6 +69,18 @@ The 16 cells of the $2^{5-1}$ resolution-V design are defined by the relation $I
 | **Tools ($u$)** | $u_1$: None (static diff generation only). | $u_2$: Interactive bash test runner. | Agent is provided a tool to run `pytest` against visible test files and inspect stdout/stderr. |
 | **Review ($r$)** | $r_1$: None (immediate submission). | $r_2$: Structured self-review checklist (`R2.md`). | Prompts agent to verify patch against edge cases (empty collections, negative numbers, exception types). |
 | **Retry ($k$)** | $k_1$: Single attempt ($k^-$). | $k_2$: Up to 2 retries on automated feedback ($k^+$). | Automated harness returns policy check failure or visible test traceback; agent resubmits fix. |
+
+### Factorial Design Matrix (Resolution V)
+| Cell Code | $s$ | $p$ | $u$ | $r$ | $k$ | Cell Code | $s$ | $p$ | $u$ | $r$ | $k$ |
+| :--- | :---: | :---: | :---: | :---: | :---: | :--- | :---: | :---: | :---: | :---: | :---: |
+| `C0000` | 0 | 0 | 0 | 0 | **1** | `C1000` | 1 | 0 | 0 | 0 | **0** |
+| `C0001` | 0 | 0 | 0 | 1 | **0** | `C1001` | 1 | 0 | 0 | 1 | **1** |
+| `C0010` | 0 | 0 | 1 | 0 | **0** | `C1010` | 1 | 0 | 1 | 0 | **1** |
+| `C0011` | 0 | 0 | 1 | 1 | **1** | `C1011` | 1 | 0 | 1 | 1 | **0** |
+| `C0100` | 0 | 1 | 0 | 0 | **0** | `C1100` | 1 | 1 | 0 | 0 | **1** |
+| `C0101` | 0 | 1 | 0 | 1 | **1** | `C1101` | 1 | 1 | 0 | 1 | **0** |
+| `C0110` | 0 | 1 | 1 | 0 | **1** | `C1110` | 1 | 1 | 1 | 0 | **0** |
+| `C0111` | 0 | 1 | 1 | 1 | **0** | `C1111` | 1 | 1 | 1 | 1 | **1** |
 
 ---
 
