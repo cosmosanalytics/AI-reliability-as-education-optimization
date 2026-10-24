@@ -27,6 +27,13 @@ import sys
 import tempfile
 import time
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
 from grader import evaluate_patch, parse_blocks, run_pytest
 
 # Standardized format header included on EVERY ticket across ALL cells
