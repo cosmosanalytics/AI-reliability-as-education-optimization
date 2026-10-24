@@ -59,6 +59,16 @@ TOOL_INSTRUCTION_ENVELOPE = (
     "When you are finished, output your complete final patch in the standard === FILE === block format without any tool blocks."
 )
 
+TOOL_TASK_ENVELOPE_HEADER = (
+    "Resolve this ticket. First read the whole ticket and every repository file below.\n"
+    "You have access to an interactive test execution tool (pytest). You may run tests to inspect and verify behavior "
+    "before submitting your final patch (see INTERACTIVE TEST RUNNER TOOL instructions at bottom).\n"
+    "When ready to submit your final patch, output ONLY the patch in the standard format: for every file you create or change write a line "
+    "=== FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===.\n"
+    "Paths are relative to the repository root. To delete a file write === DELETE: path ===.\n"
+    "Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks."
+)
+
 TOOL_BLOCK_REGEX = re.compile(
     r"=== TOOL:\s*pytest\s*===\s*\n(.*?)\n=== END_TOOL ===", re.DOTALL
 )
@@ -95,6 +105,7 @@ class LiveModelBackend:
         self.model_id = model_id
         self.temperature = temperature
         self.backend = backend or self._detect_backend()
+        self.last_thoughts_tok = None
 
     def _detect_backend(self):
         if os.environ.get("ANTHROPIC_API_KEY"):
@@ -198,8 +209,9 @@ class LiveModelBackend:
 
         elif self.backend == "gemini":
             from google import genai
+            from google.genai import types
 
-            client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+            client = getattr(self, "_client", None) or genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
             contents = []
             if system_prompt:
                 contents.append(f"System Instructions:\n{system_prompt}\n\n")
@@ -207,10 +219,16 @@ class LiveModelBackend:
                 contents.append(f"{h['role'].upper()}: {h['content']}\n")
             contents.append(f"USER: {prompt}\n")
             full_prompt = "".join(contents)
+
+            config = types.GenerateContentConfig(
+                temperature=self.temperature,
+                max_output_tokens=16384,
+                thinking_config=types.ThinkingConfig(thinking_budget=2048),
+            )
             res = client.models.generate_content(
                 model=self.model_id,
                 contents=full_prompt,
-                config=dict(temperature=self.temperature, max_output_tokens=16384),
+                config=config,
             )
             resp_text = ""
             if getattr(res, "text", None):
@@ -225,6 +243,13 @@ class LiveModelBackend:
                     )
 
             usage = getattr(res, "usage_metadata", None)
+            thoughts_tok = (
+                getattr(usage, "thoughts_token_count", None)
+                if (usage and getattr(usage, "thoughts_token_count", None) is not None)
+                else None
+            )
+            self.last_thoughts_tok = thoughts_tok
+
             in_tok = (
                 getattr(usage, "prompt_token_count", None)
                 if (usage and getattr(usage, "prompt_token_count", None) is not None)
@@ -243,8 +268,14 @@ class LiveModelBackend:
 
             stop_reason = "STOP"
             if hasattr(res, "candidates") and res.candidates:
-                stop_reason = str(res.candidates[0].finish_reason)
-                if stop_reason == "MAX_TOKENS":
+                raw_finish = res.candidates[0].finish_reason
+                stop_reason = str(raw_finish)
+                is_max = False
+                if getattr(raw_finish, "name", None) == "MAX_TOKENS":
+                    is_max = True
+                elif "MAX_TOKENS" in str(raw_finish):
+                    is_max = True
+                if is_max:
                     raise RuntimeError(
                         f"FATAL: Response truncated by provider (stop_reason={stop_reason})."
                     )
@@ -357,7 +388,7 @@ def run_single_attempt(
     brief_text,
     backend_client,
     frozen_commit_sha="unknown",
-    retry_feedback_mode="policy_only",
+    retry_feedback_mode="policy_plus_visible_pytest",
     raw_dir="results/raw",
     max_tool_turns=5,
 ):
@@ -383,8 +414,11 @@ def run_single_attempt(
         f"=== FILE: {p} ===\n{c.rstrip()}\n=== END ===\n"
         for p, c in ticket["repo"].items()
     )
+    envelope_header = (
+        TOOL_TASK_ENVELOPE_HEADER if u_val == 1 else STANDARD_TASK_ENVELOPE_HEADER
+    )
     task_prompt = (
-        f"{STANDARD_TASK_ENVELOPE_HEADER}\n\n"
+        f"{envelope_header}\n\n"
         f"TICKET ISSUE:\n{ticket['issue']}\n\n"
         f"REPOSITORY FILES:\n{repo_listing}"
     )
@@ -752,7 +786,7 @@ def run_experiment(
     model_id="claude-3-7-sonnet-20250219",
     backend=None,
     temperature=0.0,
-    retry_feedback_mode="policy_only",
+    retry_feedback_mode="policy_plus_visible_pytest",
     output_dir="results/exp",
     frozen_commit_sha="unknown",
     seed=42,

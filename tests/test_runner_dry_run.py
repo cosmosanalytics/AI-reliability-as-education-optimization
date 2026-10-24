@@ -13,6 +13,7 @@ Verifies:
 import glob
 import os
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 sys.path.insert(
@@ -174,33 +175,66 @@ def test_run_single_attempt_full_flow():
         [turn1_resp, turn2_resp, turn3_resp, turn4_resp]
     )
 
-    result = run_single_attempt(
-        cell_code="C1111",
-        s_val=1,
-        p_val=1,
-        u_val=1,
-        r_val=1,
-        k_val=1,
-        run_idx=1,
-        ticket=ticket,
-        brief_text="Test brief content.",
-        backend_client=mock_backend,
-        raw_dir="results/test_raw",
-        max_tool_turns=3,
-    )
+    with tempfile.TemporaryDirectory() as tmp_raw_dir:
+        result = run_single_attempt(
+            cell_code="C1111",
+            s_val=1,
+            p_val=1,
+            u_val=1,
+            r_val=1,
+            k_val=1,
+            run_idx=1,
+            ticket=ticket,
+            brief_text="Test brief content.",
+            backend_client=mock_backend,
+            raw_dir=tmp_raw_dir,
+            max_tool_turns=3,
+        )
 
-    assert result["tool_used"] is True, "Tool should be marked as used"
-    assert result["tool_call_count"] == 1, "Exactly 1 tool call should be logged"
-    assert (
-        result["retries_done"] == 1
-    ), "Exactly 1 retry should be executed for policy failure"
-    assert (
-        result["attempt1_strict"] is False
-    ), "Attempt 1 had protected file modification"
-    assert (
-        result["final_strict"] is True
-    ), "Final patch after retry should pass strictly"
-    assert result["tamper"] is False, "Final patch had no tamper"
+        assert result["tool_used"] is True, "Tool should be marked as used"
+        assert result["tool_call_count"] == 1, "Exactly 1 tool call should be logged"
+        assert (
+            result["retries_done"] == 1
+        ), "Exactly 1 retry should be executed for policy failure"
+        assert (
+            result["attempt1_strict"] is False
+        ), "Attempt 1 had protected file modification"
+        assert (
+            result["final_strict"] is True
+        ), "Final patch after retry should pass strictly"
+        assert result["tamper"] is False, "Final patch had no tamper"
+
+
+def test_max_tokens_truncation_raises_hard_stop():
+    """G-1: Verifies that MAX_TOKENS or FinishReason.MAX_TOKENS causes an immediate fatal hard stop in LiveModelBackend."""
+    from unittest.mock import MagicMock
+    from google.genai import types
+
+    # Test 1: types.FinishReason.MAX_TOKENS enum
+    backend = LiveModelBackend(model_id="gemini-2.5-flash", backend="gemini")
+    mock_client = MagicMock()
+    mock_res = MagicMock()
+    mock_candidate = MagicMock()
+    mock_candidate.finish_reason = types.FinishReason.MAX_TOKENS
+    mock_res.candidates = [mock_candidate]
+    mock_res.text = "partial docstring..."
+    mock_res.usage_metadata.prompt_token_count = 100
+    mock_res.usage_metadata.candidates_token_count = 654
+    mock_res.usage_metadata.thoughts_token_count = 15726
+    mock_client.models.generate_content.return_value = mock_res
+    backend._client = mock_client
+
+    with pytest.raises(RuntimeError) as exc1:
+        backend.call("test prompt", "", [])
+    assert "truncated by provider" in str(exc1.value)
+    assert "MAX_TOKENS" in str(exc1.value)
+
+    # Test 2: FinishReason.STOP with thoughts_token_count logging
+    mock_candidate.finish_reason = types.FinishReason.STOP
+    resp_text, in_tok, out_tok, resp_id, stop_reason = backend.call("test prompt", "", [])
+    assert stop_reason == "FinishReason.STOP"
+    assert backend.last_thoughts_tok == 15726
+    assert resp_text == "partial docstring..."
 
 
 if __name__ == "__main__":
