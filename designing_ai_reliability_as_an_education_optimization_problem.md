@@ -2,7 +2,7 @@
 
 **Author:** Zhao  
 **Date:** October 2026  
-**Status:** Research Manuscript (Empirically Grounded Draft)
+**Status:** Research Manuscript (Revised Empirical Draft)
 
 ---
 
@@ -10,7 +10,7 @@
 
 Artificial intelligence agents demonstrate impressive average-case performance on complex software engineering benchmarks, yet their deployment remains hindered by high variance, brittle edge-case behavior, and silent failures. Current approaches to agent reliability rely largely on post-hoc prompt engineering or unstructured multi-agent deliberation, often evaluating systems on single-pass runs where run-level noise obscures true capability differences. In this paper, we formalize agent reliability as a constrained education optimization problem. Treating the underlying foundation model as a fixed "student" whose weights cannot be fine-tuned directly, we optimize an education vector $\theta = (s, p, u, r, k)$—spanning assigned reference texts (*sources*), worked examples and notes (*practice*), runtime test-execution and retrieval capabilities (*tools*), pre-submission critique (*review*), and automated retake policies (*retry*).
 
-We evaluate this formulation on a tamper-aware software engineering benchmark of 20 tasks featuring hidden functional tests, mutant test suites, and strict protected-file constraints, tracking over 2,300 graded attempts across single-factor ablations, a $2^{5-1}$ resolution-V fractional factorial design, and five hardening progressions. Our empirical results uncover critical evaluation realities: (1) functional code generation hits a 95–100% ceiling on self-contained repositories, masking component differences across sources, practice, tools, and review; (2) observed failures are dominated by run-level behavioral clustering (specifically, an agent's run-wide disposition to edit protected test files) where the effective sample size is the number of cohort runs ($N_{\text{eff}} = 5$) rather than ticket attempts ($N = 60$), rendering single-run rankings spurious; (3) an automated policy-check retry rescues 100% (17 of 17) of rule-violation failures on first resubmission; and (4) apparent drops in capability on harder tasks stem from omitted specification conventions rather than algorithmic deficiency. We provide a rigorous evaluation protocol, sample-complexity bounds, and a surrogate mixed-integer programming (MIP) knapsack formulation for cost-constrained curriculum optimization.
+We evaluate this formulation on a tamper-aware software engineering benchmark of 20 tasks featuring hidden unit test suites and strict protected-file constraints, tracking approximately 1,950 graded attempts across single-factor ablations, a $2^{5-1}$ resolution-V fractional factorial design, and five progressively harder ticket sets using Claude Sonnet subagents (exact version not recorded). Our empirical results uncover critical evaluation realities: (1) functional code generation hits a 95–100% ceiling on self-contained repositories, masking component differences across sources, practice, tools, and review; (2) observed failures are dominated by run-level behavioral clustering (specifically, an agent's run-wide disposition to edit protected test files) where the effective sample size is the number of cohort runs ($N_{\text{eff}} = 5$) rather than ticket attempts ($N = 60$), rendering single-run rankings spurious; (3) an automated policy-check retry rescued 17 of 17 compliance failures in retry cells on the first resubmission; and (4) apparent drops in capability on harder tasks stem from omitted specification conventions rather than algorithmic deficiency. We provide an evaluation protocol, sample-complexity bounds, and a surrogate mixed-integer programming (MIP) knapsack formulation for cost-constrained curriculum optimization.
 
 ---
 
@@ -36,9 +36,9 @@ Exams are administered under strict conditions: solutions are evaluated against 
 
 ### Summary of Contributions
 1. **Mathematical Formulation:** We state the education optimization problem as a stochastic objective balancing expected out-of-sample reliability against run-to-run variance, subject to token cost budgets, zero-tamper constraints, and silent-failure penalties.
-2. **Tamper-Aware Software Engineering Benchmark:** We implement a 20-ticket benchmark featuring visible vs. hidden tests, mutant test validation, and programmatic file protection checks, establishing clear separation between functional correctness and policy adherence.
-3. **Empirical Evaluation of Educational Scaffolding (>2,300 Attempts):** Through multi-run pilots, one-at-a-time (OATA) ablations, a $2^{5-1}$ resolution-V fractional factorial experiment, and five progressive hardening stages on Claude 3.5 Sonnet, we systematically analyze the interactions of sources, practice, tools, review, and retries.
-4. **Methodological Diagnosis & Honest Findings:** We demonstrate why prompt-sized benchmarks produce severe ceiling effects that mask curriculum differences, show that retry mechanisms effortlessly resolve rule-compliance errors (17/17 recoveries), and prove that effective sample size in multi-ticket agent evaluations is governed by run count ($N_{\text{eff}} = m$) rather than attempt count ($N = m \cdot n$).
+2. **Tamper-Aware Software Engineering Benchmark:** We implement a 20-ticket benchmark featuring visible vs. hidden tests, hidden unit test verification, and programmatic file protection checks, establishing clear separation between functional correctness and policy adherence.
+3. **Empirical Evaluation of Educational Scaffolding (~1,950 Attempts):** Through multi-run pilots, one-at-a-time (OATA) ablations, a $2^{5-1}$ resolution-V fractional factorial experiment, and five progressive hardening stages using Claude Sonnet subagents (exact version not recorded), we systematically analyze the interactions of sources, practice, tools, review, and retries.
+4. **Methodological Diagnosis & Honest Findings:** We demonstrate why prompt-sized benchmarks produce severe ceiling effects that mask curriculum differences, show that retry mechanisms effortlessly resolve rule-compliance errors (rescuing 17 of 17 failures), and prove that effective sample size in multi-ticket agent evaluations is governed by run count ($N_{\text{eff}} = m$) rather than attempt count ($N = m \cdot n$).
 
 ---
 
@@ -48,7 +48,7 @@ Exams are administered under strict conditions: solutions are evaluated against 
 Automated instruction tuning has evolved from manual prompt hacking to automated search techniques. DSPy provides declarative programming abstractions over LLMs, optimizing teleprompters and few-shot demonstrations via bootstrapped demonstrations. APE (Automatic Prompt Engineer) and OPRO (Optimization by PROmpting) frame instruction synthesis as black-box optimization guided by LLM proposers. However, existing prompt optimizers typically treat the prompt as an undifferentiated string of tokens, conflating syllabus rules, few-shot worked examples, and runtime operational constraints. Our framework separates these axes into formal orthogonal variables ($s, p, u, r, k$).
 
 ### 2.2 Software Engineering Benchmarks and Grading Pitfalls
-Benchmarks such as SWE-bench, HumanEval, and RepoEval assess language models on programming tasks. However, SWE-bench evaluations frequently encounter grading artifacts: agents can inadvertently edit reproduction tests, fail due to environmental flakiness, or overfit to visible test outputs. Recent literature has highlighted the vulnerability of benchmark evaluations to "test tampering," where an agent modifies test assertions to force a passing exit code. Our benchmark enforces strict file isolation and mutant test execution, ensuring that passing grades reflect authentic behavioral repairs.
+Benchmarks such as SWE-bench, HumanEval, and RepoEval assess language models on programming tasks. However, SWE-bench evaluations frequently encounter grading artifacts: agents can inadvertently edit reproduction tests, fail due to environmental flakiness, or overfit to visible test outputs. Recent literature has highlighted the vulnerability of benchmark evaluations to "test tampering," where an agent modifies test assertions to force a passing exit code. Our benchmark enforces strict file isolation and hidden test execution, ensuring that passing grades reflect authentic behavioral repairs.
 
 ### 2.3 Reliability, Variance, and Statistical Rigor in LLM Evaluation
 The machine learning literature has increasingly warned of low statistical power in LLM evaluations. Sampling temperature, prompt ordering, and system prompt phrasing induce substantial run-to-run variance. Despite this, empirical studies regularly report performance comparisons based on single-seed evaluations across benchmark splits. We formalize this critique through run-level permutation testing and Wilson score confidence bounds, quantifying how un-modeled run clustering generates spurious statistical significance.
@@ -132,7 +132,7 @@ The optimal design is selected according to:
 $$\theta^\star = \arg\max_{\theta \in \Theta_{\text{feasible}}} \; \Big( \mathrm{LB}(\theta) - \lambda \, \hat{V}(\theta) \Big)$$
 
 ### 3.5 Surrogate Knapsack MIP Formulation
-When optimizing Sources $s$ over $M$ discrete rules $\{r_1, \dots, r_M\}$, we formulate an integer knapsack model using empirically estimated marginal gains $g_i$ and token costs $c_i$:
+When optimizing Sources $s$ over $M$ discrete rules $\{r_1, \dots, r_M\}$, we formulate an integer knapsack model using empirically estimated marginal gains $g_i$ and estimated token costs $c_i$:
 $$\max_{x \in \{0,1\}^M} \sum_{i=1}^{M} g_i x_i - \gamma \sum_{i=1}^M c_i x_i$$
 $$\text{s.t.} \quad \sum_{i=1}^{M} c_i x_i \le B, \qquad x_i + x_j \le 1 \quad \forall (i, j) \in \mathcal{K}$$
 
@@ -155,7 +155,7 @@ Where $\mathcal{K}$ contains conflicting pairs (e.g., $W13$: "Put regression tes
 |  +------------------------------------+             +------------------------------+  |
 |  | AI Student Cohort (theta=s,p,u,r,k)|             | Tamper Policy Checker        |  |
 |  | Synthesizes Patch Blocks           | -- Patch -> | core.evaluate(repo,patch,key)|  |
-|  +------------------------------------+             +--------------+---------------+  |
+|  +------------------+-----------------+             +--------------+---------------+  |
 |                                                                    |                  |
 |                                            +-----------------------+                  |
 |                                            | Tamper Check                             |
@@ -188,7 +188,7 @@ The benchmark comprises 20 realistic Python software engineering tickets defined
 - **Tuning Set ($\mathcal{D}_{\text{tune}}$):** 8 practice tickets (`t1, t3, t6, t9, t12, t15, t18, t19`).
 - **Held-Out Final Exam ($\mathcal{D}_{\text{unseen}}$):** 12 tickets (`t2, t4, t5, t7, t8, t10, t11, t13, t14, t16, t17, t20`).
 
-### 4.2 Tamper Isolation and Mutant Verification
+### 4.2 Tamper Isolation and Hidden Test Verification
 In `harness/core.py`, the `evaluate(repo, patch_text, key)` function enforces strict boundary contracts:
 ```python
 def evaluate(repo, patch_text, key):
@@ -213,7 +213,7 @@ def evaluate(repo, patch_text, key):
 ## 5. Education Components and Optimization Methods
 
 ### 5.1 Search Methods and Algorithmic Complexity
-Evaluating every point in the full design grid ($\Theta = 675$) across 12 tickets and 3 independent runs requires $24{,}300$ attempts ($165.2\text{ M}$ tokens). We compare six alternative search mechanics:
+Evaluating every point in the full design grid ($\Theta = 675$) across 12 tickets and 3 independent runs would require $24{,}300$ attempts ($\approx 165\text{ M}$ tokens). We formalize six alternative search mechanics:
 - **Grid Enumeration:** Hand-picked vectors ($E1, E2$).
 - **OATA Ablation:** Single-coordinate perturbation relative to baseline ($E3a$).
 - **Resolution-V Fractional Factorial ($2^{5-1}$):** Confounding higher-order interactions ($I = s p u r k$) to measure unbiased main effects and all 10 two-way interactions ($E3b$).
@@ -221,26 +221,28 @@ Evaluating every point in the full design grid ($\Theta = 675$) across 12 ticket
 - **Bayesian Optimization:** GP surrogate optimization over discrete embeddings.
 - **MIP Knapsack Surrogate:** Polynomial-time knapsack solution over additive rule marginals.
 
-### 5.2 Computational Cost Accounting
-Based on logged measurements from the pilot and factorial runs:
-- **Per-Attempt Tokens:** $\approx 6{,}800$ tokens per attempt.
-- **Per-Run Tokens (12 tickets):** $\approx 82{,}000$ tokens per engineer run.
-- **Brief Token Footprints:**
-  - Full Book ($s_3$): **830 tokens** (16 rules W01–W16).
-  - Short Book ($s_2$): **290 tokens** (5 rules W01, W02, W05, W07, W14).
-  - Worked Examples ($p_3$): **1,450 tokens** (2 full task-patch traces).
-  - Self-Review Checklist ($r_2$): **110 tokens**.
-  - Test Runner Brief ($u_2$): **95 tokens**.
+### 5.2 Computational Cost Estimates
+Based on pilot logging and file character counts:
+- **Per-Attempt Tokens:** Estimated at $\approx 6{,}800$ tokens per attempt based on the pilot's 12-ticket average of $\approx 82{,}000$ tokens per engineer run (30 to 58 seconds per run, tools off).
+- **Brief Token Footprints (Approximations):**
+  - Full Book ($s_3$, `B.md`): 4,238 chars / 696 words $\approx 1{,}050$ tokens.
+  - Short Book ($s_2$, `S2.md`): 1,530 chars / 263 words $\approx 380$ tokens.
+  - Worked Examples ($p_3$, `P3.md`): 8,162 chars / 1,220 words $\approx 2{,}000$ tokens.
+  - Self-Review Checklist ($r_2$, `R2.md`): 4,684 chars (includes book text) $\approx 1{,}170$ tokens.
+  - Test Runner Brief ($u_2$, `U2.md`): 4,657 chars (includes book text) $\approx 1{,}160$ tokens.
+
+*Note on accounting:* These token totals are approximations derived from character lengths and pilot averages. Exact prompt tokens will vary by tokenizer and model family.
 
 ---
 
 ## 6. Experimental Design
 
+Our empirical study comprises approximately 1,950 graded attempts executed across five experimental phases using Claude Sonnet subagents (exact version not recorded):
 - **$E1$: Initial Source Comparison (Rewritten Process Book):** 4 designs $\times$ 12 tickets $\times$ 3 runs (144 attempts).
 - **$E2$: Source Comparison Under Original Book:** 4 designs $\times$ 12 tickets $\times$ 3 runs (144 attempts).
 - **$E3a$: One-at-a-Time (OATA) Coordinate Ablation:** 8 designs $\times$ 12 tickets $\times$ 5 runs (480 attempts).
-- **$E3b$: Initial Fractional Factorial ($2^{5-1}$):** 16 cells $\times$ 12 tickets $\times$ 5 runs (960 attempts).
-- **$E3c$: Hardening Progression (Hard1 through Hard4):** 5 progressively harder task suites (224 attempts) testing baseline degradation under stripped docstrings, multi-file repos, and hidden test suites.
+- **$E3b$: Initial Fractional Factorial ($2^{5-1}$):** 16 cells $\times$ 12 tickets $\times$ 5 runs (960 attempts, 55 new runs plus 5 reused cells).
+- **$E3c$: Hardening Progression:** Five progressively harder ticket sets (Hard, Hard2, Hard3, Hard4 first version, Hard4 final; 226 attempts total).
 
 ---
 
@@ -270,17 +272,17 @@ Table 1 reports the strict pass rates, run distributions, tamper counts, Wilson 
 
 - **Severe Ceiling:** Baseline $B$ achieved 60/60 clean passes. Additions such as Worked Examples ($P_3$), Test Runners ($U_2$), and Checklists ($R_2$) were tied with baseline; they did not hurt, but could not show a marginal benefit on this task set.
 - **100% Functional Correctness:** Every single failure across all 480 attempts passed hidden tests. Functional correctness was invariant to the education design.
-- **Run-Level Failure Clustering:** In $S_1$ and $S_2$, all 8 failures occurred in a single cohort run (Run 2), where the agent adopted a habit of adding regression tests to existing test files. Because the effective sample size is 5 runs rather than 60 attempts, permutation testing confirms that no design achieves statistical significance ($p \ge 0.167$).
+- **Run-Level Failure Clustering:** In $S_1$ and $S_2$, all 8 failures occurred in a single cohort run (Run 2), where the agent adopted a habit of adding regression tests to existing test files. Because the effective sample size is 5 runs rather than 60 attempts, permutation testing confirms that no design achieves statistical significance ($p \ge 0.167$), despite pooled attempt-level Fisher exact testing showing $p = 1.7 \times 10^{-6}$ for $S_4$ vs. $B$.
 
 ### 7.3 Resolution-V Fractional Factorial Experiment ($E3b$)
 To test for multi-way interactions and evaluate automated retries, we executed a 16-cell $2^{5-1}$ fractional factorial design ($N = 960$ attempts, $\text{df} = 64$):
-- **First-Attempt Baseline:** 936 of 960 attempts passed strictly (97.5%). All 960 attempts were functionally correct. All 24 first-attempt failures were test-file modifications occurring exclusively in Run 2 within no-book cells (`0000`, `0010`, `0001`). Every cell containing the Full Book achieved a perfect 60/60.
-- **The Power of Policy Retries ($k$):** For cells with retry enabled ($k_2, k_3$), the policy checker detected protected-file modifications and returned feedback: `"Policy Error: Do not modify protected test files."` On the first resubmission, **17 out of 17 failing attempts (100%) were completely rescued**, eliminating the test edits while preserving the functional fix. The remaining 7 failures in the entire matrix resided exclusively in cell `0001` (No Book, Checklist Only), which lacked retry permissions ($k^-$).
+- **First-Attempt Baseline:** 936 of 960 attempts passed strictly; all 960 passed functional tests. All 24 first-attempt failures were test-file modifications occurring exclusively in Run 2 within no-book cells (`0000`, `0010`, `0001`). Every cell containing the Full Book achieved a perfect 60/60.
+- **The Power of Policy Retries ($k$):** For cells with retry enabled ($k_2, k_3$), the policy checker detected protected-file modifications and returned feedback: `"Policy Error: Do not modify protected test files."` On the first resubmission, **17 out of 17 failing attempts (100%) in retry cells were completely rescued**, eliminating the test edits while preserving the functional fix. The remaining 7 failures in the entire matrix resided exclusively in cell `0001` (No Book, Checklist Only), which lacked retry permissions ($k^-$).
 - **Linear Model Effects:** Fitting an ordinary least squares model on run-level pass rates ($\sigma_{\text{pooled}} = 0.065, 64 \text{ df}$) revealed that all main effects and two-way interaction coefficients hovered at $\beta = \pm 0.015$ with $t = \pm 1.0$ ($p > 0.30$). When evaluated at the run level, no individual factor statistically separated from the noise floor.
 - **Tool Neglect:** Inspection of execution scratchpads revealed that although the Test Runner ($u_2$) was provided in 8 of the 16 cells, agents only invoked the tool in 2 runs. Offering tools does not guarantee agent utilization when the agent possesses high internal confidence.
 
 ### 7.4 Hardening the Benchmark ($E3c$): The Ceiling Persists
-To break the 100% ceiling and force separation across $(s, p, u, r, k)$, we tested five successively harder task suites (Table 2).
+To break the 100% ceiling and force separation across $(s, p, u, r, k)$, we tested five successively harder ticket sets (Table 2).
 
 **Table 2: Progressive Benchmark Hardening Progression ($E3c$).**
 
@@ -294,9 +296,13 @@ To break the 100% ceiling and force separation across $(s, p, u, r, k)$, we test
 | **Hard4 Final (7 tickets)**| Added 1 specification sentence for unstated behaviors | No Tools vs. Tools | 21/21 vs. 20/21 | Ceiling restored; test runner actively used in 21/21 runs. |
 
 #### Detailed Autopsy of $E3c$:
-- **Why Simple Hardening Fails:** Modern frontier LLMs easily synthesize code for repositories that fit within an 8k-token prompt. Adding multiple seeded bugs, stripping docstrings, or providing symptom-only bug reports merely increases prompt processing time; it does not induce reasoning failure.
-- **The Artifact of Hard4 v1:** In the initial version of Hard4 (`benchmarks/hard4_tasks.py`), performance plummeted to ~57% in both arms. However, detailed log inspection revealed that this was entirely an artifact of missing requirements. Three tickets required arbitrary undocumented conventions (Task 202: environment string boolean mappings; Task 204: leading apostrophe on formulas; Task 205: wildcard action `*`). Both arms failed these tickets in 100% of runs because the information was physically absent from the prompt.
-- **Verification of Tool Use:** When Hard4 Final supplied the missing specification lines, pass rates rebounded to 100% (21/21 vs. 20/21). Crucially, the pytest cache confirmed that the test runner was actively invoked in all 21 runs of the tool arm. Yet, even with active test execution, pass rates were identical to the static generation arm. When an agent's mental model of code generation is accurate, runtime feedback provides zero marginal accuracy gain.
+- **Why Simple Hardening Fails:** Modern frontier LLMs easily synthesize code for repositories that fit within prompt context. Adding multiple seeded bugs, stripping docstrings, or providing symptom-only bug reports merely increases prompt processing time; it does not induce reasoning failure.
+- **The Artifact of Hard4 v1:** In the initial version of Hard4 (`benchmarks/hard4_tasks.py`), performance plummeted to $\approx 57\%$ in both arms. However, detailed log inspection revealed that this was entirely an artifact of missing requirements. Three tickets required arbitrary undocumented conventions:
+  - Ticket `h602`: parsing environment string boolean mappings (`EXTRA[202]`);
+  - Ticket `h604`: raising a `ValueError` on an unterminated quotation mark (`EXTRA[204]`);
+  - Ticket `h605`: treating wildcard action `*` as applying to every action (`EXTRA[205]`).
+  Both arms failed these tickets in 100% of runs because the information was physically absent from the prompt.
+- **Verification of Tool Use:** When Hard4 Final supplied the missing specification lines, pass rates rebounded to 100% (21/21 vs. 20/21). Crucially, the pytest cache confirmed that the test runner was actively invoked in all 21 runs of the tool arm. Yet, on this sample size (21 attempts per arm across 3 runs), runtime feedback showed no detectable difference compared to static code generation. When an agent's mental model of code generation is accurate, runtime feedback provides no measurable accuracy gain.
 
 ---
 
@@ -307,7 +313,7 @@ The central methodological takeaway of this study is that **ticket attempts are 
 
 When an agent processes a batch of tickets within an execution run, systemic behavioral priors (e.g., an inclination to create regression tests, verbosity in output formatting, or tolerance for linting warnings) remain correlated throughout the session. If an experimenter pools 5 runs of 12 tickets into $N = 60$ independent observations, standard standard-error formulas $\sqrt{\hat{p}(1-\hat{p})/N}$ artificially contract, producing wildly optimistic confidence intervals and false discoveries.
 
-As demonstrated in Table 1, treating attempts as independent yielded $p < 0.001$ for $S_4$ vs. $B$, whereas an exact run-level permutation test correctly yields $p = 0.167$. We strongly recommend that future agent benchmarks report variance across independent cohort runs and conduct hypothesis testing at the run level.
+As demonstrated in Table 1, treating attempts as independent yielded $p < 0.001$ for $S_4$ vs. $B$ (Fisher exact $p = 1.7 \times 10^{-6}$), whereas an exact run-level permutation test correctly yields $p = 0.167$. We strongly recommend that future agent benchmarks report variance across independent cohort runs and conduct hypothesis testing at the run level.
 
 ### 8.2 Compliance Failures vs. Capability Failures
 Our results establish an empirical taxonomy of agent unreliability:
@@ -319,32 +325,32 @@ Importantly, **education components act almost exclusively on compliance failure
 ### 8.3 When Does Education Optimization Matter?
 Our findings define the operational boundary conditions under which education design optimization is critical:
 - **Small, Prompt-Sized Tasks:** On self-contained repositories where full code context fits in the prompt, base models operate at ceiling. Optimizing $(s, p, u, r, k)$ yields negligible separation.
-- **Large-Scale, Under-Specified Tasks:** When repository size vastly exceeds the context window, agents cannot fit all definitions into memory. In this regime, retrieval tools ($u_3\text{--}u_5$), practice-derived indexing ($p_2$), and multi-pass review ($r_3$) become non-optional.
+- **Large-Scale, Under-Specified Tasks:** When repository size vastly exceeds the context window, agents cannot fit all definitions into memory. In this regime, the hypothesis that retrieval tools ($u_3\text{--}u_5$), practice-derived indexing ($p_2$), and multi-pass review ($r_3$) become non-optional remains an untested hypothesis that requires multi-module benchmarks to verify.
 
 ### 8.4 Formulating the Knapsack MIP Surrogate
-Based on measured token footprints from Section 5.2 (Full Book $c_s = 830$ tokens, Short Book $c_{s2} = 290$ tokens, Worked Examples $c_p = 1{,}450$ tokens, Review Checklist $c_r = 110$ tokens, Test Runner Brief $c_u = 95$ tokens), the optimization problem:
-$$\max_{x \in \{0,1\}^M} \sum_{i} g_i x_i \quad \text{s.t.} \quad \sum_{i} c_i x_i \le B, \quad x_i + x_j \le 1 \; \forall (i,j) \in \mathcal{K}$$
-serves as a local proposal mechanism. On compliance-dominated tasks, assigning the 830-token Full Book ($s_3$) yields the highest marginal compliance gain per token expended, while automated policy retries provide an effective fallback when prompt budgets are severely constrained ($B < 500$ tokens).
+Based on estimated token footprints from Section 5.2 (Full Book $c_s \approx 1{,}050$ tokens, Short Book $c_{s2} \approx 380$ tokens, Worked Examples $c_p \approx 2{,}000$ tokens, Review Checklist $c_r \approx 1{,}170$ tokens, Test Runner Brief $c_u \approx 1{,}160$ tokens), the optimization problem:
+$$\max_{x \in \{0,1\}^M} \sum_{i} g_i x_i \quad \text{s.t.} \quad \sum_{i} c_i x_i \le B, \qquad x_i + x_j \le 1 \; \forall (i,j) \in \mathcal{K}$$
+serves as a local proposal mechanism. On compliance-dominated tasks, assigning the Full Book ($s_3$) yields the highest marginal compliance gain per token expended, while automated policy retries provide an effective fallback when prompt budgets are severely constrained.
 
 ---
 
 ## 9. Threats to Validity and Limitations
 
 1. **Benchmark Scale and Language Diversity:** Our benchmark is restricted to Python repositories containing small-to-medium module footprints. Findings may not generalize directly to languages with complex build lifecycles (e.g., C++, Rust, Java) or massive distributed codebases.
-2. **Model Homogeneity:** Primary evaluations were conducted using the Anthropic Claude 3.5 Sonnet architecture. While Sonnet is representative of state-of-the-art SWE agents, open-weight models with lower baseline capabilities may exhibit non-ceiling behavior on the same task suite.
+2. **Model Homogeneity:** Primary evaluations were conducted using Claude Sonnet subagents (exact version not recorded). While Sonnet is representative of state-of-the-art SWE agents, open-weight models with lower baseline capabilities may exhibit non-ceiling behavior on the same task suite.
 3. **Subagent Tool Restrictions:** In our pilot configurations, subagents were constrained by prompt instructions rather than kernel-level filesystem sandboxes. While our programmatic grader enforced strict file diff protection, true production environments should pair instruction rules with OS-level access control.
-4. **Data Handling in Hard4:** During the workspace reconstruction for the final Hard4 validation, patches for 4 tickets were regenerated using identical fresh runs; replication checks verified that regenerated patches matched the original output distribution.
+4. **Data Handling in Hard4:** During the workspace reconstruction for the final Hard4 validation, the tool-arm patches for four tickets were overwritten and lost, and were subsequently replaced by fresh runs.
 
 ---
 
 ## 10. Conclusion and Future Directions
 
-In this work, we introduced a formal optimization framework that frames AI agent reliability as an education design problem over Sources, Practice, Tools, Review, and Retries. Through an extensive empirical campaign spanning over 2,300 graded attempts across single-factor ablations, fractional factorial matrices, and hardened suites, we uncovered critical evaluation realities:
+In this work, we introduced a formal optimization framework that frames AI agent reliability as an education design problem over Sources, Practice, Tools, Review, and Retries. Through an extensive empirical campaign spanning approximately 1,950 graded attempts across single-factor ablations, fractional factorial matrices, and five progressively harder ticket sets, we uncovered critical evaluation realities:
 - On prompt-contained tasks, agent reasoning operates at a 100% functional ceiling; unreliability is driven by run-level policy compliance.
 - Run-level clustering invalidates naive sample size assumptions, necessitating run-level statistical testing.
-- Automated policy-check retries ($k$) eliminate 100% of compliance failures without manual intervention.
+- Automated policy-check retries ($k$) rescued 17 of 17 compliance failures in retry cells without manual intervention.
 
-Future work must transition beyond prompt-contained repositories into multi-module codebases where specification discovery and code retrieval are non-trivial, creating the empirical spread necessary to fully parameterize non-linear component interactions in the education design space.
+Future work must transition beyond prompt-contained repositories into multi-module codebases where specification discovery and code retrieval are non-trivial, creating the empirical spread necessary to parameterize non-linear component interactions in the education design space.
 
 ---
 

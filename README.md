@@ -15,7 +15,7 @@ Artificial intelligence agents demonstrate impressive average-case performance o
 
 In this paper, we formalize agent reliability as a constrained education optimization problem. Treating the underlying foundation model as a fixed "student" whose weights cannot be fine-tuned directly, we optimize an education vector $\theta = (s, p, u, r, k)$—spanning assigned reference texts (*sources*), worked examples and notes (*practice*), runtime test-execution and retrieval capabilities (*tools*), pre-submission critique (*review*), and automated retake policies (*retry*).
 
-We evaluate this formulation on a tamper-aware software engineering benchmark of 20 tasks featuring hidden functional tests, mutant test suites, and strict protected-file constraints, tracking over 2,300 graded attempts across single-factor ablations, a $2^{5-1}$ resolution-V fractional factorial design, and five hardening progressions on Claude 3.5 Sonnet. Our empirical results uncover critical evaluation realities:
+We evaluate this formulation on a tamper-aware software engineering benchmark of 20 tasks featuring hidden unit test suites and strict protected-file constraints, tracking approximately 1,950 graded attempts across single-factor ablations, a $2^{5-1}$ resolution-V fractional factorial design, and five hardening progressions on Claude Sonnet subagents (exact version not recorded). Our empirical results uncover critical evaluation realities:
 1. **Functional Ceiling:** Modern frontier models easily synthesize code for repositories that fit within the prompt, achieving 95–100% functional solve rates and masking educational component differences.
 2. **Run-Level Behavioral Clustering:** Failures are dominated by run-wide dispositions (e.g. adding tests to protected files in Run 2); treating tickets as independent inflates sample size ($N_{\text{eff}} = 5$ cohort runs vs. $N = 60$ tickets), rendering single-pass benchmark rankings spurious.
 3. **Automated Policy Recovery:** Automated retries conditioned on file-protection checks rescue 100% (17 of 17) of rule compliance failures on the first resubmission.
@@ -48,7 +48,7 @@ All failures were protected test modifications, never functional errors.
 
 ### 3. Hardening Progression ($E3c$, 224 attempts)
 - Across Hard, Hard2, Hard3, and Hard4, base models consistently solved tickets at 95–100% rates.
-- In Hard4 Final, static generation scored **21/21 (100%)** while the test runner arm scored **20/21 (95.2%)**, confirming that runtime feedback provides zero marginal accuracy gain when code fits in the prompt.
+- In Hard4 Final, static generation scored **21/21 (100%)** while the test runner arm scored **20/21 (95.2%)**, showing no detectable marginal accuracy gain on this sample when code fits in the prompt.
 
 ---
 
@@ -58,6 +58,8 @@ All failures were protected test modifications, never functional errors.
 ├── designing_ai_reliability_as_an_education_optimization_problem.pdf  # Publication PDF of the paper
 ├── designing_ai_reliability_as_an_education_optimization_problem.md   # Full markdown manuscript
 ├── designing_ai_reliability_as_an_education_optimization_problem.html # Formatted HTML presentation
+├── REAL_TEST_REQUIREMENTS.md                                          # Rigorous protocol for live agent runs
+├── PAPER_REVIEW_COMMENTS.md                                           # Peer review tracker & resolution notes
 ├── harness/
 │   ├── core.py               # Evaluation harness (patch parser, pytest runner, tamper checker)
 │   ├── tasks.py              # 20 original benchmark tasks (12 held-out, 8 practice)
