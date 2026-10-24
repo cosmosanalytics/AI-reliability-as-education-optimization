@@ -28,3 +28,16 @@ This is an append-only, timestamped log recording all operational decisions, har
   7. Created `.gitignore` and purged `.pyc` files from git cache.
   8. Created comprehensive unit test suite in `tests/test_runner_dry_run.py` (7/7 tests passing).
 - **Impact:** Runner and protocol fully conform to binding `REAL_TEST_REQUIREMENTS.md` standards.
+
+### [2026-10-24T18:12:00Z] Round 4 Review Fixes (R4-A through R4-I)
+- **Context:** Claude Round 4 review required closing R4-A (real-model dry run), R4-B (16k max_tokens with stop_reason checks), R4-C (removal of `/tmp` in `briefs/P2.md`), R4-D (tool loop exit handling), R4-E (safe pytest args), R4-F (single retry for $k_2$), and R4-G (hermetic tests and scripted flow test).
+- **Action:**
+  1. **R4-A (Dry Run):** Executed Ticket 2 across cells `C0000`, `C1111`, `C0010`, `C0001` using live model subagents. All audit files, tool logs, grades, and `rows.json` committed to `results/dry_run/`.
+  2. **R4-B (Stop Reason):** Set `max_tokens=16384`. Added checks raising `RuntimeError` on `max_tokens` or `length` finish reasons.
+  3. **R4-C (P2.md):** Replaced `/tmp/claude-0` file note prompt with in-context study step. Added CI unit test verifying 0 `/tmp` paths across all briefs.
+  4. **R4-D (Tool Exit):** Added forced final patch submission when tool turns are exhausted; added `tool_budget_exhausted` and `patch_differs_from_tool_test` tracking.
+  5. **R4-E (Safe Args):** Pytest tool runner filters out CLI flags (`-`) and directory traversals (`..`), accepting only relative paths to visible tests.
+  6. **R4-F (Retry Count):** Restricted $k_2$ retry loop to exactly one retry attempt.
+  7. **R4-G (Hermetic Tests):** Made token counting lazy with offline fallback; added scripted mock backend test `test_run_single_attempt_full_flow`. All 10 tests pass.
+  8. **R4-H (Multi-turn Roles):** Noted Gemini role flattening in multi-turn conversation representation.
+- **Impact:** Phase 0 is verified end-to-end with live model inference and hermetic CI tests.

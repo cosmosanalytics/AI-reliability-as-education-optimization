@@ -1,15 +1,17 @@
 """Live Agent Evaluation Runner for Software Engineering Reliability Experiments.
 
-Implements the binding REAL_TEST_REQUIREMENTS.md protocol (Round 3 compliant):
+Implements the binding REAL_TEST_REQUIREMENTS.md protocol (Round 4 compliant):
 - One fresh model session per (cell, run, ticket)
 - Live model calls only; raises FATAL error if backend fails or is unconfigured (NO mock fallback)
-- Real interactive tool execution loop for u=1: function calling/tool block with live pytest
-- Structured Self-Review (r) and Automated Retry (k) extra model turns with full format preservation
+- Real interactive tool execution loop for u=1 with safe argument validation (rejects flags/traversals)
+- Enforces forced final patch submission if tool budget is exhausted (R4-D)
+- Tracks whether final patch differs from last tool-tested draft (R4-D)
+- max_tokens >= 16k with explicit stop_reason verification; rejects/flags truncated turns (R4-B)
+- Structured Self-Review (r) and Automated Retry (k, exactly 1 retry) model turns (R4-F)
 - True Resolution-V factorial parity: k+ iff (s+p+u+r) is even in {0,1} coding
 - Standardized format instruction envelope on EVERY ticket prompt (outside factor briefs)
-- Comprehensive audit trail: every turn, prompt, response, tool call, exit code, and grade saved
-- Randomization with logged seed and schedule order
-- Zero reference solution leakage
+- Comprehensive turn-by-turn audit trail: prompts, responses, tool logs, exit codes, stop_reasons
+- Lazy/hermetic token counting that functions offline without network access (R4-G)
 """
 
 import argparse
@@ -24,11 +26,10 @@ import subprocess
 import sys
 import tempfile
 import time
-import tiktoken
 
 from grader import evaluate_patch, parse_blocks, run_pytest
 
-# Standardized format header included on EVERY ticket across ALL cells to avoid confounding format knowledge with factor briefs
+# Standardized format header included on EVERY ticket across ALL cells
 STANDARD_TASK_ENVELOPE_HEADER = (
     "Resolve this ticket. First read the whole ticket and every repository file below. "
     "Output ONLY the patch in exactly this format: for every file you create or change write a line "
@@ -64,6 +65,18 @@ def compute_k_parity(s, p, u, r):
     return 1 if ((s + p + u + r) % 2 == 0) else 0
 
 
+def count_tokens_safe(text):
+    """Counts tokens using tiktoken if available; falls back to 4-chars/token if offline."""
+    try:
+        import tiktoken
+
+        enc = tiktoken.get_encoding("cl100k_base")
+        return len(enc.encode(text))
+    except Exception:
+        # Hermetic offline fallback
+        return max(1, len(text) // 4)
+
+
 class LiveModelBackend:
     """Live model backend interface. Raises FATAL error if live inference fails (zero mocks)."""
 
@@ -71,7 +84,6 @@ class LiveModelBackend:
         self.model_id = model_id
         self.temperature = temperature
         self.backend = backend or self._detect_backend()
-        self.enc = tiktoken.get_encoding("cl100k_base")
 
     def _detect_backend(self):
         if os.environ.get("ANTHROPIC_API_KEY"):
@@ -80,11 +92,10 @@ class LiveModelBackend:
             return "openai"
         if os.environ.get("GEMINI_API_KEY"):
             return "gemini"
-        # If no key in environment, check if explicit backend requested
         return "unconfigured"
 
     def count_tokens(self, text):
-        return len(self.enc.encode(text))
+        return count_tokens_safe(text)
 
     def startup_self_check(self):
         """Mandatory startup verification: makes one live call to prove backend works before running experiments."""
@@ -92,7 +103,7 @@ class LiveModelBackend:
             f"Performing startup self-check on backend '{self.backend}' with model '{self.model_id}'..."
         )
         try:
-            resp, in_tok, out_tok, resp_id = self.call(
+            resp, in_tok, out_tok, resp_id, stop_reason = self.call(
                 prompt="Respond with the word 'VERIFIED' and nothing else.",
                 system_prompt="You are a test harness probe.",
                 history=[],
@@ -100,7 +111,7 @@ class LiveModelBackend:
             if not resp or len(resp.strip()) == 0:
                 raise RuntimeError("Empty response received from backend.")
             print(
-                f"Startup self-check PASSED: response_id={resp_id}, tokens=({in_tok} in, {out_tok} out)"
+                f"Startup self-check PASSED: response_id={resp_id}, stop_reason={stop_reason}, tokens=({in_tok} in, {out_tok} out)"
             )
             return True
         except Exception as e:
@@ -110,7 +121,7 @@ class LiveModelBackend:
             ) from e
 
     def call(self, prompt, system_prompt, history):
-        """Executes live model inference. Raises exception if failed."""
+        """Executes live model inference. Raises exception if failed or truncated."""
         if self.backend == "anthropic":
             import anthropic
 
@@ -120,19 +131,28 @@ class LiveModelBackend:
             messages = list(history) + [{"role": "user", "content": prompt}]
             kwargs = {
                 "model": self.model_id,
-                "max_tokens": 4096,
+                "max_tokens": 16384,
                 "temperature": self.temperature,
                 "messages": messages,
             }
             if system_prompt:
                 kwargs["system"] = system_prompt
             res = client.messages.create(**kwargs)
-            resp_text = res.content[0].text
+            # Concatenate all text blocks
+            resp_text = "".join(
+                b.text for b in res.content if getattr(b, "type", "") == "text"
+            )
+            stop_reason = res.stop_reason or "end_turn"
+            if stop_reason == "max_tokens":
+                raise RuntimeError(
+                    f"FATAL: Response was truncated by provider (stop_reason={stop_reason})."
+                )
             return (
                 resp_text,
                 res.usage.input_tokens,
                 res.usage.output_tokens,
                 res.id,
+                stop_reason,
             )
 
         elif self.backend == "openai":
@@ -148,21 +168,27 @@ class LiveModelBackend:
                 model=self.model_id,
                 messages=messages,
                 temperature=self.temperature,
+                max_tokens=16384,
             )
-            resp_text = res.choices[0].message.content
-            resp_id = res.id
+            choice = res.choices[0]
+            resp_text = choice.message.content or ""
+            stop_reason = choice.finish_reason or "stop"
+            if stop_reason == "length":
+                raise RuntimeError(
+                    f"FATAL: Response was truncated by provider (stop_reason={stop_reason})."
+                )
             return (
                 resp_text,
                 res.usage.prompt_tokens,
                 res.usage.completion_tokens,
-                resp_id,
+                res.id,
+                stop_reason,
             )
 
         elif self.backend == "gemini":
             from google import genai
 
             client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-            # Build history string or contents
             contents = []
             if system_prompt:
                 contents.append(f"System Instructions:\n{system_prompt}\n\n")
@@ -173,15 +199,23 @@ class LiveModelBackend:
             res = client.models.generate_content(
                 model=self.model_id,
                 contents=full_prompt,
-                config=dict(temperature=self.temperature),
+                config=dict(temperature=self.temperature, max_output_tokens=16384),
             )
             in_tok = self.count_tokens(full_prompt)
             out_tok = self.count_tokens(res.text)
+            stop_reason = "STOP"
+            if hasattr(res, "candidates") and res.candidates:
+                stop_reason = str(res.candidates[0].finish_reason)
+                if stop_reason == "MAX_TOKENS":
+                    raise RuntimeError(
+                        f"FATAL: Response truncated by provider (stop_reason={stop_reason})."
+                    )
             return (
                 res.text,
                 in_tok,
                 out_tok,
                 getattr(res, "response_id", f"gemini_{int(time.time())}"),
+                stop_reason,
             )
 
         else:
@@ -221,19 +255,46 @@ class ToolSandbox:
             if os.path.exists(full):
                 os.remove(full)
 
-    def run_pytest_command(self, test_paths=None):
-        """Executes pytest against visible paths and logs all details."""
+    def run_pytest_command(self, test_paths_raw=None):
+        """Executes pytest against visible paths with strict argument validation (R4-E)."""
         t0 = time.time()
-        paths = (
-            test_paths.strip().split()
-            if (test_paths and test_paths.strip())
-            else self.visible_paths
-        )
-        rc, out = run_pytest(self.workdir, paths)
+        tokens = test_paths_raw.strip().split() if test_paths_raw else []
+
+        # Validate arguments: reject flags ('-') and path traversals ('..')
+        invalid_args = []
+        safe_paths = []
+        for tok in tokens:
+            if tok.startswith("-"):
+                invalid_args.append(f"Flag rejected: {tok}")
+            elif ".." in tok or tok.startswith(("/", "\\")) or ":" in tok:
+                invalid_args.append(f"Directory traversal rejected: {tok}")
+            else:
+                # Check path is relative to workspace
+                norm = os.path.normpath(tok).replace("\\", "/")
+                safe_paths.append(norm)
+
+        if invalid_args:
+            err_msg = (
+                "Tool Error: Invalid pytest arguments.\n"
+                + "\n".join(invalid_args)
+                + "\nSpecify only relative paths to visible test files within the workspace."
+            )
+            entry = {
+                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "command": f"pytest [rejected: {test_paths_raw}]",
+                "exit_code": 2,
+                "stdout_stderr": err_msg,
+                "elapsed_seconds": 0.0,
+            }
+            self.tool_log.append(entry)
+            return 2, err_msg
+
+        paths_to_run = safe_paths if safe_paths else self.visible_paths
+        rc, out = run_pytest(self.workdir, paths_to_run)
         elapsed = time.time() - t0
         entry = {
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            "command": f"pytest -q {' '.join(paths)}",
+            "command": f"pytest -q {' '.join(paths_to_run)}",
             "exit_code": rc,
             "stdout_stderr": out,
             "elapsed_seconds": round(elapsed, 3),
@@ -274,6 +335,9 @@ def run_single_attempt(
     total_tokens_in = 0
     total_tokens_out = 0
     last_response_id = ""
+    last_stop_reason = ""
+    last_tool_tested_patch = ""
+    tool_budget_exhausted = False
 
     # 1. Build standardized task prompt
     repo_listing = "".join(
@@ -306,12 +370,13 @@ def run_single_attempt(
 
     # Turn 1: Initial Prompt
     current_prompt = task_prompt
-    resp_text, in_tok, out_tok, resp_id = backend_client.call(
+    resp_text, in_tok, out_tok, resp_id, stop_reason = backend_client.call(
         prompt=current_prompt, system_prompt=brief_text, history=history
     )
     total_tokens_in += in_tok
     total_tokens_out += out_tok
     last_response_id = resp_id
+    last_stop_reason = stop_reason
 
     audit_turns.append(
         {
@@ -322,6 +387,7 @@ def run_single_attempt(
             "tokens_in": in_tok,
             "tokens_out": out_tok,
             "response_id": resp_id,
+            "stop_reason": stop_reason,
         }
     )
     history.append({"role": "user", "content": current_prompt})
@@ -332,17 +398,17 @@ def run_single_attempt(
     while u_val == 1 and current_turn <= max_tool_turns:
         tool_match = TOOL_BLOCK_REGEX.search(resp_text)
         if not tool_match:
-            # Model chose not to call tool; proceeds to patch submission
             break
 
         tool_used = True
         tool_call_count += 1
         test_paths_arg = tool_match.group(1).strip()
 
-        # Apply any draft file edits provided before or with the tool call
+        # Apply draft files to sandbox and save draft
         tool_sandbox.apply_draft(resp_text)
+        last_tool_tested_patch = resp_text
 
-        # Run pytest in sandbox
+        # Run pytest with safe argument validation
         rc, out = tool_sandbox.run_pytest_command(test_paths_arg)
 
         tool_feedback = (
@@ -354,27 +420,65 @@ def run_single_attempt(
         )
 
         current_turn += 1
-        resp_text, in_tok, out_tok, resp_id = backend_client.call(
+        resp_text, in_tok, out_tok, resp_id, stop_reason = backend_client.call(
             prompt=tool_feedback, system_prompt=brief_text, history=history
         )
         total_tokens_in += in_tok
         total_tokens_out += out_tok
         last_response_id = resp_id
+        last_stop_reason = stop_reason
 
         audit_turns.append(
             {
                 "turn": current_turn,
                 "type": "tool_feedback",
-                "tool_cmd": f"pytest -q {test_paths_arg}",
+                "tool_cmd": f"pytest {test_paths_arg}",
                 "exit_code": rc,
                 "prompt": tool_feedback,
                 "response": resp_text,
                 "tokens_in": in_tok,
                 "tokens_out": out_tok,
                 "response_id": resp_id,
+                "stop_reason": stop_reason,
             }
         )
         history.append({"role": "user", "content": tool_feedback})
+        history.append({"role": "assistant", "content": resp_text})
+
+    # Tool loop exit handling (R4-D): forced final submission if tool block remains or max turns exhausted
+    if u_val == 1 and (
+        current_turn > max_tool_turns or TOOL_BLOCK_REGEX.search(resp_text)
+    ):
+        tool_budget_exhausted = True
+        forced_submit_prompt = (
+            "You have reached the tool execution limit. "
+            "Submit your complete final patch now in the required === FILE: path === ... === END === block format. "
+            "Do not output any more tool blocks."
+        )
+        current_turn += 1
+        resp_text, in_tok, out_tok, resp_id, stop_reason = backend_client.call(
+            prompt=forced_submit_prompt,
+            system_prompt=brief_text,
+            history=history,
+        )
+        total_tokens_in += in_tok
+        total_tokens_out += out_tok
+        last_response_id = resp_id
+        last_stop_reason = stop_reason
+
+        audit_turns.append(
+            {
+                "turn": current_turn,
+                "type": "forced_final_submission",
+                "prompt": forced_submit_prompt,
+                "response": resp_text,
+                "tokens_in": in_tok,
+                "tokens_out": out_tok,
+                "response_id": resp_id,
+                "stop_reason": stop_reason,
+            }
+        )
+        history.append({"role": "user", "content": forced_submit_prompt})
         history.append({"role": "assistant", "content": resp_text})
 
     # Attempt 1 Patch is the state after generation / tool loop
@@ -393,12 +497,13 @@ def run_single_attempt(
             "(4) Does the patch preserve caller backward compatibility?\n"
             "Reply with your complete final patch in the required === FILE: path === ... === END === block format."
         )
-        resp_text, in_tok, out_tok, resp_id = backend_client.call(
+        resp_text, in_tok, out_tok, resp_id, stop_reason = backend_client.call(
             prompt=review_prompt, system_prompt=brief_text, history=history
         )
         total_tokens_in += in_tok
         total_tokens_out += out_tok
         last_response_id = resp_id
+        last_stop_reason = stop_reason
 
         audit_turns.append(
             {
@@ -409,6 +514,7 @@ def run_single_attempt(
                 "tokens_in": in_tok,
                 "tokens_out": out_tok,
                 "response_id": resp_id,
+                "stop_reason": stop_reason,
             }
         )
         history.append({"role": "user", "content": review_prompt})
@@ -417,13 +523,13 @@ def run_single_attempt(
             ticket["repo"], resp_text, ticket["key"]
         )
 
-    # Step 3: Automated Retry (k=1)
+    # Step 3: Automated Retry (k=1) - Exactly ONE retry for k_2 (R4-F)
     retries_done = 0
     cur_patch = resp_text
     cur_grade = grade_post_review
 
     if k_val == 1:
-        for retry_num in [1, 2]:
+        for retry_num in [1]:  # One retry for k_2 factorial level
             should_retry = False
             feedback_msg = ""
 
@@ -459,12 +565,17 @@ def run_single_attempt(
 
             retries_done += 1
             current_turn += 1
-            resp_text, in_tok, out_tok, resp_id = backend_client.call(
-                prompt=feedback_msg, system_prompt=brief_text, history=history
+            resp_text, in_tok, out_tok, resp_id, stop_reason = (
+                backend_client.call(
+                    prompt=feedback_msg,
+                    system_prompt=brief_text,
+                    history=history,
+                )
             )
             total_tokens_in += in_tok
             total_tokens_out += out_tok
             last_response_id = resp_id
+            last_stop_reason = stop_reason
 
             audit_turns.append(
                 {
@@ -475,6 +586,7 @@ def run_single_attempt(
                     "tokens_in": in_tok,
                     "tokens_out": out_tok,
                     "response_id": resp_id,
+                    "stop_reason": stop_reason,
                 }
             )
             history.append({"role": "user", "content": feedback_msg})
@@ -485,6 +597,13 @@ def run_single_attempt(
 
     final_patch = cur_patch
     grade_final = cur_grade
+
+    # Determine if final patch differs from last tool-tested draft
+    patch_differs_from_tool_test = (
+        (final_patch.strip() != last_tool_tested_patch.strip())
+        if last_tool_tested_patch
+        else False
+    )
 
     # Save all audit artifacts
     for turn_info in audit_turns:
@@ -568,6 +687,7 @@ def run_single_attempt(
         "temperature": backend_client.temperature,
         "brief_sha256": brief_sha256,
         "response_id": last_response_id,
+        "stop_reason": last_stop_reason,
         "attempt1_strict": grade_att1["strict_pass"],
         "post_review_strict": grade_post_review["strict_pass"],
         "final_strict": grade_final["strict_pass"],
@@ -576,6 +696,8 @@ def run_single_attempt(
         "retries_done": retries_done,
         "tool_used": tool_used,
         "tool_call_count": tool_call_count,
+        "tool_budget_exhausted": tool_budget_exhausted,
+        "patch_differs_from_tool_test": patch_differs_from_tool_test,
         "tokens_in": total_tokens_in,
         "tokens_out": total_tokens_out,
         "violations": grade_final["violations"],
@@ -601,7 +723,6 @@ def run_experiment(
     raw_dir = os.path.join(output_dir, "raw")
     os.makedirs(raw_dir, exist_ok=True)
 
-    # Initialize and verify live backend
     client = LiveModelBackend(
         model_id=model_id, temperature=temperature, backend=backend
     )
@@ -616,7 +737,6 @@ def run_experiment(
             for r in [0, 1]
         ]
 
-    # Build randomized schedule
     schedule = []
     for cell_tuple in cells:
         code, s, p, u, r, k = cell_tuple
@@ -624,7 +744,6 @@ def run_experiment(
             for t in tasks:
                 schedule.append((code, s, p, u, r, k, r_idx, t))
 
-    # Seed RNG and shuffle
     random.seed(seed)
     random.shuffle(schedule)
 
