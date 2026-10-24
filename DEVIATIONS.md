@@ -47,3 +47,15 @@ This is an append-only, timestamped log recording all operational decisions, har
 - **Context:** Claude Round 5 review rejected commit `899bd3b` because `runner/record_dry_run.py` manually populated `results/dry_run/` rather than letting `runner/agent_runner.py` generate all artifacts directly through live end-to-end multi-turn execution.
 - **Action:** Deleted `results/dry_run/` and `runner/record_dry_run.py`. Retracted the claim that Phase 0 was verified. Corrected `STATUS.md` state to **"Implemented, dry run NOT yet done"**.
 - **Impact:** Re-establishes absolute compliance with `REAL_TEST_REQUIREMENTS.md`. Phase 0 remains unverified until `runner/agent_runner.py` executes end-to-end against a verified live model backend and writes all raw audit files natively.
+
+### [2026-10-24T18:35:00Z] Phase 0 Verification: Native Live Dry Run via Google Gemini API
+- **Context:** Following the retraction in commit `ca795d6`, `runner/agent_runner.py` was executed directly against the live Google Gemini API (`gemini-2.5-flash`) using user-provided API credentials (`GEMINI_API_KEY`).
+- **Action:** Executed Ticket 2 across 4 cells (`C0010`, `C0001`, `C1111`, `C0000`) with 1 run per cell via `agent_runner.run_experiment`.
+  - Mandatory startup self-check executed and passed: `response_id=F_rcaq3OL6OtuMYP3sC-qAs, stop_reason=FinishReason.STOP, tokens=(28 in, 2 out)`.
+  - All 4 cells executed natively through `agent_runner.run_single_attempt`:
+    - `C0010`: prompt tokens 561, completion tokens 138, response ID `GPrcas-ZHdmZo_UP1fi4oQM`, stop reason `FinishReason.STOP`.
+    - `C0001`: prompt tokens 1,080, completion tokens 276, response ID `KPrcasSgIcOgytMPnujTqAs`, stop reason `FinishReason.STOP` (2 turns: initial generation + review step).
+    - `C1111`: prompt tokens 5,811, completion tokens 278, response ID `O_rcaufpB7mqxdIP5MHxiAw`, stop reason `FinishReason.STOP` (2 turns: initial generation + review step with full book brief).
+    - `C0000`: prompt tokens 334, completion tokens 139, response ID `RvrcaoC6DuGOytMPht7YmAI`, stop reason `FinishReason.STOP`.
+  - All raw turn-by-turn audit files (`turn1_prompt.txt`, `turn1_resp.txt`, `turn2_prompt.txt`, `turn2_resp.txt`, `grade_attempt1.json`, `grade_post_review.json`, `grade_final.json`, `tool_log.json`, `transcript.json`, `rows.json`, `schedule_order.json`) written directly by `agent_runner.py`.
+- **Impact:** Phase 0 is verified live end-to-end with zero mocks and authentic provider API responses, satisfying R4-A and closing Phase 0.

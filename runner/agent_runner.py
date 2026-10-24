@@ -208,8 +208,17 @@ class LiveModelBackend:
                 contents=full_prompt,
                 config=dict(temperature=self.temperature, max_output_tokens=16384),
             )
-            in_tok = self.count_tokens(full_prompt)
-            out_tok = self.count_tokens(res.text)
+            usage = getattr(res, "usage_metadata", None)
+            in_tok = (
+                getattr(usage, "prompt_token_count", None)
+                if usage
+                else None
+            ) or self.count_tokens(full_prompt)
+            out_tok = (
+                getattr(usage, "candidates_token_count", None)
+                if usage
+                else None
+            ) or self.count_tokens(res.text)
             stop_reason = "STOP"
             if hasattr(res, "candidates") and res.candidates:
                 stop_reason = str(res.candidates[0].finish_reason)
@@ -217,11 +226,12 @@ class LiveModelBackend:
                     raise RuntimeError(
                         f"FATAL: Response truncated by provider (stop_reason={stop_reason})."
                     )
+            resp_id = getattr(res, "response_id", None) or f"gemini_{int(time.time())}"
             return (
                 res.text,
                 in_tok,
                 out_tok,
-                getattr(res, "response_id", f"gemini_{int(time.time())}"),
+                resp_id,
                 stop_reason,
             )
 

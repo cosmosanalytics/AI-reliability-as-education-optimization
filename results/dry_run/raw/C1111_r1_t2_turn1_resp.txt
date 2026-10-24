@@ -1,0 +1,11 @@
+=== FILE: tagging.py ===
+def add_tag(item, tag, tags=None):
+    """Return {"item": item, "tags": [...]} where tags is the given tags plus `tag` appended.
+    Calls must not share state, and the caller's `tags` list must never be modified."""
+    if tags is None:
+        current_tags = []
+    else:
+        current_tags = list(tags)  # Create a copy to avoid modifying the caller's list
+    current_tags.append(tag)
+    return {"item": item, "tags": current_tags}
+=== END ===
