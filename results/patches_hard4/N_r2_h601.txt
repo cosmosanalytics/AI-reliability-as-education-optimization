@@ -1,0 +1,41 @@
+=== FILE: money.py ===
+from decimal import Decimal, ROUND_HALF_UP
+
+
+def to_cents(x):
+    return int((Decimal(str(x)) * 100).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+
+
+def fmt(cents):
+    sign = "-" if cents < 0 else ""
+    cents = abs(cents)
+    return "%s$%d.%02d" % (sign, cents // 100, cents % 100)
+=== END ===
+=== FILE: invoice.py ===
+from decimal import Decimal, ROUND_HALF_UP
+
+from money import to_cents
+
+
+def line_total(price, qty):
+    return to_cents(price) * qty
+
+
+def invoice_total(lines, discount_pct=0):
+    sub = sum(line_total(p, q) for p, q in lines)
+    discount = (Decimal(sub) * Decimal(str(discount_pct)) / 100).quantize(
+        Decimal(1), rounding=ROUND_HALF_UP
+    )
+    return sub - int(discount)
+=== END ===
+=== FILE: tax.py ===
+from decimal import Decimal, ROUND_HALF_UP
+
+
+def vat(cents, rate):
+    return int((Decimal(cents) * Decimal(str(rate))).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+
+
+def gross(cents, rate):
+    return cents + vat(cents, rate)
+=== END ===

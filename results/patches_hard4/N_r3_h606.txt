@@ -1,0 +1,49 @@
+=== FILE: ledger.py ===
+from datetime import datetime
+
+
+class Ledger:
+
+    def __init__(self):
+        self.entries = []
+
+    def record(self, customer, ts, units):
+        if not isinstance(customer, str) or not customer:
+            raise ValueError("customer must be a non-empty string")
+        if not isinstance(ts, datetime):
+            raise ValueError("ts must be a datetime")
+        if isinstance(units, bool) or not isinstance(units, int) or units == 0:
+            raise ValueError("units must be a non-zero integer")
+        self.entries.append((customer, ts, units))
+
+    def customers(self):
+        return sorted({c for c, _, _ in self.entries})
+=== END ===
+=== FILE: period.py ===
+from datetime import datetime
+
+
+def month_bounds(year, month):
+    if isinstance(month, bool) or not isinstance(month, int) or not 1 <= month <= 12:
+        raise ValueError("month must be between 1 and 12")
+    start = datetime(year, month, 1)
+    if month == 12:
+        end = datetime(year + 1, 1, 1)
+    else:
+        end = datetime(year, month + 1, 1)
+    return start, end
+=== END ===
+=== FILE: usage_report.py ===
+from period import month_bounds
+
+
+def monthly_report(ledger, year, month, customers=None):
+    start, end = month_bounds(year, month)
+    if customers is None:
+        customers = ledger.customers()
+    out = {c: 0 for c in customers}
+    for c, ts, u in ledger.entries:
+        if c in out and start <= ts < end:
+            out[c] += u
+    return out
+=== END ===

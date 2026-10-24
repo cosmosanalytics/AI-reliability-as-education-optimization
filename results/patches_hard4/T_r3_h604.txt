@@ -1,0 +1,67 @@
+=== FILE: csvio.py ===
+import re
+
+_NUMBER = re.compile(r"[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$")
+
+
+def _cell(f):
+    if f is None:
+        return ""
+    if not isinstance(f, str):
+        return str(f)
+    if f[:1] in ("=", "+", "-", "@") and not _NUMBER.match(f):
+        f = "'" + f
+    if any(c in f for c in ',"\r\n') or f != f.strip():
+        return '"' + f.replace('"', '""') + '"'
+    return f
+
+
+def write_row(fields):
+    return ",".join(_cell(f) for f in fields)
+
+
+def read_rows(text):
+    rows = []
+    row = []
+    field = []
+    in_quotes = False
+    started = False
+    i = 0
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if in_quotes:
+            if c == '"':
+                if i + 1 < n and text[i + 1] == '"':
+                    field.append('"')
+                    i += 1
+                else:
+                    in_quotes = False
+            else:
+                field.append(c)
+        elif c == '"' and not field:
+            in_quotes = True
+            started = True
+        elif c == ",":
+            row.append("".join(field))
+            field = []
+            started = True
+        elif c in "\r\n":
+            if c == "\r" and i + 1 < n and text[i + 1] == "\n":
+                i += 1
+            row.append("".join(field))
+            rows.append(row)
+            row = []
+            field = []
+            started = False
+        else:
+            field.append(c)
+            started = True
+        i += 1
+    if in_quotes:
+        raise ValueError("unterminated quote")
+    if started or field or row:
+        row.append("".join(field))
+        rows.append(row)
+    return rows
+=== END ===

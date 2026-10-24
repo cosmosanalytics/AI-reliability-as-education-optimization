@@ -1,0 +1,28 @@
+=== FILE: recur.py ===
+import calendar
+from datetime import datetime, timedelta
+
+
+def _monthly(start, k):
+    total = start.year * 12 + (start.month - 1) + k
+    year, month = divmod(total, 12)
+    month += 1
+    day = min(start.day, calendar.monthrange(year, month)[1])
+    return start.replace(year=year, month=month, day=day)
+
+
+def next_occurrence(start, rule, after):
+    if rule not in ("daily", "weekly", "monthly"):
+        raise ValueError(rule)
+    k = 0
+    cur = start
+    while cur <= after:
+        k += 1
+        if rule == "daily":
+            cur = start + timedelta(days=k)
+        elif rule == "weekly":
+            cur = start + timedelta(days=7 * k)
+        else:
+            cur = _monthly(start, k)
+    return cur
+=== END ===

@@ -1,0 +1,48 @@
+=== FILE: acl.py ===
+def _covers(prefix, path):
+    base = prefix.rstrip("/")
+    return path == base or path.startswith(base + "/")
+
+
+def allowed(groups, acl, user, path, action):
+    subjects = groups.groups_of(user)
+    subjects.add(user)
+    best = None
+    for prefix, subject, act, effect in acl:
+        if not _covers(prefix, path):
+            continue
+        if act != action and act != "*":
+            continue
+        if subject not in subjects:
+            continue
+        length = len(prefix.rstrip("/"))
+        if best is None or length > best[0]:
+            best = (length, effect)
+        elif length == best[0] and effect != "allow":
+            best = (length, effect)
+    return best is not None and best[1] == "allow"
+=== END ===
+=== FILE: groups.py ===
+class Groups:
+
+    def __init__(self):
+        self.members = {}
+
+    def add(self, group, member):
+        self.members.setdefault(group, set()).add(member)
+
+    def remove(self, group, member):
+        if group in self.members:
+            self.members[group].discard(member)
+
+    def groups_of(self, user):
+        result = set()
+        frontier = [user]
+        while frontier:
+            current = frontier.pop()
+            for g, m in self.members.items():
+                if current in m and g not in result:
+                    result.add(g)
+                    frontier.append(g)
+        return result
+=== END ===

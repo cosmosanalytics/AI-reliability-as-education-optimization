@@ -1,0 +1,40 @@
+=== FILE: envparse.py ===
+import re
+
+_INT = re.compile(r"[+-]?\d+\Z")
+_FLOAT = re.compile(r"[+-]?(\d+\.\d*|\.\d+)\Z")
+
+
+def parse_value(text):
+    s = str(text).strip()
+    low = s.lower()
+    if low in ("true", "yes", "on", "1"):
+        return True
+    if low in ("false", "no", "off", "0"):
+        return False
+    if low in ("", "null", "none"):
+        return None
+    if _INT.match(s):
+        return int(s)
+    if _FLOAT.match(s):
+        return float(s)
+    return s
+=== END ===
+=== FILE: confmerge.py ===
+import copy
+
+
+def deep_merge(base, override):
+    result = copy.deepcopy(base)
+    for key, value in override.items():
+        if value is None:
+            result.pop(key, None)
+        elif isinstance(value, dict):
+            current = result.get(key)
+            if not isinstance(current, dict):
+                current = {}
+            result[key] = deep_merge(current, value)
+        else:
+            result[key] = copy.deepcopy(value)
+    return result
+=== END ===

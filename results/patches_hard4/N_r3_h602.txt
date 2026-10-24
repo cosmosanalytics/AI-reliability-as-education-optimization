@@ -1,0 +1,45 @@
+=== FILE: confmerge.py ===
+import copy
+
+
+def _clean(value):
+    if isinstance(value, dict):
+        return {k: _clean(v) for k, v in value.items() if v is not None}
+    return copy.deepcopy(value)
+
+
+def deep_merge(base, override):
+    result = _clean(base)
+    for key, value in override.items():
+        if value is None:
+            result.pop(key, None)
+        elif isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = deep_merge(result[key], value)
+        else:
+            result[key] = _clean(value)
+    return result
+=== END ===
+=== FILE: envparse.py ===
+def parse_value(text):
+    if text is None:
+        return None
+    if not isinstance(text, str):
+        return text
+    s = text.strip()
+    low = s.lower()
+    if low in ("true", "yes", "on", "1"):
+        return True
+    if low in ("false", "no", "off", "0"):
+        return False
+    if low in ("", "null", "none"):
+        return None
+    try:
+        return int(s)
+    except ValueError:
+        pass
+    try:
+        return float(s)
+    except ValueError:
+        pass
+    return s
+=== END ===

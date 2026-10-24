@@ -1,0 +1,45 @@
+=== FILE: acl.py ===
+def _covers(prefix, path):
+    if prefix == "" or prefix.endswith("/"):
+        return path.startswith(prefix)
+    return path == prefix or path.startswith(prefix + "/")
+
+
+def allowed(groups, acl, user, path, action):
+    user_groups = groups.groups_of(user)
+    best = None
+    for prefix, subject, act, effect in acl:
+        if not _covers(prefix, path):
+            continue
+        if act != action and act != "*":
+            continue
+        if subject != user and subject not in user_groups:
+            continue
+        key = (len(prefix), effect == "deny")
+        if best is None or key > best:
+            best = key
+    return best is not None and not best[1]
+=== END ===
+=== FILE: groups.py ===
+class Groups:
+
+    def __init__(self):
+        self.members = {}
+
+    def add(self, group, member):
+        self.members.setdefault(group, set()).add(member)
+
+    def remove(self, group, member):
+        self.members.setdefault(group, set()).discard(member)
+
+    def groups_of(self, user):
+        found = set()
+        todo = [user]
+        while todo:
+            current = todo.pop()
+            for g, m in self.members.items():
+                if current in m and g not in found:
+                    found.add(g)
+                    todo.append(g)
+        return found
+=== END ===
