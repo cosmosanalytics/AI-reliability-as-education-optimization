@@ -1,0 +1,72 @@
+=== FILE: event.py ===
+class Event:
+    """Event object passed to subscribers."""
+
+    def __init__(self, name, data=None):
+        self.name = name
+        self.data = data or {}
+        self.cancelled = False
+
+    def stop_propagation(self):
+        """Halt dispatching to all subsequent subscribers immediately."""
+        self.cancelled = True
+=== END ===
+=== FILE: dispatcher.py ===
+from subscriber import Subscriber
+
+
+class EventDispatcher:
+    def __init__(self):
+        self._subscribers = {}
+        # Used for stable sorting of equal-priority subscribers, ensuring FIFO order.
+        self._next_subscriber_id = 0
+
+    def subscribe(self, name, handler, priority=0, once=False):
+        sub = Subscriber(handler, priority, once)
+        # Assign a unique, increasing ID to preserve FIFO order for equal priorities.
+        sub._id = self._next_subscriber_id
+        self._next_subscriber_id += 1
+        self._subscribers.setdefault(name, []).append(sub)
+        return sub
+
+    def unsubscribe(self, name, handler):
+        if name in self._subscribers:
+            # Create a new list to avoid modifying the list during iteration
+            # and to ensure the list is always in a consistent state.
+            self._subscribers[name] = [
+                s for s in self._subscribers[name] if s.handler != handler
+            ]
+
+    def dispatch(self, event):
+        """Dispatch event to subscribers sorted by priority (descending).
+        Equal priority subscribers must execute in FIFO order.
+        If event.cancelled is set, halt execution immediately."""
+        subs = self._subscribers.get(event.name, [])
+
+        # Sort by priority (descending) and then by internal ID (ascending)
+        # to ensure stable FIFO order for equal priorities.
+        # Python's sorted() is stable, but explicitly adding _id as a secondary
+        # key ensures correct FIFO order when priorities are equal, even if
+        # the initial 'subs' list order isn't strictly FIFO (e.g., due to
+        # unsubscribes or re-subscriptions).
+        # The key is (negative priority, _id) to achieve descending priority
+        # and ascending _id (FIFO) when sorted in ascending order.
+        sorted_subs = sorted(subs, key=lambda s: (-s.priority, s._id))
+
+        to_unsubscribe = []
+        for s in sorted_subs:
+            # Check cancelled status before each handler.
+            # This ensures that if stop_propagation() is called, no further
+            # handlers (even at the same priority) are executed.
+            if event.cancelled:
+                break
+            s.handler(event)
+            if s.once:
+                to_unsubscribe.append(s.handler)
+        
+        # Unsubscribe 'once' handlers after the dispatch loop to avoid
+        # modifying the subscriber list during iteration, which could lead
+        # to RuntimeError or skipped listeners.
+        for handler in to_unsubscribe:
+            self.unsubscribe(event.name, handler)
+=== END ===

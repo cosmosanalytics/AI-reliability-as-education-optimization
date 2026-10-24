@@ -24,7 +24,7 @@ class KVEngine:
                 op, k, v = res
                 if op == "SET":
                     self.memtable.set(k, v)
-                elif op == "DEL":  # Fix: handle DEL operations during recovery
+                elif op == "DEL":
                     self.memtable.delete(k)
 
     def get(self, key):
@@ -36,11 +36,12 @@ class KVEngine:
         self.memtable.set(key, str(val))
 
     def delete(self, key):
-        # Fix: calling delete on a non-existent key should be a no-op, not raise KeyError
-        # The memtable.delete method already handles non-existent keys gracefully.
-        with open(self.wal_path, "a", encoding="utf-8") as f:
-            f.write(serialize_entry("DEL", key))
-        self.memtable.delete(key)
+        # Only write to WAL and delete from memtable if the key exists.
+        # If the key does not exist, it's a no-op.
+        if self.memtable.get(key) is not None:
+            with open(self.wal_path, "a", encoding="utf-8") as f:
+                f.write(serialize_entry("DEL", key))
+            self.memtable.delete(key)
 
     def snapshot(self):
         return Snapshot(dict(self.memtable.items()))
@@ -49,8 +50,6 @@ class KVEngine:
         """Compacts WAL by rewriting only live keys to a new log file."""
         tmp_path = self.wal_path + ".compact"
         with open(tmp_path, "w", encoding="utf-8") as f:
-            # Compaction should only write SET entries for keys currently in the memtable.
-            # Since memtable.delete removes keys, the memtable naturally only contains live keys.
             for k, v in self.memtable.items():
                 f.write(serialize_entry("SET", k, v))
         os.replace(tmp_path, self.wal_path)

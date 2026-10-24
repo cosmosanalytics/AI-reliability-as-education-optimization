@@ -11,8 +11,7 @@ class Ledger:
     def record(self, customer, ts, units):
         """Record an entry. Reject (ValueError) a units value of 0, a non-int units (bools too), a non-datetime ts or an empty
         customer name."""
-        # Bug fix: Store units as provided, allowing negative values for refunds.
-        # The docstring implies validation that is not implemented here, but fixing that is out of scope for this ticket.
+        # Bug fix: units should be stored as-is, not absolute, to correctly handle refunds.
         self.entries.append((customer, ts, units))
 
     def customers(self):
@@ -28,23 +27,22 @@ def monthly_report(ledger, year, month, customers=None):
     all customers in the ledger) with 0 when they have no entries that month."""
     start, end = month_bounds(year, month)
 
-    # Determine the set of customers to include in the report
+    # Bug fix: A customer with no usage should show zero.
+    # Initialize output with all relevant customers, defaulting to 0 units.
     if customers is None:
-        # Default to all customers that ever had an entry in the ledger
-        report_customer_names = set(ledger.customers())
+        report_customers = ledger.customers()
     else:
-        # Use the provided list of customers
-        report_customer_names = set(customers)
+        # Ensure `customers` is iterable and sorted for consistent output
+        report_customers = sorted(list(customers))
 
-    # Initialize the output dictionary with all relevant customers having 0 usage
-    # This fixes the bug where customers with no usage were missing from the report.
-    out = {c: 0 for c in report_customer_names}
+    out = {c: 0 for c in report_customers}
 
     for c, ts, u in ledger.entries:
-        # Bug fix: An entry belongs to the month iff start <= ts < end (exclusive of 'end').
-        # This fixes the bug where entries late on the last day of a month were counted in the next month.
-        # Also, only process entries for customers we are reporting on.
-        if start <= ts < end and c in report_customer_names:
-            out[c] += u
+        # Bug fix: An entry belongs to the month iff start <= ts < end (exclusive end boundary).
+        # Original code used <= end, which incorrectly included the first instant of the next month.
+        if start <= ts < end:
+            # Only update if the customer is one we intend to report on
+            if c in out:
+                out[c] += u
     return out
 === END ===

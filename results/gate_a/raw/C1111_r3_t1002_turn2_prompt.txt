@@ -1,2 +1,14 @@
-Review your unified diff against docstring contracts: (1) Did you alter any test file? (2) Are boundary values (empty, zero, negative) handled? (3) Are raised exception types exact? (4) Does the patch preserve caller backward compatibility?
-Reply with your complete final patch in the required === FILE: path === ... === END === block format.
+=== TOOL_OUTPUT (exit code: 1) ===
+F                                                                        [100%]
+================================== FAILURES ===================================
+_____________________ test_nested_override_keeps_siblings _____________________
+tests\test_settings.py:5: in test_nested_override_keeps_siblings
+    assert cfg["db"]["host"] == "localhost" and cfg["db"]["port"] == 1
+E   KeyError: 'host'
+=========================== short test summary info ===========================
+FAILED tests/test_settings.py::test_nested_override_keeps_siblings - KeyError...
+1 failed in 0.25s
+
+=== END_TOOL_OUTPUT ===
+
+If further modifications or tests are needed, output revised tool blocks or file blocks. When you are finished, output your complete final patch in === FILE === format.

@@ -36,12 +36,10 @@ class KVEngine:
         self.memtable.set(key, str(val))
 
     def delete(self, key):
-        # If the key does not exist, it's a no-op.
-        # We only write a DEL entry to the WAL if the key was actually present.
-        if self.memtable.get(key) is None:
-            return
+        # Write DEL to WAL first, even if key doesn't exist, for idempotency
         with open(self.wal_path, "a", encoding="utf-8") as f:
             f.write(serialize_entry("DEL", key))
+        # memtable.delete already handles non-existent keys as a no-op
         self.memtable.delete(key)
 
     def snapshot(self):

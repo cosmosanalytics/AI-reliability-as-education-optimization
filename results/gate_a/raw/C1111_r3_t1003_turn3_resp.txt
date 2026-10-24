@@ -1,0 +1,42 @@
+=== FILE: recur.py ===
+from datetime import datetime, timedelta
+import calendar
+
+def next_occurrence(start, rule, after):
+    """start: naive datetime of the first occurrence. rule: "daily", "weekly" or "monthly". Return the first occurrence
+    STRICTLY after `after` (a naive datetime), or start itself if start > after. Occurrences are start + n periods, n>=0.
+    Weekly = same weekday and wall-clock time every 7 days. Monthly = same day-of-month and time each month; if the month
+    is too short use that month's LAST day (31 Jan -> 28/29 Feb -> 31 Mar, always counted from the ORIGINAL start day, so
+    the day returns to 31 in March). Raise ValueError for an unknown rule."""
+
+    # Store the original day from 'start' for monthly calculations, as per docstring.
+    original_day = start.day
+
+    cur = start
+    while cur <= after:
+        if rule == "daily":
+            cur += timedelta(days=1)
+        elif rule == "weekly":
+            # To preserve wall-clock time across DST changes, we advance the date by 7 days
+            # and then ensure the time components (hour, minute, second, microsecond) are preserved.
+            # This is effectively adding 7 days to the date part while keeping the time part constant.
+            # datetime.replace() handles this correctly for naive datetimes.
+            cur = cur.replace(year=cur.year, month=cur.month, day=cur.day) + timedelta(days=7)
+        elif rule == "monthly":
+            # Advance month, handling year rollover
+            year = cur.year
+            month = cur.month + 1
+            if month > 12:
+                month = 1
+                year += 1
+
+            # Determine the day for the new month, respecting the original_day
+            # and falling back to the last day of the month if original_day is too large.
+            max_day_in_month = calendar.monthrange(year, month)[1]
+            day = min(original_day, max_day_in_month)
+            
+            cur = cur.replace(year=year, month=month, day=day)
+        else:
+            raise ValueError(rule)
+    return cur
+=== END ===

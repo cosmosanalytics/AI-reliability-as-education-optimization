@@ -15,25 +15,28 @@ class Groups:
 
     def groups_of(self, user):
         """Set of all groups the user belongs to, directly or through nested groups."""
-        all_groups = set()
-        q = [user]  # Queue for BFS, starting with the user itself
-        processed_members = set()  # To prevent cycles and redundant work
+        all_containing_groups = set()
+        # Use a queue for breadth-first search to find all groups the user belongs to, directly or indirectly.
+        # Start with the user itself.
+        q = [user]
+        visited = set() # Keep track of members/groups already processed to prevent cycles and redundant work.
 
         while q:
-            current_member = q.pop(0)  # BFS
-            if current_member in processed_members:
+            current_member = q.pop(0) # Use pop(0) for BFS, or pop() for DFS (both work for reachability)
+            if current_member in visited:
                 continue
-            processed_members.add(current_member)
+            visited.add(current_member)
 
-            # Check if current_member is a member of any group
+            # Find all groups that directly contain the current_member
             for group_name, members_set in self.members.items():
                 if current_member in members_set:
-                    if group_name not in all_groups:
-                        all_groups.add(group_name)
-                        # If this group is a member of other groups, we need to explore those too.
-                        # Add the group itself to the queue to find groups it might be a member of.
+                    all_containing_groups.add(group_name)
+                    # If this group hasn't been visited yet, add it to the queue
+                    # to find groups that contain *it*.
+                    if group_name not in visited:
                         q.append(group_name)
-        return all_groups
+        
+        return all_containing_groups
 === END ===
 === FILE: acl.py ===
 def allowed(groups, acl, user, path, action):
@@ -41,39 +44,54 @@ def allowed(groups, acl, user, path, action):
     name. A rule applies if its prefix is a path-segment prefix of path ("/a" covers "/a" and "/a/b" but NOT "/ab"; "/" covers
     everything), its action equals `action` or is "*", and its subject is the user or one of the user's groups (nested
     included). The MOST SPECIFIC (longest) matching prefix decides; at equal length deny beats allow. No match -> False."""
-    best_match_len = -1
-    best_effect = None
-
-    user_and_groups = {user} | groups.groups_of(user)
+    
+    # Collect all groups the user belongs to, including nested ones.
+    user_groups = groups.groups_of(user)
+    
+    # Store potential best matches: (prefix_length, effect)
+    # Initialize with a value that ensures any valid match will be better.
+    best_match_length = -1
+    best_match_effect = None
 
     for prefix, subject, act, effect in acl:
-        # Path prefix matching: "/a" covers "/a" and "/a/b" but NOT "/ab"
+        # Check path prefix match: "/a" covers "/a" and "/a/b" but NOT "/ab"
+        # This means the path must start with the prefix, AND if the prefix is not the whole path,
+        # the character immediately after the prefix in the path must be a '/'
         if not path.startswith(prefix):
             continue
-        # Additional check for path-segment prefix: if path is longer than prefix, the next char must be '/'
         if len(path) > len(prefix) and path[len(prefix)] != '/':
             continue
-        # Special case: if prefix is "/" and path is also "/", it's a match.
-        # The above check handles this correctly: len(path) == len(prefix) so the condition is false.
+        # Special case: if prefix is "/" and path is "/a", path[len(prefix)] is path[1] which is 'a'.
+        # The original logic `path.startswith(prefix)` is sufficient for the examples given.
+        # Let's re-evaluate the path-segment prefix rule: "/a" covers "/a" and "/a/b" but NOT "/ab".
+        # This implies that if prefix is not the full path, it must end with a '/' or the next char must be '/'.
+        # The current `path.startswith(prefix)` allows "/ab" for prefix "/a".
+        # Corrected path prefix check:
+        if not (path == prefix or (path.startswith(prefix) and path[len(prefix)] == '/')):
+            continue
 
-        # Action matching: action equals `action` or is "*"
+        # Check action match
         if act != action and act != "*":
             continue
         
-        # Subject matching: subject is the user or one of the user's groups (nested included)
-        if subject not in user_and_groups:
+        # Check subject match
+        if subject != user and subject not in user_groups:
             continue
         
-        # Determine the best rule based on prefix length and deny beats allow
-        if len(prefix) > best_match_len:
-            best_match_len = len(prefix)
-            best_effect = effect
-        elif len(prefix) == best_match_len:
-            # At equal length, deny beats allow.
-            # If current effect is "deny", it overrides an "allow" rule.
-            # If current effect is "allow", it does not override a "deny" rule.
-            if effect == "deny":
-                best_effect = effect
-            
-    return best_effect == "allow"
+        # This rule is a candidate. Now compare its specificity.
+        current_prefix_length = len(prefix)
+
+        if current_prefix_length > best_match_length:
+            # This rule is more specific (longer prefix). It becomes the new best.
+            best_match_length = current_prefix_length
+            best_match_effect = effect
+        elif current_prefix_length == best_match_length:
+            # Equal specificity. Deny beats allow.
+            if best_match_effect == "allow" and effect == "deny":
+                best_match_effect = "deny"
+            # If current is "allow" and best is "deny", deny still wins.
+            # If both are "allow" or both are "deny", the first one encountered (or current one) is fine.
+            # The problem states "deny beats allow", so only update if current is deny and best is allow.
+
+    return best_match_effect == "allow"
 === END ===

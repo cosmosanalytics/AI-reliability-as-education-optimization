@@ -1,6 +1,26 @@
 === FILE: recur.py ===
 from datetime import datetime, timedelta
-import calendar
+
+
+def _add_months_preserving_day(dt, months_to_add, original_day):
+    """Adds months to a datetime, preserving the original day-of-month if possible.
+    If the target month is too short, it uses the last day of that month."""
+    target_month = dt.month + months_to_add
+    target_year = dt.year
+    while target_month > 12:
+        target_month -= 12
+        target_year += 1
+
+    try:
+        return dt.replace(year=target_year, month=target_month, day=original_day)
+    except ValueError:
+        # If original_day is too large for the target month, use the last day of the month
+        if target_month == 12:
+            next_month_first_day = datetime(target_year + 1, 1, 1, dt.hour, dt.minute, dt.second, dt.microsecond)
+        else:
+            next_month_first_day = datetime(target_year, target_month + 1, 1, dt.hour, dt.minute, dt.second, dt.microsecond)
+        last_day_of_month = (next_month_first_day - timedelta(days=1)).day
+        return dt.replace(year=target_year, month=target_month, day=last_day_of_month)
 
 
 def next_occurrence(start, rule, after):
@@ -10,38 +30,37 @@ def next_occurrence(start, rule, after):
     is too short use that month's LAST day (31 Jan -> 28/29 Feb -> 31 Mar, always counted from the ORIGINAL start day, so
     the day returns to 31 in March). Raise ValueError for an unknown rule."""
 
-    # Capture original day and time from 'start' for monthly recurrence logic
-    original_day = start.day
-    original_time = start.time()
+    # Handle the "start itself if start > after" case first.
+    # This also covers the case where start is the first occurrence and is already strictly after `after`.
+    if start > after:
+        return start
 
+    # Initialize `cur` to `start`. We will advance it until it's strictly after `after`.
     cur = start
-    # If start is already strictly after 'after', return start immediately.
-    # Otherwise, iterate until 'cur' is strictly after 'after'.
-    while cur <= after:
+    n_periods = 0 # Counter for periods for monthly rule
+
+    while True:
         if rule == "daily":
-            cur += timedelta(days=1)
+            cur = start + timedelta(days=n_periods)
         elif rule == "weekly":
-            # For naive datetimes, timedelta(days=7) correctly preserves the wall-clock time
-            # and weekday by adding exactly 7 * 24 hours.
-            cur += timedelta(days=7)
+            # Weekly events should maintain the same wall-clock time.
+            # timedelta arithmetic handles this correctly for naive datetimes.
+            cur = start + timedelta(weeks=n_periods)
         elif rule == "monthly":
-            # Calculate the next month and year
-            year = cur.year
-            month = cur.month + 1
-            if month > 12:
-                month = 1
-                year += 1
-
-            # Determine the day for the new month, respecting the original day
-            # and clamping to the last day of the month if it's shorter.
-            max_day_in_month = calendar.monthrange(year, month)[1]
-            target_day = min(original_day, max_day_in_month)
-
-            # Create the new datetime, preserving the original time components from 'start'
-            cur = datetime(year, month, target_day,
-                           original_time.hour, original_time.minute,
-                           original_time.second, original_time.microsecond)
+            # Monthly rule needs to use the original start.day and handle month-end logic.
+            cur = _add_months_preserving_day(start, n_periods, start.day)
         else:
             raise ValueError(rule)
-    return cur
+
+        # If the current occurrence is strictly after `after`, we found our result.
+        if cur > after:
+            return cur
+        
+        # Increment period counter for the next iteration.
+        n_periods += 1
+
+        # Safety break for extremely long loops, though not strictly necessary for correct logic.
+        # In practice, n_periods will not grow indefinitely for valid inputs.
+        if n_periods > 10000: # Arbitrary large number to prevent infinite loops in case of logic error
+            raise RuntimeError("Too many occurrences calculated, potential infinite loop.")
 === END ===

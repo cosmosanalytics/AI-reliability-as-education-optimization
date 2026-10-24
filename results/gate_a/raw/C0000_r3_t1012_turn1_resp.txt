@@ -29,23 +29,23 @@ class LeaseManager:
         """Extend existing lease. Raises LeaseExpiredError if lease expired or missing."""
         now = self.clock.now()
         cur = self._leases.get(resource)
-        # Fix: Raise LeaseExpiredError if lease is missing, expired, or held by a different client.
-        # Do not re-acquire.
-        if cur is None or not cur.is_valid(now) or cur.holder != holder:
-            raise LeaseExpiredError(f"Lease for resource '{resource}' is expired, missing, or held by another client.")
 
-        # Fix: Increment fencing token on renewal
+        if cur is None:
+            raise LeaseExpiredError(f"Lease for resource '{resource}' is missing.")
+        if not cur.is_valid(now):
+            raise LeaseExpiredError(f"Lease for resource '{resource}' has expired.")
+        if cur.holder != holder:
+            raise LeaseExpiredError(f"Lease for resource '{resource}' is held by another client.")
+
         self._token_seq += 1
-        cur.fencing_token = self._token_seq
-
         dur = float(ttl or self.default_ttl)
         cur.expires_at = now + dur
+        cur.fencing_token = self._token_seq
         return cur
 
     def release(self, resource, holder):
         """Release active lease. Returns True if released, False otherwise."""
         cur = self._leases.get(resource)
-        # Fix: Verify that the holder matches the lease holder before releasing.
         if cur and cur.holder == holder:
             del self._leases[resource]
             return True

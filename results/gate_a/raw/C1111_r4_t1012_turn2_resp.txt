@@ -32,16 +32,17 @@ class LeaseManager:
 
         if cur is None:
             raise LeaseExpiredError(f"Lease for resource '{resource}' not found.")
+
         if cur.holder != holder:
             raise LeaseExpiredError(f"Lease for resource '{resource}' held by '{cur.holder}', not '{holder}'.")
+
         if not cur.is_valid(now):
             raise LeaseExpiredError(f"Lease for resource '{resource}' has expired.")
 
         self._token_seq += 1
-        cur.fencing_token = self._token_seq
-
         dur = float(ttl or self.default_ttl)
         cur.expires_at = now + dur
+        cur.fencing_token = self._token_seq
         return cur
 
     def release(self, resource, holder):

@@ -11,7 +11,7 @@ class TokenBucket:
     def refill(self, now):
         elapsed = max(0.0, now - self.last_updated)
         self.last_updated = now
-        # Fix: Fractional refills are no longer truncated.
+        # Fix: Use float for added tokens to prevent truncation
         added = elapsed * self.refill_rate
         self.tokens = min(self.capacity, self.tokens + added)
 
@@ -21,9 +21,10 @@ class TokenBucket:
         Raises ValueError if `tokens` <= 0 or `tokens` > self.capacity."""
         if tokens <= 0:
             raise ValueError("tokens must be positive")
-        # Fix: Raise ValueError if tokens > capacity.
+        # Fix: Raise ValueError if tokens requested exceed bucket capacity
         if tokens > self.capacity:
-            raise ValueError("tokens cannot exceed bucket capacity")
+            raise ValueError(f"tokens ({tokens}) cannot exceed bucket capacity ({self.capacity})")
+
         self.refill(now)
         if self.tokens >= tokens:
             self.tokens -= tokens
@@ -61,7 +62,7 @@ class RateLimiter:
         for k in self.store.keys():
             entry = self.store.get(k)
             # Fix: Ensure elapsed time is non-negative to prevent issues with timestamp rollovers
-            # or clock adjustments causing active keys to be deleted.
-            if entry and (now - entry[1]) > self.ttl:
+            # If now < entry[1] (e.g., due to rollover), the bucket is not stale.
+            if entry and (now >= entry[1]) and ((now - entry[1]) > self.ttl):
                 self.store.delete(k)
 === END ===

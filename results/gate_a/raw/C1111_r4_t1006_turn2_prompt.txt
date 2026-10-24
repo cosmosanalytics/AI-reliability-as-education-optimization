@@ -1,2 +1,18 @@
-Review your unified diff against docstring contracts: (1) Did you alter any test file? (2) Are boundary values (empty, zero, negative) handled? (3) Are raised exception types exact? (4) Does the patch preserve caller backward compatibility?
-Reply with your complete final patch in the required === FILE: path === ... === END === block format.
+=== TOOL_OUTPUT (exit code: 1) ===
+F                                                                        [100%]
+================================== FAILURES ===================================
+_________________________________ test_refund _________________________________
+tests\test_usage.py:7: in test_refund
+    assert monthly_report(l, 2024, 1) == {"a": 7}
+E   AssertionError: assert {'a': 13} == {'a': 7}
+E     
+E     Differing items:
+E     {'a': 13} != {'a': 7}
+E     Use -v to get more diff
+=========================== short test summary info ===========================
+FAILED tests/test_usage.py::test_refund - AssertionError: assert {'a': 13} ==...
+1 failed in 0.22s
+
+=== END_TOOL_OUTPUT ===
+
+If further modifications or tests are needed, output revised tool blocks or file blocks. When you are finished, output your complete final patch in === FILE === format.

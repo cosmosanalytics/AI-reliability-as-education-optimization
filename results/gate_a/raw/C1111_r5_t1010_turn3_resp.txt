@@ -1,0 +1,66 @@
+=== FILE: event.py ===
+class Event:
+    """Event object passed to subscribers."""
+
+    def __init__(self, name, data=None):
+        self.name = name
+        self.data = data or {}
+        self.cancelled = False
+
+    def stop_propagation(self):
+        """Halt dispatching to all subsequent subscribers immediately."""
+        self.cancelled = True
+=== END ===
+=== FILE: dispatcher.py ===
+from subscriber import Subscriber
+
+
+class EventDispatcher:
+    def __init__(self):
+        self._subscribers = {}
+        self._next_subscriber_id = 0 # Used for stable FIFO ordering
+
+    def subscribe(self, name, handler, priority=0, once=False):
+        # Assign a unique, increasing ID to each subscriber for stable FIFO ordering
+        sub = Subscriber(handler, priority, once)
+        sub._id = self._next_subscriber_id
+        self._next_subscriber_id += 1
+        self._subscribers.setdefault(name, []).append(sub)
+        return sub
+
+    def unsubscribe(self, name, handler):
+        if name in self._subscribers:
+            # Create a new list, effectively removing the subscriber
+            self._subscribers[name] = [
+                s for s in self._subscribers[name] if s.handler != handler
+            ]
+
+    def dispatch(self, event):
+        """Dispatch event to subscribers sorted by priority (descending).
+        Equal priority subscribers must execute in FIFO order.
+        If event.cancelled is set, halt execution immediately."""
+
+        # Take a snapshot of subscribers to allow safe modification (unsubscribe) during dispatch.
+        # Sort by priority (descending) then by internal ID (ascending) for stable FIFO.
+        # We negate priority to sort descending for priority and ascending for _id
+        # using a single ascending sort on the tuple.
+        subs_snapshot = sorted(
+            self._subscribers.get(event.name, []),
+            key=lambda s: (-s.priority, s._id)
+        )
+
+        # Keep track of subscribers to remove after dispatch (for 'once' handlers)
+        to_remove_once = []
+
+        for s in subs_snapshot:
+            # Check for cancellation before executing each handler
+            if event.cancelled:
+                break
+            s.handler(event)
+            if s.once:
+                to_remove_once.append(s)
+
+        # Remove 'once' subscribers after the dispatch loop
+        for s in to_remove_once:
+            self.unsubscribe(event.name, s.handler)
+=== END ===

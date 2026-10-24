@@ -1,24 +1,3 @@
-=== FILE: event.py ===
-class Event:
-    """Event object passed to subscribers."""
-
-    def __init__(self, name, data=None):
-        self.name = name
-        self.data = data or {}
-        self.cancelled = False
-
-    def stop_propagation(self):
-        """Halt dispatching to all subsequent subscribers immediately."""
-        self.cancelled = True
-=== END ===
-=== FILE: subscriber.py ===
-class Subscriber:
-    def __init__(self, handler, priority=0, once=False, insertion_id=None):
-        self.handler = handler
-        self.priority = int(priority)
-        self.once = bool(once)
-        self.insertion_id = insertion_id
-=== END ===
 === FILE: dispatcher.py ===
 from subscriber import Subscriber
 
@@ -26,65 +5,43 @@ from subscriber import Subscriber
 class EventDispatcher:
     def __init__(self):
         self._subscribers = {}
-        self._next_insertion_id = 0 # Instance-level counter for stable sorting
+        self._next_subscriber_id = 0 # For stable FIFO ordering
 
     def subscribe(self, name, handler, priority=0, once=False):
-        insertion_id = self._next_insertion_id
-        self._next_insertion_id += 1
-        sub = Subscriber(handler, priority, once, insertion_id)
+        # Assign a unique ID to maintain FIFO order for equal priorities
+        sub = Subscriber(handler, priority, once)
+        sub._id = self._next_subscriber_id
+        self._next_subscriber_id += 1
+
         self._subscribers.setdefault(name, []).append(sub)
         return sub
 
     def unsubscribe(self, name, handler):
-        """Delete subscribers whose handler equals `handler` exactly."""
         if name in self._subscribers:
             self._subscribers[name] = [
                 s for s in self._subscribers[name] if s.handler != handler
-            ]
-
-    def _remove_subscriber_instance(self, name, sub_instance):
-        """Internal helper to remove a specific Subscriber instance."""
-        if name in self._subscribers:
-            self._subscribers[name] = [
-                s for s in self._subscribers[name] if s is not sub_instance
             ]
 
     def dispatch(self, event):
         """Dispatch event to subscribers sorted by priority (descending).
         Equal priority subscribers must execute in FIFO order.
         If event.cancelled is set, halt execution immediately."""
+        subs = self._subscribers.get(event.name, [])
 
-        # Get a snapshot of subscribers for this event to safely iterate
-        # and allow modifications to self._subscribers during dispatch.
-        current_subs_for_event = list(self._subscribers.get(event.name, []))
+        # Sort by priority (descending) and then by subscriber ID (ascending) for stable FIFO
+        sorted_subs = sorted(subs, key=lambda s: (s.priority, s._id), reverse=True)
 
-        # Bug fix: Sort by priority (descending), then by insertion_id (ascending for FIFO tie-breaking).
-        # This addresses the "Equal priority subscribers must execute in FIFO order" requirement
-        # and the "does not ensure stable FIFO tie-breaking" bug.
-        sorted_subs = sorted(current_subs_for_event, key=lambda s: (-s.priority, s.insertion_id))
-
-        subs_to_remove_once = []
+        # Collect handlers to unsubscribe after dispatch to avoid modifying the list during iteration
+        handlers_to_unsubscribe = []
 
         for s in sorted_subs:
-            # Bug fix: Check event.cancelled BEFORE calling the handler.
-            # This ensures that if a previous handler cancelled the event,
-            # all subsequent handlers (even at the same priority level) are not called,
-            # addressing the "fails to stop subsequent listeners registered at the same priority level" bug.
             if event.cancelled:
                 break
-
             s.handler(event)
-
-            # Bug fix: If s.once is true, mark this specific subscriber instance for removal.
-            # Defer removal until after the dispatch loop to avoid modifying the subscriber list
-            # self._subscribers[event.name] while iterating over it, which could lead to
-            # "RuntimeError: dictionary changed size during iteration or skips listeners".
             if s.once:
-                subs_to_remove_once.append(s)
-
-        # Apply deferred unsubscriptions for 'once' subscribers using the internal helper.
-        # This ensures that only the specific 'once' subscriber instance is removed,
-        # not all subscribers with the same handler, and that modifications happen safely after iteration.
-        for s_to_remove in subs_to_remove_once:
-            self._remove_subscriber_instance(event.name, s_to_remove)
+                handlers_to_unsubscribe.append((event.name, s.handler))
+        
+        # Perform unsubscribes after the dispatch loop
+        for name, handler in handlers_to_unsubscribe:
+            self.unsubscribe(name, handler)
 === END ===

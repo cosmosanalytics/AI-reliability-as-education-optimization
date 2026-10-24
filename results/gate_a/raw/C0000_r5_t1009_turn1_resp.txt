@@ -11,8 +11,8 @@ class TokenBucket:
     def refill(self, now):
         elapsed = max(0.0, now - self.last_updated)
         self.last_updated = now
-        # Buggy: int truncation loses fractional refills on frequent calls
-        added = elapsed * self.refill_rate  # Fix: remove int() truncation
+        # Fix: Use float for added tokens to prevent truncation
+        added = elapsed * self.refill_rate
         self.tokens = min(self.capacity, self.tokens + added)
 
     def acquire(self, tokens, now):
@@ -21,9 +21,10 @@ class TokenBucket:
         Raises ValueError if `tokens` <= 0 or `tokens` > self.capacity."""
         if tokens <= 0:
             raise ValueError("tokens must be positive")
-        # Buggy: fails to raise ValueError if tokens > capacity
-        if tokens > self.capacity:  # Fix: Add check for tokens > capacity
-            raise ValueError("tokens requested exceed bucket capacity")
+        # Fix: Raise ValueError if tokens requested exceed bucket capacity
+        if tokens > self.capacity:
+            raise ValueError(f"tokens ({tokens}) cannot exceed bucket capacity ({self.capacity})")
+
         self.refill(now)
         if self.tokens >= tokens:
             self.tokens -= tokens
@@ -60,11 +61,8 @@ class RateLimiter:
         """Prune buckets that have been inactive for more than self.ttl."""
         for k in self.store.keys():
             entry = self.store.get(k)
-            if entry:
-                # Buggy: pruning deletes active keys when timestamps roll over.
-                # Use max(0.0, ...) to handle cases where 'now' might be less than 'entry[1]'
-                # (e.g., due to clock adjustments or 'now' resetting), preventing premature pruning.
-                elapsed = max(0.0, now - entry[1])
-                if elapsed > self.ttl:
-                    self.store.delete(k)
+            # Fix: Ensure elapsed time is non-negative to prevent issues with timestamp rollovers
+            # If now < entry[1] (e.g., due to rollover), the bucket is not stale.
+            if entry and (now >= entry[1]) and ((now - entry[1]) > self.ttl):
+                self.store.delete(k)
 === END ===

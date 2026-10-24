@@ -4,11 +4,11 @@ from utils import round_half_up, clamp
 
 def unit_price(sku, qty, catalog):
     item = catalog[sku]
-    best_pct = 0
+    best = 0
     for min_qty, pct in item.get("tiers", []):
         if qty >= min_qty:
-            best_pct = max(best_pct, pct)
-    return round_half_up(item["price"] * (100 - best_pct) / 100)
+            best = pct
+    return round_half_up(item["price"] * (100 - best) / 100)
 
 
 def subtotal(lines, catalog):
@@ -24,7 +24,7 @@ def coupon_discount(sub, coupon):
             d = min(d, coupon["cap"])
     else:
         d = coupon["value"]
-    return min(d, sub)
+    return min(d, sub) # Coupon discount cannot make subtotal negative
 === END ===
 === FILE: inventory.py ===
 class OutOfStock(Exception):
@@ -45,23 +45,29 @@ class Inventory:
     def reserve(self, order_id, lines):
         if order_id in self.reservations:
             raise ValueError("duplicate order")
-        need = {}
+        
+        # Aggregate quantities needed for each SKU
+        needed_quantities = {}
         for s, q in lines:
-            need[s] = need.get(s, 0) + q
-        for s, total_needed_q in need.items():
-            if self.available(s) < total_needed_q:
+            needed_quantities[s] = needed_quantities.get(s, 0) + q
+
+        # Check availability for aggregated quantities before making any reservation
+        for s, q_needed in needed_quantities.items():
+            if self.available(s) < q_needed:
                 raise OutOfStock(s)
+        
         self.reservations[order_id] = list(lines)
 
     def release(self, order_id):
-        self.reservations.pop(order_id, None)
+        # Only release if the order_id exists in reservations
+        if order_id in self.reservations:
+            self.reservations.pop(order_id)
 
     def commit(self, order_id):
         for s, q in self.reservations.pop(order_id):
             self.stock[s] -= q
 === END ===
 === FILE: shipping.py ===
-import math
 from utils import round_half_up
 
 BANDS = [(500, 300), (2000, 600), (5000, 1200)]
@@ -70,17 +76,24 @@ ZONES = {"local": 1.0, "remote": 1.5}
 
 
 def shipping_cost(weight_g, zone, sub):
-    if sub >= FREE_AT:
+    if sub >= FREE_AT: # Exactly 10000 cents ships free
         return 0
+    
     base = None
-    for limit, cost in BANDS:
-        if weight_g <= limit:
-            base = cost
-            break
-    if base is None:
-        extra = math.ceil((weight_g - 5000) / 1000)
-        base = 1200 + 200 * extra
-    return round_half_up(base * ZONES[zone])
+    if weight_g <= 500: # Exactly 500g belongs to the 500g band
+        base = 300
+    elif weight_g <= 2000: # Exactly 2000g belongs to the 2000g band
+        base = 600
+    elif weight_g <= 5000: # Exactly 5000g belongs to the 5000g band
+        base = 1200
+    else: # Beyond 5000g
+        # 5001g is one extra kilogram, so (5001 - 5000 - 1) // 1000 + 1 = 1
+        # (weight_g - 5000 - 1) // 1000 + 1 calculates "started extra kilogram"
+        extra_kg = (weight_g - 5001) // 1000 + 1
+        base = 1200 + 200 * extra_kg
+    
+    cost = base * ZONES[zone]
+    return round_half_up(cost) # Remote zone costs 1.5x, rounded half up
 === END ===
 === FILE: orders.py ===
 from inventory import OutOfStock
@@ -109,7 +122,7 @@ class OrderBook:
         if o is None or o["status"] != "placed":
             return
         o["status"] = "cancelled"
-        self.inv.release(order_id)
+        self.inv.release(order_id) # Release stock when order is cancelled
 
     def ship(self, order_id):
         o = self.orders[order_id]
@@ -125,9 +138,8 @@ from pricing import unit_price
 def revenue_by_sku(book):
     out = {}
     for o in book.orders.values():
-        if o["status"] == "cancelled":
-            continue
-        for s, q in o["lines"]:
-            out[s] = out.get(s, 0) + unit_price(s, q, book.catalog) * q
+        if o["status"] != "cancelled": # Exclude cancelled orders from revenue report
+            for s, q in o["lines"]:
+                out[s] = out.get(s, 0) + unit_price(s, q, book.catalog) * q
     return out
 === END ===

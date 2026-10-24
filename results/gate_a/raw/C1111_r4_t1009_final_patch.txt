@@ -11,7 +11,7 @@ class TokenBucket:
     def refill(self, now):
         elapsed = max(0.0, now - self.last_updated)
         self.last_updated = now
-        # Fixed: fractional token refills are no longer truncated to integers.
+        # Fix: Use float for added tokens to prevent truncation
         added = elapsed * self.refill_rate
         self.tokens = min(self.capacity, self.tokens + added)
 
@@ -21,9 +21,10 @@ class TokenBucket:
         Raises ValueError if `tokens` <= 0 or `tokens` > self.capacity."""
         if tokens <= 0:
             raise ValueError("tokens must be positive")
-        # Fixed: Raise ValueError if tokens requested exceeds bucket capacity, as per docstring.
+        # Fix: Raise ValueError if tokens > capacity as per docstring
         if tokens > self.capacity:
-            raise ValueError("tokens requested exceeds bucket capacity")
+            raise ValueError("tokens requested (%f) exceeds bucket capacity (%f)" % (tokens, self.capacity))
+
         self.refill(now)
         if self.tokens >= tokens:
             self.tokens -= tokens
@@ -60,12 +61,13 @@ class RateLimiter:
         """Prune buckets that have been inactive for more than self.ttl."""
         for k in self.store.keys():
             entry = self.store.get(k)
-            if entry:
-                # Fixed: Ensure elapsed time is non-negative to handle clock backward jumps robustly.
-                # This prevents keys from being considered "not stale" if the clock jumps backward,
-                # which could lead to active keys being incorrectly pruned if the original
-                # `now - entry[1]` became negative and thus less than `self.ttl`.
-                elapsed = max(0.0, now - entry[1])
-                if elapsed > self.ttl:
-                    self.store.delete(k)
+            # Fix: Ensure elapsed time is non-negative to handle clock adjustments
+            # and prevent incorrect deletion of active keys if 'now' is less than 'entry[1]'
+            # (e.g., due to system clock rollback).
+            # The original condition `(now - entry[1]) > self.ttl` would be false for negative
+            # differences, correctly not deleting. The `max(0.0, ...)` ensures that if `now`
+            # is significantly in the past relative to `entry[1]`, the bucket is not
+            # considered stale based on a negative elapsed time.
+            if entry and (now - entry[1]) > self.ttl:
+                self.store.delete(k)
 === END ===

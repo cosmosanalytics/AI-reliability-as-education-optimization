@@ -6,18 +6,16 @@ class Event:
         self.name = name
         self.data = data or {}
         self.cancelled = False
+        self._propagation_stopped = False
 
     def stop_propagation(self):
         """Halt dispatching to all subsequent subscribers immediately."""
-        self.cancelled = True
-=== END ===
-=== FILE: subscriber.py ===
-class Subscriber:
-    def __init__(self, handler, priority=0, once=False):
-        self.handler = handler
-        self.priority = int(priority)
-        self.once = bool(once)
-        self.insertion_order = None # Assigned by EventDispatcher to ensure FIFO for equal priorities
+        self._propagation_stopped = True
+
+    @property
+    def propagation_stopped(self):
+        """Check if propagation has been stopped."""
+        return self._propagation_stopped
 === END ===
 === FILE: dispatcher.py ===
 from subscriber import Subscriber
@@ -25,53 +23,64 @@ from subscriber import Subscriber
 
 class EventDispatcher:
     def __init__(self):
+        # _subscribers stores {event_name: {priority: [Subscriber, ...]}}
         self._subscribers = {}
-        self._next_insertion_order = 0 # Counter for stable sorting of equal-priority subscribers
 
     def subscribe(self, name, handler, priority=0, once=False):
         sub = Subscriber(handler, priority, once)
-        sub.insertion_order = self._next_insertion_order
-        self._next_insertion_order += 1
-        self._subscribers.setdefault(name, []).append(sub)
+        self._subscribers.setdefault(name, {}).setdefault(priority, []).append(sub)
         return sub
 
     def unsubscribe(self, name, handler):
         if name in self._subscribers:
-            # Rebuild the list, filtering out the specified handler.
-            # This creates a new list, which is safe against RuntimeError if the original list
-            # was being iterated directly (though dispatch iterates a copy).
-            self._subscribers[name] = [
-                s for s in self._subscribers[name] if s.handler != handler
-            ]
+            for priority in list(self._subscribers[name].keys()): # Iterate over a copy of keys
+                self._subscribers[name][priority] = [
+                    s for s in self._subscribers[name][priority] if s.handler != handler
+                ]
+                if not self._subscribers[name][priority]:
+                    del self._subscribers[name][priority]
+            if not self._subscribers[name]:
+                del self._subscribers[name]
 
     def dispatch(self, event):
         """Dispatch event to subscribers sorted by priority (descending).
         Equal priority subscribers must execute in FIFO order.
-        If event.cancelled is set, halt execution immediately."""
-        subs = self._subscribers.get(event.name, [])
-        
-        # Fix: Sort by priority (descending) and then by insertion_order (ascending).
-        # This ensures stable FIFO tie-breaking for equal priorities.
-        sorted_subs = sorted(subs, key=lambda s: (-s.priority, s.insertion_order))
+        If event.propagation_stopped is set, halt execution immediately."""
+        if event.name not in self._subscribers:
+            return
 
-        # Fix: Collect subscribers to be removed after the dispatch loop.
-        # This prevents RuntimeError: dictionary changed size during iteration
-        # if unsubscribe is called from within a handler.
-        to_remove_once = []
+        # Create a flattened, sorted list of active subscribers for this dispatch.
+        # This snapshot ensures that modifications to _subscribers during dispatch
+        # (e.g., via unsubscribe or s.once) do not cause RuntimeError or skip/re-execute
+        # handlers incorrectly within the current dispatch loop.
+        # Subscribers are sorted by priority (descending), then by their original
+        # registration order (FIFO for equal priority).
+        active_subs = []
+        for priority in sorted(self._subscribers[event.name].keys(), reverse=True):
+            # Append a copy of the list to maintain FIFO order for equal priorities
+            active_subs.extend(list(self._subscribers[event.name][priority]))
 
-        for s in sorted_subs:
-            # Fix: Check event.cancelled BEFORE calling the handler.
-            # This ensures that if a previous handler stopped propagation,
-            # subsequent handlers (even at the same priority) do not run.
-            if event.cancelled:
+        # Keep track of handlers to unsubscribe after the dispatch loop
+        # to avoid modifying the _subscribers structure during iteration.
+        handlers_to_unsubscribe = []
+
+        for s in active_subs:
+            if event.propagation_stopped:
                 break
+
+            # Check if the subscriber is still active in the main _subscribers structure.
+            # This handles cases where a handler unsubscribes another handler
+            # that is later in the active_subs snapshot.
+            # This check is efficient because _subscribers is now structured by priority.
+            if s not in self._subscribers.get(event.name, {}).get(s.priority, []):
+                continue
 
             s.handler(event)
 
             if s.once:
-                to_remove_once.append(s)
-        
-        # Fix: Perform deferred removals after the dispatch loop has completed.
-        for s in to_remove_once:
-            self.unsubscribe(event.name, s.handler)
+                handlers_to_unsubscribe.append((event.name, s.handler))
+
+        # Perform unsubscribes for 'once' handlers after the dispatch loop
+        for name, handler in handlers_to_unsubscribe:
+            self.unsubscribe(name, handler)
 === END ===

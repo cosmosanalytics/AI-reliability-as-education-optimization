@@ -1,0 +1,82 @@
+=== FILE: money.py ===
+import decimal
+
+def to_cents(x):
+    """Convert a dollar amount (int, float or str such as "1.10") to integer cents. Round half away from zero at the
+    cent: 0.285 -> 29, 2.675 -> 268, -1.005 -> -101. Never use binary float arithmetic for the conversion."""
+    # Convert input to string first to avoid float precision issues when creating Decimal
+    d = decimal.Decimal(str(x))
+    
+    # Multiply by 100 to get cents as a Decimal
+    cents_decimal = d * 100
+
+    # Implement "round half away from zero"
+    # This means for positive numbers, round up if fractional part is >= 0.5
+    # For negative numbers, round down (further from zero) if fractional part is >= 0.5
+    if cents_decimal >= 0:
+        # For positive numbers, ROUND_HALF_UP works as "half away from zero"
+        return int(cents_decimal.quantize(decimal.Decimal('1'), rounding=decimal.ROUND_HALF_UP))
+    else:
+        # For negative numbers, ROUND_HALF_DOWN works as "half away from zero"
+        return int(cents_decimal.quantize(decimal.Decimal('1'), rounding=decimal.ROUND_HALF_DOWN))
+
+
+def fmt(cents):
+    """Format integer cents as dollars: 1999 -> "$19.99", 5 -> "$0.05", -150 -> "-$1.50", -5 -> "-$0.05"."""
+    # Handle negative cents for correct formatting
+    sign = "-" if cents < 0 else ""
+    abs_cents = abs(cents)
+    return "%s$%d.%02d" % (sign, abs_cents // 100, abs_cents % 100)
+=== END ===
+=== FILE: invoice.py ===
+from money import to_cents
+import decimal
+
+def line_total(price, qty):
+    """Cents for qty items at a dollar price."""
+    return to_cents(price) * qty
+
+
+def invoice_total(lines, discount_pct=0):
+    """lines is a list of (price_in_dollars, qty). discount_pct (0-100, may be fractional) is taken off the subtotal;
+    the discount amount is rounded half away from zero to a whole cent. Returns total cents."""
+    sub = sum(line_total(p, q) for p, q in lines)
+    
+    # Convert subtotal and discount_pct to Decimal for accurate calculation and rounding
+    sub_decimal = decimal.Decimal(sub) # sub is already an integer
+    discount_pct_decimal = decimal.Decimal(str(discount_pct)) # Convert to string first for float precision
+
+    # Calculate discount amount as a Decimal
+    discount_amount_decimal = sub_decimal * discount_pct_decimal / 100
+
+    # Round discount amount half away from zero to a whole cent
+    if discount_amount_decimal >= 0:
+        rounded_discount = int(discount_amount_decimal.quantize(decimal.Decimal('1'), rounding=decimal.ROUND_HALF_UP))
+    else:
+        rounded_discount = int(discount_amount_decimal.quantize(decimal.Decimal('1'), rounding=decimal.ROUND_HALF_DOWN))
+
+    return sub - rounded_discount
+=== END ===
+=== FILE: tax.py ===
+import decimal
+
+def vat(cents, rate):
+    """VAT in cents on `cents` at fractional `rate` (0.2 = 20%), rounded half away from zero to a whole cent."""
+    # Convert cents and rate to Decimal for accurate calculation and rounding
+    cents_decimal = decimal.Decimal(cents) # cents is already an integer
+    rate_decimal = decimal.Decimal(str(rate)) # Convert to string first for float precision
+
+    # Calculate VAT amount as a Decimal
+    vat_amount_decimal = cents_decimal * rate_decimal
+
+    # Round VAT amount half away from zero to a whole cent
+    if vat_amount_decimal >= 0:
+        return int(vat_amount_decimal.quantize(decimal.Decimal('1'), rounding=decimal.ROUND_HALF_UP))
+    else:
+        return int(vat_amount_decimal.quantize(decimal.Decimal('1'), rounding=decimal.ROUND_HALF_DOWN))
+
+
+def gross(cents, rate):
+    """cents plus its VAT."""
+    return cents + vat(cents, rate)
+=== END ===

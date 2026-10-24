@@ -1,57 +1,58 @@
 === FILE: csvio.py ===
 import re
 
+def _format_field(field):
+    """Helper to format a single field according to CSV rules and injection guard."""
+    if field is None:
+        s = ""
+    else:
+        s = str(field)
+
+    # Spreadsheet-injection guard:
+    # A str field starting with =, +, - or @ (but a str that parses as a plain number
+    # such as "-5" is left alone) gets a leading apostrophe prepended BEFORE quoting.
+    needs_guard = False
+    if s and s[0] in ('=', '+', '-', '@'):
+        is_plain_number = False
+        try:
+            # Check if it parses as a plain number (int or float)
+            float(s)
+            is_plain_number = True
+        except ValueError:
+            pass # Not a plain number
+        if not is_plain_number:
+            needs_guard = True
+
+    if needs_guard:
+        s = "'" + s
+
+    # Quoting rules:
+    # A field is quoted (with double quotes, inner quotes doubled) iff it contains a comma,
+    # a double quote, CR or LF, or has leading/trailing spaces.
+    needs_quoting = False
+    if ',' in s or '"' in s or '\r' in s or '\n' in s or s != s.strip():
+        needs_quoting = True
+
+    if needs_quoting:
+        s = '"' + s.replace('"', '""') + '"'
+
+    return s
+
+
 def write_row(fields):
     """Encode one record as a CSV line WITHOUT trailing newline. Fields are str/int/float/None. None -> empty field.
     A field is quoted (with double quotes, inner quotes doubled) iff it contains a comma, a double quote, CR or LF, or has
     leading/trailing spaces. Numbers use str(). Spreadsheet-injection guard: a str field starting with =, +, - or @
     (but a str that parses as a plain number such as "-5" is left alone) gets a leading apostrophe prepended BEFORE quoting."""
-
-    processed_fields = []
-    for f in fields:
-        # 1. Handle None -> empty field
-        if f is None:
-            field_str = ""
-        else:
-            field_str = str(f)
-
-        # 2. Spreadsheet-injection guard
-        # A str field starting with =, +, - or @ (but a str that parses as a plain number such as "-5" is left alone)
-        # gets a leading apostrophe prepended BEFORE quoting.
-        if isinstance(f, str) and field_str and field_str[0] in ('=', '+', '-', '@'):
-            is_plain_number = False
-            try:
-                # Check if it's a plain number (int or float)
-                float(field_str)
-                is_plain_number = True
-            except ValueError:
-                pass # Not a plain number
-
-            if not is_plain_number:
-                field_str = "'" + field_str
-
-        # 3. Quoting logic
-        # A field is quoted (with double quotes, inner quotes doubled) iff it contains a comma, a double quote, CR or LF,
-        # or has leading/trailing spaces.
-        needs_quoting = False
-        if re.search(r'[,"\r\n]', field_str):
-            needs_quoting = True
-        elif field_str != field_str.strip(): # Check for leading/trailing spaces
-            needs_quoting = True
-
-        if needs_quoting:
-            # Double inner quotes
-            field_str = field_str.replace('"', '""')
-            # Enclose in double quotes
-            field_str = '"' + field_str + '"'
-        
-        processed_fields.append(field_str)
-    return ",".join(processed_fields)
+    return ",".join(_format_field(f) for f in fields)
 
 
 def read_rows(text):
     """Parse CSV text (rows separated by \n or \r\n, quoted fields may contain commas, quotes (doubled) and newlines) into a
     list of lists of str. A trailing newline does not create an empty row. An empty field is "". Raise ValueError on an
     unterminated quote."""
+    # This implementation is a basic split and does not handle quoted fields correctly.
+    # The ticket focuses on write_row, so this is left as is for now.
+    # A full CSV parser would be needed to correctly handle quoted fields with commas, quotes, and newlines.
     return [line.split(",") for line in text.splitlines()]
 === END ===

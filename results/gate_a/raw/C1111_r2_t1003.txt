@@ -10,41 +10,51 @@ def next_occurrence(start, rule, after):
     is too short use that month's LAST day (31 Jan -> 28/29 Feb -> 31 Mar, always counted from the ORIGINAL start day, so
     the day returns to 31 in March). Raise ValueError for an unknown rule."""
 
-    # Store original day and time from the 'start' (first occurrence) for the monthly rule
-    # This ensures that the day-of-month and time components are consistently derived from the initial 'start'
-    # for monthly recurrences, as per the docstring.
-    original_day = start.day
-    original_time = start.time()
+    # Helper to get the next occurrence based on the rule, relative to a given 'current' date.
+    # This helper does not consider the 'after' boundary.
+    def _get_next_single_occurrence(current_dt, original_start_dt, rule_type):
+        if rule_type == "daily":
+            return current_dt + timedelta(days=1)
+        elif rule_type == "weekly":
+            # To avoid DST issues, add 7 days and then ensure the time matches the original start time.
+            # This preserves the wall-clock time and weekday.
+            next_week_dt = current_dt + timedelta(days=7)
+            return next_week_dt.replace(
+                hour=original_start_dt.hour,
+                minute=original_start_dt.minute,
+                second=original_start_dt.second,
+                microsecond=original_start_dt.microsecond
+            )
+        elif rule_type == "monthly":
+            # Calculate the target month and year
+            target_month = current_dt.month % 12 + 1
+            target_year = current_dt.year + (current_dt.month == 12)
+
+            # Determine the day. Use the original start day, but cap it at the last day of the target month.
+            original_day = original_start_dt.day
+            days_in_target_month = calendar.monthrange(target_year, target_month)[1]
+            target_day = min(original_day, days_in_target_month)
+
+            # Create the new datetime, preserving the time components from the original start.
+            return datetime(
+                target_year,
+                target_month,
+                target_day,
+                original_start_dt.hour,
+                original_start_dt.minute,
+                original_start_dt.second,
+                original_start_dt.microsecond
+            )
+        else:
+            raise ValueError(rule_type)
 
     cur = start
+    # The loop condition `cur <= after` ensures that if `cur` is equal to `after`,
+    # it will be advanced to the *next* occurrence, satisfying "STRICTLY after `after`".
+    # If `start > after`, the loop is skipped and `start` is returned, satisfying
+    # "or start itself if start > after".
     while cur <= after:
-        if rule == "daily":
-            cur += timedelta(days=1)
-        elif rule == "weekly":
-            # For naive datetimes, timedelta(days=7) preserves the wall-clock time and weekday.
-            # The "drift" mentioned in the ticket for weekly events is likely due to expectations
-            # around timezone-aware behavior, which is not applicable to naive datetimes.
-            # The current implementation matches the docstring "same weekday and wall-clock time every 7 days".
-            cur += timedelta(days=7)
-        elif rule == "monthly":
-            # Calculate the next month and year
-            year = cur.year
-            month = cur.month + 1
-            if month > 12:
-                month = 1
-                year += 1
+        cur = _get_next_single_occurrence(cur, start, rule)
 
-            # Determine the target day for the new month.
-            # Use original_day, but cap it at the last day of the target month if it's too short.
-            # This addresses the "vanish in short months" bug and the "always counted from the ORIGINAL start day" requirement.
-            max_day_in_next_month = calendar.monthrange(year, month)[1]
-            target_day = min(original_day, max_day_in_next_month)
-
-            # Construct the new datetime, preserving the original time components
-            cur = datetime(year, month, target_day,
-                           original_time.hour, original_time.minute,
-                           original_time.second, original_time.microsecond)
-        else:
-            raise ValueError(rule)
     return cur
 === END ===

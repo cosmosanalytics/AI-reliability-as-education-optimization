@@ -1,0 +1,44 @@
+=== FILE: recur.py ===
+from datetime import datetime, timedelta
+from calendar import monthrange
+
+
+def next_occurrence(start, rule, after):
+    """start: naive datetime of the first occurrence. rule: "daily", "weekly" or "monthly". Return the first occurrence
+    STRICTLY after `after` (a naive datetime), or start itself if start > after. Occurrences are start + n periods, n>=0.
+    Weekly = same weekday and wall-clock time every 7 days. Monthly = same day-of-month and time each month; if the month
+    is too short use that month's LAST day (31 Jan -> 28/29 Feb -> 31 Mar, always counted from the ORIGINAL start day, so
+    the day returns to 31 in March). Raise ValueError for an unknown rule."""
+    cur = start
+    # The loop condition `cur <= after` ensures that the returned occurrence is
+    # STRICTLY after `after`. If `start > after`, the loop is skipped and `start`
+    # is returned, which matches the docstring.
+    while cur <= after:
+        if rule == "daily":
+            cur += timedelta(days=1)
+        elif rule == "weekly":
+            # For naive datetimes, adding timedelta(days=7) preserves the wall-clock time.
+            # This correctly implements "same weekday and wall-clock time every 7 days"
+            # without drifting due to DST changes, as naive datetimes do not account for timezones.
+            cur += timedelta(days=7)
+        elif rule == "monthly":
+            # Calculate the next month and year based on the current occurrence's date.
+            next_month = cur.month % 12 + 1
+            next_year = cur.year + (cur.month == 12)
+
+            # The target day for the next occurrence is always based on the ORIGINAL start day.
+            target_day = start.day
+
+            # Determine the last day of the calculated next month.
+            _, last_day_of_next_month = monthrange(next_year, next_month)
+
+            # If the original start day is greater than the last day of the next month,
+            # use the last day of the next month. Otherwise, use the original start day.
+            day_to_use = min(target_day, last_day_of_next_month)
+
+            # Create the new datetime for the next month, preserving time components.
+            cur = cur.replace(year=next_year, month=next_month, day=day_to_use)
+        else:
+            raise ValueError(rule)
+    return cur
+=== END ===

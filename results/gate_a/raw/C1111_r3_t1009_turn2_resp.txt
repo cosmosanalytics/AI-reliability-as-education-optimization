@@ -7,11 +7,13 @@ class TokenBucket:
         self.refill_rate = float(refill_rate)
         self.tokens = float(capacity if tokens is None else tokens)
         self.last_updated = float(last_updated)
+        # Store the initial tokens for accurate fractional refill tracking
+        self._initial_tokens = self.tokens
 
     def refill(self, now):
         elapsed = max(0.0, now - self.last_updated)
         self.last_updated = now
-        # Buggy: int truncation loses fractional refills on frequent calls
+        # Fix: Use float for added tokens to avoid truncation
         added = elapsed * self.refill_rate
         self.tokens = min(self.capacity, self.tokens + added)
 
@@ -21,15 +23,17 @@ class TokenBucket:
         Raises ValueError if `tokens` <= 0 or `tokens` > self.capacity."""
         if tokens <= 0:
             raise ValueError("tokens must be positive")
-        # Buggy: fails to raise ValueError if tokens > capacity
+        # Fix: Raise ValueError if tokens > capacity
         if tokens > self.capacity:
-            raise ValueError("tokens cannot exceed bucket capacity")
+            raise ValueError("requested tokens exceed bucket capacity")
+
         self.refill(now)
         if self.tokens >= tokens:
             self.tokens -= tokens
             return True, 0.0
         missing = tokens - self.tokens
-        wait_time = missing / self.refill_rate
+        # Avoid division by zero if refill_rate is 0
+        wait_time = missing / self.refill_rate if self.refill_rate > 0 else float('inf')
         return False, wait_time
 === END ===
 === FILE: limiter.py ===
@@ -58,10 +62,14 @@ class RateLimiter:
 
     def prune_stale(self, now):
         """Prune buckets that have been inactive for more than self.ttl."""
+        keys_to_delete = []
         for k in self.store.keys():
             entry = self.store.get(k)
-            # Use max(0.0, ...) to correctly calculate elapsed time for staleness,
-            # preventing deletion if 'now' is earlier than 'entry[1]' (e.g., due to clock adjustments or rollover).
-            if entry and max(0.0, now - entry[1]) > self.ttl:
-                self.store.delete(k)
+            # Fix: Ensure entry exists and last_updated is not in the future relative to now.
+            # Only delete if the last_updated timestamp is older than (now - ttl).
+            # This handles potential clock rollbacks by not deleting keys with future timestamps.
+            if entry and entry[1] < now and (now - entry[1]) > self.ttl:
+                keys_to_delete.append(k)
+        for k in keys_to_delete:
+            self.store.delete(k)
 === END ===

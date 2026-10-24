@@ -11,7 +11,7 @@ class Ledger:
     def record(self, customer, ts, units):
         """Record an entry. Reject (ValueError) a units value of 0, a non-int units (bools too), a non-datetime ts or an empty
         customer name."""
-        # BUG FIX: Do not take absolute value of units. This ensures negative units (refunds) are recorded correctly.
+        # Bug fix: `abs(units)` was incorrectly making refunds positive.
         self.entries.append((customer, ts, units))
 
     def customers(self):
@@ -26,19 +26,21 @@ def monthly_report(ledger, year, month, customers=None):
     """Dict customer -> net units for the month (refunds subtract). Includes every customer in `customers` (default:
     all customers in the ledger) with 0 when they have no entries that month."""
     start, end = month_bounds(year, month)
-    
-    # BUG FIX: Initialize the report dictionary with all relevant customers, setting their initial usage to 0.
-    # This ensures customers with no usage in the specified month are included in the report with a zero value.
-    all_customers_for_report = customers if customers is not None else ledger.customers()
-    out = {c: 0 for c in all_customers_for_report}
-    
+
+    # Bug fix: Initialize report with all relevant customers, setting their usage to 0.
+    # If `customers` is None, default to all customers ever seen in the ledger.
+    if customers is None:
+        report_customers = ledger.customers()
+    else:
+        report_customers = sorted(list(set(customers))) # Ensure unique and sorted for consistent output if `customers` is provided
+
+    out = {c: 0 for c in report_customers}
+
     for c, ts, u in ledger.entries:
-        # BUG FIX: Correct time boundary check. An entry belongs to the month if its timestamp `ts` is
-        # greater than or equal to `start` and strictly less than `end`.
-        # The original `ts <= end` incorrectly included the first instant of the *next* month.
+        # Bug fix: Date comparison should be `ts < end` to exclude entries exactly at the start of the next month.
         if start <= ts < end:
-            # Only update if the customer is part of the requested report (either all ledger customers or specific 'customers' list).
+            # Only update if the customer is part of the requested report_customers set.
             if c in out:
-                out[c] += u # `u` can now be negative for refunds due to fix in ledger.py
+                out[c] += u
     return out
 === END ===

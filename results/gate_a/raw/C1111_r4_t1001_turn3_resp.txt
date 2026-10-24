@@ -1,0 +1,61 @@
+=== FILE: money.py ===
+from decimal import Decimal, ROUND_HALF_UP
+
+
+def _round_half_away_from_zero(x):
+    """Round a Decimal or float x half away from zero to the nearest integer.
+    Uses ROUND_HALF_UP which rounds .5 up for positive and down for negative,
+    effectively rounding away from zero."""
+    if not isinstance(x, Decimal):
+        x = Decimal(str(x))
+    # Quantize to a whole number (exponent 0) using ROUND_HALF_UP
+    return int(x.quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+
+
+def to_cents(x):
+    """Convert a dollar amount (int, float or str such as "1.10") to integer cents. Round half away from zero at the
+    cent: 0.285 -> 29, 2.675 -> 268, -1.005 -> -101. Never use binary float arithmetic for the conversion."""
+    # Convert input to Decimal to avoid float precision issues, then multiply by 100.
+    # The _round_half_away_from_zero helper handles the final rounding.
+    return _round_half_away_from_zero(Decimal(str(x)) * 100)
+
+
+def fmt(cents):
+    """Format integer cents as dollars: 1999 -> "$19.99", 5 -> "$0.05", -150 -> "-$1.50", -5 -> "-$0.05"."""
+    sign = "-" if cents < 0 else ""
+    abs_cents = abs(cents)
+    return "%s$%d.%02d" % (sign, abs_cents // 100, abs_cents % 100)
+=== END ===
+=== FILE: invoice.py ===
+from money import to_cents, _round_half_away_from_zero
+
+
+def line_total(price, qty):
+    """Cents for qty items at a dollar price."""
+    return to_cents(price) * qty
+
+
+def invoice_total(lines, discount_pct=0):
+    """lines is a list of (price_in_dollars, qty). discount_pct (0-100, may be fractional) is taken off the subtotal;
+    the discount amount is rounded half away from zero to a whole cent. Returns total cents."""
+    sub = sum(line_total(p, q) for p, q in lines)
+    # The discount amount must be rounded half away from zero.
+    # Use the helper function for consistent rounding.
+    discount_amount = _round_half_away_from_zero(sub * discount_pct / 100)
+    return sub - discount_amount
+=== END ===
+=== FILE: tax.py ===
+from money import _round_half_away_from_zero
+
+
+def vat(cents, rate):
+    """VAT in cents on `cents` at fractional `rate` (0.2 = 20%), rounded half away from zero to a whole cent."""
+    # VAT amount must be rounded half away from zero.
+    # Use the helper function for consistent rounding.
+    return _round_half_away_from_zero(cents * rate)
+
+
+def gross(cents, rate):
+    """cents plus its VAT."""
+    return cents + vat(cents, rate)
+=== END ===

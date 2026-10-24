@@ -1,58 +1,60 @@
 === FILE: csvio.py ===
+import csv
+import io
+
+def _apply_spreadsheet_guard(field):
+    """Applies the spreadsheet injection guard to a string field."""
+    if not isinstance(field, str):
+        return field
+
+    if field.startswith(('=', '+', '-', '@')):
+        try:
+            # Check if it parses as a plain number (e.g., "-5", "+10")
+            float(field)
+            # If it parses as a number, leave it alone
+            return field
+        except ValueError:
+            # If it does not parse as a number (e.g., "=SUM(A1)", "@user", "-abc"),
+            # prepend an apostrophe to prevent spreadsheet injection.
+            return "'" + field
+    return field
+
 def write_row(fields):
     """Encode one record as a CSV line WITHOUT trailing newline. Fields are str/int/float/None. None -> empty field.
     A field is quoted (with double quotes, inner quotes doubled) iff it contains a comma, a double quote, CR or LF, or has
     leading/trailing spaces. Numbers use str(). Spreadsheet-injection guard: a str field starting with =, +, - or @
     (but a str that parses as a plain number such as "-5" is left alone) gets a leading apostrophe prepended BEFORE quoting."""
+    # Apply spreadsheet guard to each field first
+    guarded_fields = [_apply_spreadsheet_guard(f) for f in fields]
 
-    formatted_fields = []
-    for field in fields:
-        if field is None:
-            s = ""
-        else:
-            s = str(field)
+    # Use StringIO to capture the CSV output
+    output = io.StringIO()
+    # csv.writer handles quoting, inner quotes, commas, newlines, etc.
+    # It also converts None to empty strings by default, matching the docstring.
+    # It calls str() on non-string types, matching "Numbers use str()".
+    writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)
+    writer.writerow(guarded_fields)
 
-        # Spreadsheet-injection guard
-        if s and s[0] in ('=', '+', '-', '@'):
-            is_number_string = False
-            try:
-                # Check if it's a number string like "-5" or "+10.5"
-                # This will fail for "=SUM(...)" or "@user"
-                float(s)
-                is_number_string = True
-            except ValueError:
-                pass # Not a number string
-
-            if not is_number_string:
-                s = "'" + s
-
-        # Quoting logic
-        needs_quoting = False
-        # Check for characters that require quoting
-        if ',' in s or '"' in s or '\r' in s or '\n' in s:
-            needs_quoting = True
-        # Check for leading/trailing spaces that require quoting
-        if s != s.strip():
-            needs_quoting = True
-
-        if needs_quoting:
-            # Double inner quotes
-            s = s.replace('"', '""')
-            # Enclose in double quotes
-            s = '"' + s + '"'
-        
-        formatted_fields.append(s)
-
-    return ",".join(formatted_fields)
+    # Get the content and remove the trailing newline added by writerow
+    return output.getvalue().rstrip('\r\n')
 
 
 def read_rows(text):
     """Parse CSV text (rows separated by \n or \r\n, quoted fields may contain commas, quotes (doubled) and newlines) into a
     list of lists of str. A trailing newline does not create an empty row. An empty field is "". Raise ValueError on an
     unterminated quote."""
-    # The current ticket focuses on fixing CSV export issues.
-    # The read_rows function is not a full CSV parser and would require significant changes
-    # to correctly handle quoted fields, doubled quotes, and newlines within fields.
-    # This is out of scope for the current bug report, which is about malformed *export*.
-    return [line.split(",") for line in text.splitlines()]
+    # Use StringIO to treat the input text as a file
+    input_file = io.StringIO(text)
+    # csv.reader handles quoted fields, doubled quotes, newlines within fields, etc.
+    reader = csv.reader(input_file)
+
+    rows = []
+    try:
+        for row in reader:
+            rows.append(row)
+    except csv.Error as e:
+        # Translate csv.Error to ValueError as per docstring
+        raise ValueError(f"CSV parsing error: {e}") from e
+
+    return rows
 === END ===

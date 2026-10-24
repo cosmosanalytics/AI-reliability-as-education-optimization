@@ -16,9 +16,10 @@ class MiddlewarePipeline:
         executed_middlewares = []
         for mw in self.middlewares:
             mw.process_request(ctx)
-            executed_middlewares.append(mw) # Always add, even if aborted, so its response hook can run
+            executed_middlewares.append(mw)
             if ctx.aborted:
-                break # Stop processing further request hooks
+                # Stop calling subsequent request hooks
+                break
 
         if not ctx.aborted:
             handler(ctx)

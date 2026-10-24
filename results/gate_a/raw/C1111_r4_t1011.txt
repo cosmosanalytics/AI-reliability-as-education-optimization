@@ -36,8 +36,7 @@ class KVEngine:
         self.memtable.set(key, str(val))
 
     def delete(self, key):
-        # Fix: calling delete on a non-existent key should be a no-op, not raise KeyError.
-        # The memtable.delete method already handles non-existent keys gracefully.
+        # Fix: make delete a no-op for non-existent keys
         with open(self.wal_path, "a", encoding="utf-8") as f:
             f.write(serialize_entry("DEL", key))
         self.memtable.delete(key)

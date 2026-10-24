@@ -1,0 +1,111 @@
+=== FILE: csvio.py ===
+import re
+
+# Regex to match a single CSV field.
+# It handles:
+# 1. Quoted fields: starts with ", ends with ", inner "" means a single ".
+#    Allows commas, newlines inside quotes.
+# 2. Unquoted fields: anything not containing comma, double quote, or newline.
+# This regex matches one field and consumes the trailing comma if present,
+# or asserts end of line if not.
+_CSV_FIELD_RE = re.compile(r'''
+    \s* # Optional leading whitespace (not part of the field content)
+    (?:
+        "((?:[^"]|"")*)" # Group 1: Quoted field content (unescaped quotes are "")
+        |
+        ([^",\r\n]*)    # Group 2: Unquoted field content
+    )
+    (?:,|$) # Must be followed by a comma or end of line
+    \s* # Optional trailing whitespace (not part of the field content)
+''', re.VERBOSE)
+
+
+def write_row(fields):
+    """Encode one record as a CSV line WITHOUT trailing newline. Fields are str/int/float/None. None -> empty field.
+    A field is quoted (with double quotes, inner quotes doubled) iff it contains a comma, a double quote, CR or LF, or has
+    leading/trailing spaces. Numbers use str(). Spreadsheet-injection guard: a str field starting with =, +, - or @
+    (but a str that parses as a plain number such as "-5" is left alone) gets a leading apostrophe prepended BEFORE quoting."""
+    processed_fields = []
+    for f in fields:
+        s = ""
+        if f is None:
+            s = ""
+        elif isinstance(f, (int, float)):
+            s = str(f)
+        else:  # Assume it's a string or convertible to string
+            s = str(f)
+
+            # Spreadsheet-injection guard
+            # Check if it starts with a special character and is NOT a plain number.
+            if s and s[0] in ('=', '+', '-', '@'):
+                is_plain_number = False
+                try:
+                    # Check if the string can be parsed as a float.
+                    # This handles cases like "-5", "+10.5", etc.
+                    float(s)
+                    is_plain_number = True
+                except ValueError:
+                    pass # Not a plain number
+
+                if not is_plain_number:
+                    s = "'" + s  # Prepend apostrophe
+
+        # Determine if quoting is needed
+        needs_quoting = (
+            "," in s or
+            '"' in s or
+            "\r" in s or
+            "\n" in s or
+            s.strip() != s  # leading/trailing spaces
+        )
+
+        if needs_quoting:
+            # Double inner quotes, then enclose in double quotes
+            processed_fields.append(f'"{s.replace('"', '""')}"')
+        else:
+            processed_fields.append(s)
+
+    return ",".join(processed_fields)
+
+
+def read_rows(text):
+    """Parse CSV text (rows separated by \n or \r\n, quoted fields may contain commas, quotes (doubled) and newlines) into a
+    list of lists of str. A trailing newline does not create an empty row. An empty field is "". Raise ValueError on an
+    unterminated quote."""
+    rows = []
+    for line in text.splitlines():
+        if not line.strip(): # Skip empty lines, including those from trailing newlines
+            continue
+
+        row = []
+        pos = 0
+        while pos < len(line):
+            match = _CSV_FIELD_RE.match(line, pos)
+            if not match:
+                # If no match, it's a malformed line (e.g., unterminated quote, or invalid characters)
+                raise ValueError(f"Malformed CSV line or unterminated quote at position {pos}: {line}")
+
+            quoted_field, unquoted_field = match.groups()
+            if quoted_field is not None:
+                # Unescape double quotes
+                row.append(quoted_field.replace('""', '"'))
+            elif unquoted_field is not None:
+                row.append(unquoted_field)
+            else:
+                # This case should not be reached if regex is correct and always captures one of the groups.
+                # It implies an empty field that wasn't explicitly captured as unquoted_field="".
+                # The regex `([^",\r\n]*)` handles empty unquoted fields.
+                row.append("") # Fallback for safety, though likely redundant
+
+            pos = match.end()
+
+        # After parsing the entire line, if pos is not equal to len(line),
+        # it means there was unparsed content, indicating a malformed line.
+        # This check is crucial for catching cases like `a,"b"c` where 'c' is left over.
+        if pos != len(line):
+            raise ValueError(f"Malformed CSV line: unparsed content after field at position {pos}: {line}")
+
+        rows.append(row)
+
+    return rows
+=== END ===

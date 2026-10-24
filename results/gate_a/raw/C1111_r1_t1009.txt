@@ -11,7 +11,7 @@ class TokenBucket:
     def refill(self, now):
         elapsed = max(0.0, now - self.last_updated)
         self.last_updated = now
-        # Fixed: fractional token refills are no longer truncated to integers.
+        # Fix: remove int truncation to preserve fractional refills
         added = elapsed * self.refill_rate
         self.tokens = min(self.capacity, self.tokens + added)
 
@@ -21,9 +21,10 @@ class TokenBucket:
         Raises ValueError if `tokens` <= 0 or `tokens` > self.capacity."""
         if tokens <= 0:
             raise ValueError("tokens must be positive")
-        # Fixed: Raise ValueError if tokens requested exceeds bucket capacity, as per docstring.
+        # Fix: raise ValueError if tokens requested exceeds bucket capacity as per docstring
         if tokens > self.capacity:
             raise ValueError("tokens requested exceeds bucket capacity")
+
         self.refill(now)
         if self.tokens >= tokens:
             self.tokens -= tokens
@@ -58,14 +59,14 @@ class RateLimiter:
 
     def prune_stale(self, now):
         """Prune buckets that have been inactive for more than self.ttl."""
+        keys_to_delete = []
         for k in self.store.keys():
             entry = self.store.get(k)
-            if entry:
-                # Fixed: Ensure elapsed time is non-negative to handle clock backward jumps robustly.
-                # This prevents keys from being considered "not stale" if the clock jumps backward,
-                # which could lead to active keys being incorrectly pruned if the original
-                # `now - entry[1]` became negative and thus less than `self.ttl`.
-                elapsed = max(0.0, now - entry[1])
-                if elapsed > self.ttl:
-                    self.store.delete(k)
+            # Fix: Ensure `now - entry[1]` is non-negative to correctly calculate elapsed time.
+            # This prevents incorrect pruning if `now` is less than `entry[1]` due to clock
+            # adjustments or rollovers, which would result in a large negative elapsed time.
+            if entry and (max(0.0, now - entry[1])) > self.ttl:
+                keys_to_delete.append(k)
+        for k in keys_to_delete:
+            self.store.delete(k)
 === END ===

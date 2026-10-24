@@ -10,32 +10,24 @@ class Groups:
 
     def remove(self, group, member):
         """Remove member from group; removing a non-member is a no-op. An emptied group still exists."""
-        # Fix for issue #1: Actually remove the member from the group's set.
         if group in self.members:
-            self.members[group].discard(member) # Use discard to avoid KeyError if member is not present
+            self.members[group].discard(member)
 
     def groups_of(self, user):
         """Set of all groups the user belongs to, directly or through nested groups."""
-        # Fix for issue #3: Traverse nested groups using a BFS-like approach.
-        all_groups = set()
-        q = [user] # Queue for members to process (can be users or groups)
-        visited_members = set() # To prevent cycles and redundant processing
+        # Use a worklist algorithm to find all groups the user belongs to, directly or indirectly.
+        # This handles cycles by only processing each group once.
+        user_groups = set()
+        worklist = {user} # Start with the user itself
 
-        while q:
-            current_member = q.pop(0) # Dequeue the current member
+        while worklist:
+            current_member = worklist.pop()
+            for group_name, members_set in self.members.items():
+                if current_member in members_set and group_name not in user_groups:
+                    user_groups.add(group_name)
+                    worklist.add(group_name) # Add the group itself to the worklist to check for nesting
 
-            if current_member in visited_members:
-                continue
-            visited_members.add(current_member)
-
-            # Find all groups where 'current_member' is a direct member
-            for group_name, direct_members in self.members.items():
-                if current_member in direct_members:
-                    if group_name not in all_groups: # Only add to queue if this is a new group found
-                        all_groups.add(group_name)
-                        q.append(group_name) # Add the group itself to the queue to find its parent groups
-
-        return all_groups
+        return user_groups
 === END ===
 === FILE: acl.py ===
 def allowed(groups, acl, user, path, action):
@@ -43,47 +35,42 @@ def allowed(groups, acl, user, path, action):
     name. A rule applies if its prefix is a path-segment prefix of path ("/a" covers "/a" and "/a/b" but NOT "/ab"; "/" covers
     everything), its action equals `action` or is "*", and its subject is the user or one of the user's groups (nested
     included). The MOST SPECIFIC (longest) matching prefix decides; at equal length deny beats allow. No match -> False."""
-    
-    candidate_rules = []
-    # Optimize by getting all user's groups once, and include the user itself as a subject.
-    user_and_groups = groups.groups_of(user)
-    user_and_groups.add(user)
+    best_match_len = -1
+    best_effect = None
+
+    # Pre-calculate all groups the user belongs to, including nested ones, for efficiency.
+    user_and_groups = {user} | groups.groups_of(user)
 
     for prefix, subject, act, effect in acl:
-        # 1. Path prefix matching: "/a" covers "/a" and "/a/b" but NOT "/ab"
+        # Check path prefix match
         if not path.startswith(prefix):
             continue
-        # Ensure it's a path-segment prefix (e.g., "/a" matches "/a/b" but not "/ab")
-        if prefix != "/" and len(path) > len(prefix) and path[len(prefix)] != '/':
+        # Ensure prefix matches whole path segments (e.g., "/a" matches "/a/b" but not "/ab")
+        if len(path) > len(prefix) and path[len(prefix)] != '/':
+            continue
+        if len(path) == len(prefix) and path != prefix: # Exact match required if lengths are equal
             continue
 
-        # 2. Action matching: "its action equals `action` or is `*`"
+        # Check action match
         if act != action and act != "*":
             continue
 
-        # 3. Subject matching: "its subject is the user or one of the user's groups (nested included)"
+        # Check subject match
         if subject not in user_and_groups:
             continue
-        
-        # If all checks pass, this rule is a candidate
-        candidate_rules.append((len(prefix), effect))
 
-    if not candidate_rules:
-        return False
+        # This rule is a candidate. Determine if it's the "best" so far.
+        current_len = len(prefix)
 
-    # Find the maximum prefix length among all candidate rules
-    max_len = max(rule_len for rule_len, _ in candidate_rules)
+        if current_len > best_match_len:
+            # This rule is more specific (longer prefix)
+            best_match_len = current_len
+            best_effect = effect
+        elif current_len == best_match_len:
+            # Same specificity, apply "deny beats allow" tie-breaker
+            if effect == "deny" and best_effect == "allow":
+                best_effect = effect # Deny overrides allow
+            # If both are deny, or both are allow, or current is allow and best is deny, keep best_effect.
 
-    # Filter rules to only those with the maximum prefix length
-    longest_rules_effects = [effect for rule_len, effect in candidate_rules if rule_len == max_len]
-
-    # Fix for issue #2: Apply "deny beats allow" tie-breaker for equal length prefixes
-    if "deny" in longest_rules_effects:
-        return False # If any "deny" rule exists among the longest, it takes precedence
-    elif "allow" in longest_rules_effects:
-        return True # Otherwise, if any "allow" rule exists, it allows access
-    else:
-        # This case should ideally not be reached if candidate_rules was not empty
-        # and max_len was found, as effects are either "allow" or "deny".
-        return False
+    return best_effect == "allow"
 === END ===

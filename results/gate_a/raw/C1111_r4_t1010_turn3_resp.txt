@@ -1,0 +1,51 @@
+=== FILE: dispatcher.py ===
+from subscriber import Subscriber
+
+
+class EventDispatcher:
+    def __init__(self):
+        self._subscribers = {}
+        self._next_subscriber_id = 0  # For stable FIFO ordering
+
+    def subscribe(self, name, handler, priority=0, once=False):
+        # Assign a unique ID to maintain FIFO order for equal priorities
+        sub = Subscriber(handler, priority, once)
+        sub._id = self._next_subscriber_id
+        self._next_subscriber_id += 1
+
+        self._subscribers.setdefault(name, []).append(sub)
+        return sub
+
+    def unsubscribe(self, name, handler):
+        if name in self._subscribers:
+            # Create a new list to avoid modifying the list during iteration elsewhere
+            self._subscribers[name] = [
+                s for s in self._subscribers[name] if s.handler != handler
+            ]
+
+    def dispatch(self, event):
+        """Dispatch event to subscribers sorted by priority (descending).
+        Equal priority subscribers must execute in FIFO order.
+        If event.cancelled is set, halt execution immediately."""
+        subs = self._subscribers.get(event.name, [])
+
+        # Sort by priority (descending) and then by subscriber ID (ascending) for stable FIFO
+        # The `reverse=True` applies to the tuple (priority, _id), so for equal priorities,
+        # a smaller _id (earlier subscription) will be considered "greater" and thus come first.
+        sorted_subs = sorted(subs, key=lambda s: (s.priority, s._id), reverse=True)
+
+        # Collect handlers to unsubscribe after dispatch to avoid modifying the list during iteration
+        handlers_to_unsubscribe = []
+
+        for s in sorted_subs:
+            # Check event.cancelled before each handler to halt execution immediately
+            if event.cancelled:
+                break
+            s.handler(event)
+            if s.once:
+                handlers_to_unsubscribe.append((event.name, s.handler))
+        
+        # Perform unsubscribes after the dispatch loop has completed
+        for name, handler in handlers_to_unsubscribe:
+            self.unsubscribe(name, handler)
+=== END ===

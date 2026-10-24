@@ -1,0 +1,90 @@
+=== FILE: groups.py ===
+class Groups:
+    """Group membership. Groups may contain users and other groups (nesting). Cycles must not hang."""
+
+    def __init__(self):
+        self.members = {}
+
+    def add(self, group, member):
+        self.members.setdefault(group, set()).add(member)
+
+    def remove(self, group, member):
+        """Remove member from group; removing a non-member is a no-op. An emptied group still exists."""
+        if group in self.members:
+            self.members[group].discard(member)
+
+    def groups_of(self, user):
+        """Set of all groups the user belongs to, directly or through nested groups."""
+        all_containing_groups = set()
+        
+        # Use a queue for breadth-first search to find all groups the user belongs to, directly or indirectly.
+        # Start with the user itself.
+        q = [user]
+        visited = set() # Keep track of members/groups already processed to prevent cycles and redundant work.
+
+        while q:
+            current_member = q.pop(0)
+            if current_member in visited:
+                continue
+            visited.add(current_member)
+
+            # Find all groups that directly contain the current_member
+            for group_name, members_set in self.members.items():
+                if current_member in members_set:
+                    all_containing_groups.add(group_name)
+                    # If this group hasn't been visited yet, add it to the queue
+                    # to find groups that contain *it*.
+                    if group_name not in visited:
+                        q.append(group_name)
+        
+        return all_containing_groups
+=== END ===
+=== FILE: acl.py ===
+def allowed(groups, acl, user, path, action):
+    """acl: list of (path_prefix, subject, action, effect) with effect "allow" or "deny"; subject is a user name or group
+    name. A rule applies if its prefix is a path-segment prefix of path ("/a" covers "/a" and "/a/b" but NOT "/ab"; "/" covers
+    everything), its action equals `action` or is "*", and its subject is the user or one of the user's groups (nested
+    included). The MOST SPECIFIC (longest) matching prefix decides; at equal length deny beats allow. No match -> False."""
+    
+    # Collect all groups the user belongs to, including nested ones.
+    user_groups = groups.groups_of(user)
+    
+    # Store potential best matches: (prefix_length, effect)
+    # Initialize with values that ensure any valid match will be considered.
+    best_match_length = -1
+    best_match_effect = None
+
+    for prefix, subject, act, effect in acl:
+        # Check path prefix match: "/a" covers "/a" and "/a/b" but NOT "/ab"; "/" covers everything
+        # A rule applies if:
+        # 1. The path is exactly the prefix (e.g., path="/a", prefix="/a")
+        # OR
+        # 2. The path starts with the prefix AND the character immediately following the prefix in the path is '/'
+        #    (e.g., path="/a/b", prefix="/a")
+        if not (path == prefix or (path.startswith(prefix) and len(path) > len(prefix) and path[len(prefix)] == '/')):
+            continue
+
+        # Check action match: action equals `action` or is "*"
+        if act != action and act != "*":
+            continue
+        
+        # Check subject match: subject is the user or one of the user's groups (nested included)
+        if subject != user and subject not in user_groups:
+            continue
+        
+        # This rule is a candidate. Now compare its specificity.
+        current_prefix_length = len(prefix)
+
+        if current_prefix_length > best_match_length:
+            # This rule is more specific (longer prefix). It becomes the new best.
+            best_match_length = current_prefix_length
+            best_match_effect = effect
+        elif current_prefix_length == best_match_length:
+            # Equal specificity. Deny beats allow.
+            if best_match_effect == "allow" and effect == "deny":
+                best_match_effect = "deny"
+            # If current is "allow" and best is "deny", deny still wins.
+            # If both are "allow" or both are "deny", the first one encountered (or current one) is fine.
+
+    return best_match_effect == "allow"
+=== END ===

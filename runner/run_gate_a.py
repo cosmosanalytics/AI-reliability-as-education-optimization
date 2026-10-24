@@ -25,7 +25,8 @@ if __name__ == "__main__":
         model_id="gemini-2.5-flash",
         backend="gemini",
         output_dir=os.path.join(repo_root, "results", "gate_a"),
-        frozen_commit_sha="f9d6c18",
+        frozen_commit_sha="915711b",
+        retry_feedback_mode="policy_plus_visible_pytest",
         seed=42,
         max_workers=6,
     )

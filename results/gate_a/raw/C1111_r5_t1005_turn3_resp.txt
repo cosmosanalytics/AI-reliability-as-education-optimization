@@ -1,0 +1,86 @@
+=== FILE: groups.py ===
+class Groups:
+    """Group membership. Groups may contain users and other groups (nesting). Cycles must not hang."""
+
+    def __init__(self):
+        self.members = {}
+
+    def add(self, group, member):
+        self.members.setdefault(group, set()).add(member)
+
+    def remove(self, group, member):
+        """Remove member from group; removing a non-member is a no-op. An emptied group still exists."""
+        if group in self.members:
+            self.members[group].discard(member)
+
+    def groups_of(self, user):
+        """Set of all groups the user belongs to, directly or through nested groups."""
+        all_groups = set()
+        # Use a queue for BFS-like traversal to find all groups the user belongs to,
+        # directly or through nested groups.
+        # The queue can contain both users and group names.
+        q = [user]
+        visited = set() # Keep track of members/groups already processed to prevent cycles and redundant work
+
+        while q:
+            current_entity = q.pop(0) # Use pop(0) for BFS
+            if current_entity in visited:
+                continue
+            visited.add(current_entity)
+
+            for group_name, members_set in self.members.items():
+                if current_entity in members_set:
+                    all_groups.add(group_name)
+                    # If this group is itself a member of other groups, add it to the queue
+                    # to find those higher-level groups.
+                    if group_name not in visited:
+                        q.append(group_name)
+        return all_groups
+=== END ===
+=== FILE: acl.py ===
+def allowed(groups, acl, user, path, action):
+    """acl: list of (path_prefix, subject, action, effect) with effect "allow" or "deny"; subject is a user name or group
+    name. A rule applies if its prefix is a path-segment prefix of path ("/a" covers "/a" and "/a/b" but NOT "/ab"; "/" covers
+    everything), its action equals `action` or is "*", and its subject is the user or one of the user's groups (nested
+    included). The MOST SPECIFIC (longest) matching prefix decides; at equal length deny beats allow. No match -> False."""
+    best_match_len = -1
+    best_effect = None
+
+    # Pre-calculate all groups the user belongs to, including nested ones.
+    user_and_groups = {user} | groups.groups_of(user)
+
+    for prefix, subject, act, effect in acl:
+        # Path matching: "/a" covers "/a" and "/a/b" but NOT "/ab"; "/" covers everything.
+        # This means either path == prefix, or path starts with prefix + '/'
+        if not path.startswith(prefix):
+            continue
+        if len(path) > len(prefix) and path[len(prefix)] != '/':
+            continue
+        # The condition `path[len(prefix)] != '/'` correctly handles the "NOT /ab" case for prefix "/a".
+        # It also correctly handles "/" covering everything, as for prefix "/", len(prefix) is 1.
+        # If path is "/a", path[1] is 'a', so `path[len(prefix)] != '/'` is true, and it would fail.
+        # The correct logic is: if path is longer than prefix, the character immediately after prefix must be '/'.
+        # If path == prefix, it's a match.
+        if path != prefix and not path.startswith(prefix + '/'):
+            continue
+
+        if act != action and act != "*":
+            continue
+
+        if subject not in user_and_groups:
+            continue
+
+        # Check for most specific rule (longest prefix)
+        if len(prefix) > best_match_len:
+            best_match_len = len(prefix)
+            best_effect = effect
+        elif len(prefix) == best_match_len:
+            # At equal length, deny beats allow
+            if effect == "deny":
+                best_effect = "deny"
+            # If current effect is "allow" and best_effect is "deny", keep "deny"
+            # If current effect is "allow" and best_effect is "allow", keep "allow"
+            # So, only update if current effect is "deny"
+
+    return best_effect == "allow"
+=== END ===

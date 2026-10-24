@@ -1,0 +1,60 @@
+=== FILE: recur.py ===
+from datetime import datetime, timedelta
+import calendar
+
+
+def next_occurrence(start, rule, after):
+    """start: naive datetime of the first occurrence. rule: "daily", "weekly" or "monthly". Return the first occurrence
+    STRICTLY after `after` (a naive datetime), or start itself if start > after. Occurrences are start + n periods, n>=0.
+    Weekly = same weekday and wall-clock time every 7 days. Monthly = same day-of-month and time each month; if the month
+    is too short use that month's LAST day (31 Jan -> 28/29 Feb -> 31 Mar, always counted from the ORIGINAL start day, so
+    the day returns to 31 in March). Raise ValueError for an unknown rule."""
+
+    # Helper to get the next occurrence based on the rule, relative to a given 'current' date.
+    # This helper does not consider the 'after' boundary.
+    def _get_next_single_occurrence(current_dt, original_start_dt, rule_type):
+        if rule_type == "daily":
+            return current_dt + timedelta(days=1)
+        elif rule_type == "weekly":
+            # To avoid DST issues, add 7 days and then ensure the time matches the original start time.
+            # This preserves the wall-clock time and weekday.
+            next_week_dt = current_dt + timedelta(days=7)
+            return next_week_dt.replace(
+                hour=original_start_dt.hour,
+                minute=original_start_dt.minute,
+                second=original_start_dt.second,
+                microsecond=original_start_dt.microsecond
+            )
+        elif rule_type == "monthly":
+            # Calculate the target month and year
+            target_month = current_dt.month % 12 + 1
+            target_year = current_dt.year + (current_dt.month == 12)
+
+            # Determine the day. Use the original start day, but cap it at the last day of the target month.
+            original_day = original_start_dt.day
+            days_in_target_month = calendar.monthrange(target_year, target_month)[1]
+            target_day = min(original_day, days_in_target_month)
+
+            # Create the new datetime, preserving the time components from the original start.
+            return datetime(
+                target_year,
+                target_month,
+                target_day,
+                original_start_dt.hour,
+                original_start_dt.minute,
+                original_start_dt.second,
+                original_start_dt.microsecond
+            )
+        else:
+            raise ValueError(rule_type)
+
+    cur = start
+    # The loop condition `cur <= after` ensures that if `cur` is equal to `after`,
+    # it will be advanced to the *next* occurrence, satisfying "STRICTLY after `after`".
+    # If `start > after`, the loop is skipped and `start` is returned, satisfying
+    # "or start itself if start > after".
+    while cur <= after:
+        cur = _get_next_single_occurrence(cur, start, rule)
+
+    return cur
+=== END ===

@@ -6,18 +6,11 @@ class Event:
         self.name = name
         self.data = data or {}
         self.cancelled = False
+        self.propagation_stopped = False # New attribute to track propagation status
 
     def stop_propagation(self):
         """Halt dispatching to all subsequent subscribers immediately."""
-        self.cancelled = True
-=== END ===
-=== FILE: subscriber.py ===
-class Subscriber:
-    def __init__(self, handler, priority=0, once=False):
-        self.handler = handler
-        self.priority = int(priority)
-        self.once = bool(once)
-        self.insertion_order = None # Assigned by EventDispatcher to ensure FIFO for equal priorities
+        self.propagation_stopped = True
 === END ===
 === FILE: dispatcher.py ===
 from subscriber import Subscriber
@@ -26,52 +19,73 @@ from subscriber import Subscriber
 class EventDispatcher:
     def __init__(self):
         self._subscribers = {}
-        self._next_insertion_order = 0 # Counter for stable sorting of equal-priority subscribers
+        self._dispatching = False # New flag to indicate if dispatch is in progress
+        self._subscribers_to_remove_after_dispatch = [] # New list for deferred removals
 
     def subscribe(self, name, handler, priority=0, once=False):
         sub = Subscriber(handler, priority, once)
-        sub.insertion_order = self._next_insertion_order
-        self._next_insertion_order += 1
         self._subscribers.setdefault(name, []).append(sub)
+        # Maintain FIFO order for equal priorities by appending
         return sub
 
     def unsubscribe(self, name, handler):
         if name in self._subscribers:
-            # Rebuild the list, filtering out the specified handler.
-            # This creates a new list, which is safe against RuntimeError if the original list
-            # was being iterated directly (though dispatch iterates a copy).
-            self._subscribers[name] = [
-                s for s in self._subscribers[name] if s.handler != handler
-            ]
+            # If dispatching, defer removal to avoid modifying list during iteration
+            if self._dispatching:
+                # Find the subscriber object to remove
+                sub_to_remove = next((s for s in self._subscribers[name] if s.handler == handler), None)
+                if sub_to_remove and sub_to_remove not in self._subscribers_to_remove_after_dispatch:
+                    self._subscribers_to_remove_after_dispatch.append((name, sub_to_remove))
+            else:
+                # Otherwise, remove immediately
+                self._subscribers[name] = [
+                    s for s in self._subscribers[name] if s.handler != handler
+                ]
 
     def dispatch(self, event):
         """Dispatch event to subscribers sorted by priority (descending).
         Equal priority subscribers must execute in FIFO order.
-        If event.cancelled is set, halt execution immediately."""
-        subs = self._subscribers.get(event.name, [])
-        
-        # Fix: Sort by priority (descending) and then by insertion_order (ascending).
-        # This ensures stable FIFO tie-breaking for equal priorities.
-        sorted_subs = sorted(subs, key=lambda s: (-s.priority, s.insertion_order))
+        If event.propagation_stopped is set, halt execution immediately."""
 
-        # Fix: Collect subscribers to be removed after the dispatch loop.
-        # This prevents RuntimeError: dictionary changed size during iteration
-        # if unsubscribe is called from within a handler.
-        to_remove_once = []
+        # Set dispatching flag
+        self._dispatching = True
+        self._subscribers_to_remove_after_dispatch = [] # Clear for this dispatch cycle
 
-        for s in sorted_subs:
-            # Fix: Check event.cancelled BEFORE calling the handler.
-            # This ensures that if a previous handler stopped propagation,
-            # subsequent handlers (even at the same priority) do not run.
-            if event.cancelled:
-                break
+        try:
+            subs = self._subscribers.get(event.name, [])
+            # Create a stable sorted copy for iteration.
+            # The original list order (FIFO) is preserved for equal priorities.
+            # We sort a copy to avoid issues if the original list is modified by unsubscribe.
+            # The key uses priority for primary sort and original index for stable tie-breaking.
+            # We need to store (index, subscriber) pairs to get the original order.
+            indexed_subs = [(i, s) for i, s in enumerate(subs)]
+            sorted_indexed_subs = sorted(indexed_subs, key=lambda item: (-item[1].priority, item[0]))
 
-            s.handler(event)
+            for original_index, s in sorted_indexed_subs:
+                # Check if propagation has been stopped before calling the handler
+                if event.propagation_stopped:
+                    break
 
-            if s.once:
-                to_remove_once.append(s)
-        
-        # Fix: Perform deferred removals after the dispatch loop has completed.
-        for s in to_remove_once:
-            self.unsubscribe(event.name, s.handler)
+                # Check if the subscriber is still active in the main list
+                # This handles cases where a subscriber unsubscribes itself or another
+                # subscriber during the same dispatch cycle.
+                if s not in self._subscribers.get(event.name, []):
+                    continue
+
+                s.handler(event)
+
+                if s.once:
+                    # Mark for removal after dispatch, or immediately if not dispatching
+                    self.unsubscribe(event.name, s.handler)
+
+        finally:
+            # Process deferred removals after dispatch completes
+            for name, sub_to_remove in self._subscribers_to_remove_after_dispatch:
+                if name in self._subscribers:
+                    self._subscribers[name] = [s for s in self._subscribers[name] if s != sub_to_remove]
+
+            # Reset dispatching flag
+            self._dispatching = False
+            self._subscribers_to_remove_after_dispatch = [] # Clear again
+
 === END ===

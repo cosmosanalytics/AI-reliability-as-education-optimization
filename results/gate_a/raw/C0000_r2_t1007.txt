@@ -45,15 +45,12 @@ class Inventory:
     def reserve(self, order_id, lines):
         if order_id in self.reservations:
             raise ValueError("duplicate order")
-        
-        needed_quantities = {}
+        need = {}
         for s, q in lines:
-            needed_quantities[s] = needed_quantities.get(s, 0) + q
-        
-        for s, q_needed in needed_quantities.items():
+            need[s] = need.get(s, 0) + q
+        for s, q_needed in need.items():
             if self.available(s) < q_needed:
                 raise OutOfStock(s)
-        
         self.reservations[order_id] = list(lines)
 
     def release(self, order_id):
@@ -80,9 +77,7 @@ def shipping_cost(weight_g, zone, sub):
             base = cost
             break
     if base is None:
-        # For "every started extra kilogram", use ceiling division
-        # (x + y - 1) // y for ceil(x / y) with positive integers
-        extra = (weight_g - 5000 + 999) // 1000
+        extra = (weight_g - 5001) // 1000 + 1
         base = 1200 + 200 * extra
     return round_half_up(base * ZONES[zone])
 === END ===

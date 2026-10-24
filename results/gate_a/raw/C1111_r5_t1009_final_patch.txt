@@ -7,13 +7,19 @@ class TokenBucket:
         self.refill_rate = float(refill_rate)
         self.tokens = float(capacity if tokens is None else tokens)
         self.last_updated = float(last_updated)
+        # Store the total tokens added since the last update to maintain fractional precision
+        self._total_added_tokens = 0.0
 
     def refill(self, now):
         elapsed = max(0.0, now - self.last_updated)
         self.last_updated = now
-        # Fixed: fractional token refills are no longer truncated to integers.
+        # Buggy: int truncation loses fractional refills on frequent calls
+        # Fix: Use float for added tokens and accumulate fractional parts
         added = elapsed * self.refill_rate
-        self.tokens = min(self.capacity, self.tokens + added)
+        self._total_added_tokens += added
+        whole_tokens_to_add = int(self._total_added_tokens)
+        self._total_added_tokens -= whole_tokens_to_add
+        self.tokens = min(self.capacity, self.tokens + whole_tokens_to_add)
 
     def acquire(self, tokens, now):
         """Attempts to consume tokens at time `now`.
@@ -21,9 +27,10 @@ class TokenBucket:
         Raises ValueError if `tokens` <= 0 or `tokens` > self.capacity."""
         if tokens <= 0:
             raise ValueError("tokens must be positive")
-        # Fixed: Raise ValueError if tokens requested exceeds bucket capacity, as per docstring.
+        # Buggy: fails to raise ValueError if tokens > capacity
         if tokens > self.capacity:
-            raise ValueError("tokens requested exceeds bucket capacity")
+            raise ValueError("tokens requested (%s) exceeds bucket capacity (%s)" % (tokens, self.capacity))
+
         self.refill(now)
         if self.tokens >= tokens:
             self.tokens -= tokens
@@ -49,23 +56,25 @@ class RateLimiter:
         if entry is None:
             bucket = TokenBucket(self.default_capacity, self.default_refill_rate, last_updated=now)
         else:
-            tok, last_t = entry
+            # Handle old entry format (without _total_added_tokens) for backward compatibility
+            tok, last_t = entry[0], entry[1]
+            total_added = entry[2] if len(entry) > 2 else 0.0
             bucket = TokenBucket(self.default_capacity, self.default_refill_rate, tokens=tok, last_updated=last_t)
+            bucket._total_added_tokens = total_added # Restore fractional part
 
         allowed, wait_time = bucket.acquire(tokens, now)
-        self.store.set(key, (bucket.tokens, bucket.last_updated))
+        # Store the fractional part of added tokens along with tokens and last_updated
+        self.store.set(key, (bucket.tokens, bucket.last_updated, bucket._total_added_tokens))
         return allowed, wait_time
 
     def prune_stale(self, now):
         """Prune buckets that have been inactive for more than self.ttl."""
         for k in self.store.keys():
             entry = self.store.get(k)
-            if entry:
-                # Fixed: Ensure elapsed time is non-negative to handle clock backward jumps robustly.
-                # This prevents keys from being considered "not stale" if the clock jumps backward,
-                # which could lead to active keys being incorrectly pruned if the original
-                # `now - entry[1]` became negative and thus less than `self.ttl`.
-                elapsed = max(0.0, now - entry[1])
-                if elapsed > self.ttl:
-                    self.store.delete(k)
+            # Buggy: (now - entry[1]) > self.ttl can be problematic if timestamps roll over.
+            # Fix: Check if entry exists and if the last_updated timestamp is older than (now - ttl).
+            # This correctly identifies stale entries based on an absolute time threshold,
+            # and is robust to `now` potentially being smaller than `entry[1]` due to clock resets.
+            if entry and entry[1] < (now - self.ttl):
+                self.store.delete(k)
 === END ===

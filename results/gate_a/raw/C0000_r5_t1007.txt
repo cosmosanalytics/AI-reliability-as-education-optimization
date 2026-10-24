@@ -1,29 +1,14 @@
-=== FILE: utils.py ===
-from decimal import Decimal, ROUND_HALF_UP, ROUND_CEILING
-
-
-def round_half_up(x):
-    return int(Decimal(str(x)).quantize(Decimal(1), rounding=ROUND_HALF_UP))
-
-
-def ceil(x):
-    return int(Decimal(str(x)).quantize(Decimal(1), rounding=ROUND_CEILING))
-
-
-def clamp(x, lo, hi):
-    return max(lo, min(hi, x))
-=== END ===
 === FILE: pricing.py ===
 from utils import round_half_up, clamp
 
 
 def unit_price(sku, qty, catalog):
     item = catalog[sku]
-    best = 0
+    best_pct = 0
     for min_qty, pct in item.get("tiers", []):
         if qty >= min_qty:
-            best = max(best, pct)
-    return round_half_up(item["price"] * (100 - best) / 100)
+            best_pct = max(best_pct, pct)
+    return round_half_up(item["price"] * (100 - best_pct) / 100)
 
 
 def subtotal(lines, catalog):
@@ -60,18 +45,12 @@ class Inventory:
     def reserve(self, order_id, lines):
         if order_id in self.reservations:
             raise ValueError("duplicate order")
-        
-        # Aggregate quantities needed for each SKU in this order
         need = {}
         for s, q in lines:
             need[s] = need.get(s, 0) + q
-        
-        # Check if all aggregated quantities can be fulfilled before making any reservation
         for s, q_needed in need.items():
             if self.available(s) < q_needed:
                 raise OutOfStock(s)
-        
-        # If all checks pass, then store the reservation
         self.reservations[order_id] = list(lines)
 
     def release(self, order_id):
@@ -82,7 +61,7 @@ class Inventory:
             self.stock[s] -= q
 === END ===
 === FILE: shipping.py ===
-from utils import round_half_up, ceil
+from utils import round_half_up
 
 BANDS = [(500, 300), (2000, 600), (5000, 1200)]
 FREE_AT = 10000
@@ -98,7 +77,7 @@ def shipping_cost(weight_g, zone, sub):
             base = cost
             break
     if base is None:
-        extra = ceil((weight_g - 5000) / 1000)
+        extra = (weight_g - 5001) // 1000 + 1
         base = 1200 + 200 * extra
     return round_half_up(base * ZONES[zone])
 === END ===
@@ -128,8 +107,8 @@ class OrderBook:
         o = self.orders.get(order_id)
         if o is None or o["status"] != "placed":
             return
-        o["status"] = "cancelled"
         self.inv.release(order_id)
+        o["status"] = "cancelled"
 
     def ship(self, order_id):
         o = self.orders[order_id]

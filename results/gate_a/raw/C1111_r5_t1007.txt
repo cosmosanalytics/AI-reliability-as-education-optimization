@@ -7,7 +7,7 @@ def unit_price(sku, qty, catalog):
     best_pct = 0
     for min_qty, pct in item.get("tiers", []):
         if qty >= min_qty:
-            best_pct = max(best_pct, pct)
+            best_pct = max(best_pct, pct) # Take the best (highest) percentage
     return round_half_up(item["price"] * (100 - best_pct) / 100)
 
 
@@ -24,7 +24,7 @@ def coupon_discount(sub, coupon):
             d = min(d, coupon["cap"])
     else:
         d = coupon["value"]
-    return min(d, sub)
+    return min(d, sub) # Coupon discount cannot make subtotal negative
 === END ===
 === FILE: inventory.py ===
 class OutOfStock(Exception):
@@ -45,23 +45,31 @@ class Inventory:
     def reserve(self, order_id, lines):
         if order_id in self.reservations:
             raise ValueError("duplicate order")
+        
+        # Aggregate quantities needed for each SKU across all lines in the order
         need = {}
         for s, q in lines:
             need[s] = need.get(s, 0) + q
-        for s, total_needed_q in need.items():
-            if self.available(s) < total_needed_q:
+        
+        # Check availability for aggregated quantities before making any reservation
+        for s, q in need.items():
+            if self.available(s) < q:
                 raise OutOfStock(s)
+        
+        # If all checks pass, then reserve
         self.reservations[order_id] = list(lines)
 
     def release(self, order_id):
+        # Only release if the order_id exists in reservations
         self.reservations.pop(order_id, None)
 
     def commit(self, order_id):
+        # The OrderBook ensures that only 'placed' orders are committed,
+        # and 'placed' orders must have a reservation.
         for s, q in self.reservations.pop(order_id):
             self.stock[s] -= q
 === END ===
 === FILE: shipping.py ===
-import math
 from utils import round_half_up
 
 BANDS = [(500, 300), (2000, 600), (5000, 1200)]
@@ -70,16 +78,24 @@ ZONES = {"local": 1.0, "remote": 1.5}
 
 
 def shipping_cost(weight_g, zone, sub):
-    if sub >= FREE_AT:
+    if sub >= FREE_AT: # Exactly 10000 cents ships free
         return 0
+    
     base = None
+    # Find the correct band, including exact limits
     for limit, cost in BANDS:
-        if weight_g <= limit:
+        if weight_g <= limit: # Use <= to include exact limits
             base = cost
             break
-    if base is None:
-        extra = math.ceil((weight_g - 5000) / 1000)
-        base = 1200 + 200 * extra
+    
+    if base is None: # Beyond the last band (5000g)
+        # Calculate number of *started* extra kilograms beyond 5000g.
+        # For example, 5001g is 1 extra kg, 6000g is 1 extra kg, 6001g is 2 extra kg.
+        # This is equivalent to ceil((weight_g - 5000) / 1000)
+        extra_kg = (weight_g - 5000 + 999) // 1000
+        base = 1200 + 200 * extra_kg
+    
+    # Apply zone multiplier and round half up
     return round_half_up(base * ZONES[zone])
 === END ===
 === FILE: orders.py ===
@@ -95,6 +111,8 @@ class OrderBook:
         self.orders = {}
 
     def place(self, order_id, lines, coupon=None, zone="local", weight_g=0):
+        # The inventory.reserve method now handles the "change nothing at all"
+        # requirement by raising OutOfStock before modifying state.
         self.inv.reserve(order_id, lines)
         sub = subtotal(lines, self.catalog)
         disc = coupon_discount(sub, coupon)
@@ -107,9 +125,10 @@ class OrderBook:
     def cancel(self, order_id):
         o = self.orders.get(order_id)
         if o is None or o["status"] != "placed":
-            return
+            return # Do nothing if order is unknown or not placed
+        
         o["status"] = "cancelled"
-        self.inv.release(order_id)
+        self.inv.release(order_id) # Release stock back to inventory
 
     def ship(self, order_id):
         o = self.orders[order_id]
@@ -125,9 +144,8 @@ from pricing import unit_price
 def revenue_by_sku(book):
     out = {}
     for o in book.orders.values():
-        if o["status"] == "cancelled":
-            continue
-        for s, q in o["lines"]:
-            out[s] = out.get(s, 0) + unit_price(s, q, book.catalog) * q
+        if o["status"] != "cancelled": # Exclude cancelled orders from revenue report
+            for s, q in o["lines"]:
+                out[s] = out.get(s, 0) + unit_price(s, q, book.catalog) * q
     return out
 === END ===

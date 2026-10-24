@@ -1,4 +1,4 @@
-Resolve this ticket. First read the whole ticket and every repository file below. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+Resolve this ticket. First read the whole ticket and every repository file below. You have access to an interactive test execution tool (pytest). In your first turn, invoke the test runner (see INTERACTIVE TEST RUNNER TOOL instructions at bottom). When ready to submit your final patch, output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
 
 TICKET ISSUE:
 Bug report: In the KV storage engine, replaying the write-ahead log during recovery ignores tombstone (DEL) records, causing deleted keys to reappear after recovery. Furthermore, compaction crashes when tombstones are encountered, and calling delete on a key that does not exist raises KeyError instead of being a no-op. Fix wal.py and engine.py. Do not change the tests.
@@ -128,11 +128,15 @@ def test_basic_crud():
 
 
 INTERACTIVE TEST RUNNER TOOL:
-You have access to an interactive test execution tool to run visible unit tests in your workspace.
-To run tests before final submission, output a tool block:
+You have access to an interactive test execution tool in your workspace.
+WORKFLOW REQUIREMENT:
+In your first turn, you must invoke the test runner to observe test behavior in the repository by outputting:
 === TOOL: pytest ===
 tests/
 === END_TOOL ===
-You may include draft === FILE === blocks in the same turn so tests run against your updated code.
-You will receive the test exit code and traceback. You may run tests multiple times across turns.
-When you are finished, output your complete final patch in the standard === FILE === block format without any tool blocks.
+You will receive the test execution exit code and traceback in the next turn.
+When you are finished testing and ready to submit your final patch, output ONLY the patch in the standard format:
+=== FILE: path/to/file ===
+... complete file content ...
+=== END ===
+Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.

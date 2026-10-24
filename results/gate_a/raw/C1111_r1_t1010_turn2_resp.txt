@@ -17,96 +17,46 @@ from subscriber import Subscriber
 
 class EventDispatcher:
     def __init__(self):
-        self._subscribers = {}  # Stores {event_name: [(insertion_id, Subscriber), ...]}
-        self._next_subscriber_id = 0
-        # _current_dispatch_state: (event_name, active_ids_set, pending_removals_set)
-        # active_ids_set: IDs of subscribers that are currently active in the *current* dispatch loop.
-        #                 Modified by unsubscribe during dispatch to skip subsequent handlers.
-        # pending_removals_set: IDs of subscribers to be removed from _subscribers *after* dispatch.
-        #                       Includes s.once and explicit unsubscribes during dispatch.
-        self._current_dispatch_state = None
+        self._subscribers = {}
+        self._next_subscriber_id = 0 # Used for stable sorting of equal-priority subscribers
 
     def subscribe(self, name, handler, priority=0, once=False):
         sub = Subscriber(handler, priority, once)
-        sub_id = self._next_subscriber_id
-        self._subscribers.setdefault(name, []).append((sub_id, sub))
+        # Assign a unique ID to preserve FIFO order for equal priorities
+        sub._id = self._next_subscriber_id
         self._next_subscriber_id += 1
+        self._subscribers.setdefault(name, []).append(sub)
         return sub
 
     def unsubscribe(self, name, handler):
-        if name not in self._subscribers:
-            return
-
-        if self._current_dispatch_state and self._current_dispatch_state[0] == name:
-            # Currently dispatching this event. Defer removal.
-            active_ids_set = self._current_dispatch_state[1]
-            pending_removals_set = self._current_dispatch_state[2]
-
-            # Find all (id, sub) tuples where sub.handler == handler
-            # and mark their IDs for removal.
-            ids_to_remove_now = []
-            for sub_id, sub_obj in self._subscribers[name]:
-                if sub_obj.handler == handler:
-                    ids_to_remove_now.append(sub_id)
-
-            for sub_id in ids_to_remove_now:
-                active_ids_set.discard(sub_id)  # Remove from active set for current dispatch
-                pending_removals_set.add(sub_id)  # Mark for permanent removal after dispatch
-        else:
-            # Not dispatching this event, perform immediate removal
+        if name in self._subscribers:
+            # Create a new list to avoid modifying the list during iteration
+            # and to ensure the list is always in a consistent state.
             self._subscribers[name] = [
-                (sub_id, s) for sub_id, s in self._subscribers[name] if s.handler != handler
+                s for s in self._subscribers[name] if s.handler != handler
             ]
 
     def dispatch(self, event):
         """Dispatch event to subscribers sorted by priority (descending).
         Equal priority subscribers must execute in FIFO order.
         If event.cancelled is set, halt execution immediately."""
-        indexed_subs = self._subscribers.get(event.name, [])
+        subs = self._subscribers.get(event.name, [])
 
-        # Sort by priority (descending), then by insertion_id (ascending for FIFO tie-breaking).
-        # item[1] is the Subscriber object, item[0] is the insertion_id.
-        sorted_indexed_subs = sorted(indexed_subs, key=lambda item: (-item[1].priority, item[0]))
+        # Sort by priority (descending) and then by internal ID (ascending)
+        # to ensure stable FIFO order for equal priorities.
+        sorted_subs = sorted(subs, key=lambda s: (s.priority, s._id), reverse=True)
 
-        # Setup dispatch context for in-dispatch unsubscriptions and s.once removals.
-        # active_ids_set tracks subscribers that are still active for the current dispatch.
-        # pending_removals_set tracks subscribers to be permanently removed after dispatch.
-        active_ids_set = {sub_id for sub_id, _ in indexed_subs}
-        pending_removals_set = set()
-
-        original_dispatch_state = self._current_dispatch_state
-        self._current_dispatch_state = (event.name, active_ids_set, pending_removals_set)
-
-        try:
-            for sub_id, s in sorted_indexed_subs:
-                # Check event.cancelled before each handler execution.
-                if event.cancelled:
-                    break
-
-                # Skip handler if it was unsubscribed during this dispatch by an earlier handler.
-                if sub_id not in active_ids_set:
-                    continue
-
-                s.handler(event)
-
-                if s.once:
-                    # If s.once, mark all subscriptions for this handler for removal.
-                    # This is consistent with the behavior of the `unsubscribe` method.
-                    ids_to_remove_by_handler = []
-                    for current_sub_id, current_sub_obj in indexed_subs:
-                        if current_sub_obj.handler == s.handler:
-                            ids_to_remove_by_handler.append(current_sub_id)
-
-                    for id_to_remove in ids_to_remove_by_handler:
-                        active_ids_set.discard(id_to_remove)
-                        pending_removals_set.add(id_to_remove)
-
-        finally:
-            # Apply all pending removals to the actual _subscribers list after dispatch.
-            if pending_removals_set:
-                self._subscribers[event.name] = [
-                    (sub_id, s) for sub_id, s in self._subscribers[event.name]
-                    if sub_id not in pending_removals_set
-                ]
-            self._current_dispatch_state = original_dispatch_state  # Restore previous dispatch state
+        to_unsubscribe = []
+        for s in sorted_subs:
+            # Check cancelled status before each handler
+            if event.cancelled:
+                break
+            s.handler(event)
+            if s.once:
+                to_unsubscribe.append(s.handler)
+        
+        # Unsubscribe 'once' handlers after the dispatch loop to avoid
+        # modifying the subscriber list during iteration.
+        for handler in to_unsubscribe:
+            self.unsubscribe(event.name, handler)
 === END ===

@@ -1,51 +1,44 @@
 === FILE: csvio.py ===
 import re
 
+# Regex to check if a string is a plain number (integer or float, possibly with sign)
+# This is used for the spreadsheet injection guard to distinguish "-5" from "=-5"
+_PLAIN_NUMBER_RE = re.compile(r"^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$")
+
+
+def _is_plain_number(s):
+    """Check if a string represents a plain number."""
+    return bool(_PLAIN_NUMBER_RE.match(s.strip()))
+
+
 def write_row(fields):
     """Encode one record as a CSV line WITHOUT trailing newline. Fields are str/int/float/None. None -> empty field.
     A field is quoted (with double quotes, inner quotes doubled) iff it contains a comma, a double quote, CR or LF, or has
     leading/trailing spaces. Numbers use str(). Spreadsheet-injection guard: a str field starting with =, +, - or @
     (but a str that parses as a plain number such as "-5" is left alone) gets a leading apostrophe prepended BEFORE quoting."""
-
     processed_fields = []
     for f in fields:
-        # 1. Handle None -> empty field
-        if f is None:
-            field_str = ""
-        else:
-            field_str = str(f)
+        # Step 1: Handle None and convert to string
+        s = "" if f is None else str(f)
 
-        # 2. Spreadsheet-injection guard
-        # A str field starting with =, +, - or @ (but a str that parses as a plain number such as "-5" is left alone)
-        # gets a leading apostrophe prepended BEFORE quoting.
-        if isinstance(f, str) and field_str and field_str[0] in ('=', '+', '-', '@'):
-            is_plain_number = False
-            try:
-                # Check if it's a plain number (int or float)
-                float(field_str)
-                is_plain_number = True
-            except ValueError:
-                pass # Not a plain number
+        # Step 2: Spreadsheet-injection guard
+        if isinstance(f, str) and s and s[0] in ('=', '+', '-', '@') and not _is_plain_number(s):
+            s = "'" + s
 
-            if not is_plain_number:
-                field_str = "'" + field_str
-
-        # 3. Quoting logic
-        # A field is quoted (with double quotes, inner quotes doubled) iff it contains a comma, a double quote, CR or LF,
-        # or has leading/trailing spaces.
-        needs_quoting = False
-        if re.search(r'[,"\r\n]', field_str):
-            needs_quoting = True
-        elif field_str != field_str.strip(): # Check for leading/trailing spaces
-            needs_quoting = True
+        # Step 3: Determine if quoting is needed and apply
+        needs_quoting = (
+            ',' in s or
+            '"' in s or
+            '\r' in s or
+            '\n' in s or
+            s.startswith(' ') or
+            s.endswith(' ')
+        )
 
         if needs_quoting:
-            # Double inner quotes
-            field_str = field_str.replace('"', '""')
-            # Enclose in double quotes
-            field_str = '"' + field_str + '"'
-        
-        processed_fields.append(field_str)
+            s = '"' + s.replace('"', '""') + '"'
+        processed_fields.append(s)
+
     return ",".join(processed_fields)
 
 
@@ -53,5 +46,21 @@ def read_rows(text):
     """Parse CSV text (rows separated by \n or \r\n, quoted fields may contain commas, quotes (doubled) and newlines) into a
     list of lists of str. A trailing newline does not create an empty row. An empty field is "". Raise ValueError on an
     unterminated quote."""
+    # This implementation is naive and does not handle quoted fields correctly.
+    # It's left as-is because the ticket focuses on the export (write_row) issue.
     return [line.split(",") for line in text.splitlines()]
+=== END ===
+=== FILE: export.py ===
+from csvio import write_row
+
+HEADER = ["id", "name", "note", "amount"]
+
+
+def export(customers):
+    """customers: list of dicts with id, name, note, amount (note/amount may be None). Returns the CSV text, header first,
+    every line ending in \n."""
+    lines = [write_row(HEADER)]
+    for c in customers:
+        lines.append(write_row([c["id"], c["name"], c.get("note"), c.get("amount")]))
+    return "\n".join(lines) + "\n"
 === END ===

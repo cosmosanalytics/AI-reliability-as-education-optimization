@@ -1,1 +1,9 @@
-[]
+[
+  {
+    "timestamp": "2026-10-24T21:07:55.006900+00:00",
+    "command": "pytest -q tests",
+    "exit_code": 1,
+    "stdout_stderr": "F                                                                        [100%]\n================================== FAILURES ===================================\n_______________________________ test_comma_name _______________________________\ntests\\test_export.py:4: in test_comma_name\n    assert export([{\"id\": 1, \"name\": \"Smith, J\", \"note\": None, \"amount\": 2}]).splitlines()[1] == '1,\"Smith, J\",,2'\nE   assert '1,Smith, J,None,2' == '1,\"Smith, J\",,2'\nE     \nE     - 1,\"Smith, J\",,2\nE     ?   -        -\nE     + 1,Smith, J,None,2\nE     ?            ++++\n=========================== short test summary info ===========================\nFAILED tests/test_export.py::test_comma_name - assert '1,Smith, J,None,2' == ...\n1 failed in 0.24s\n",
+    "elapsed_seconds": 1.89
+  }
+]

@@ -1,0 +1,50 @@
+=== FILE: confmerge.py ===
+import copy
+
+def deep_merge(base, override):
+    """Return a NEW dict: base merged with override. Nested dicts merge recursively; any other value in override replaces
+    the base value (lists are replaced, not concatenated). A value of None in override REMOVES that key from the result.
+    Neither input is modified and the result shares no mutable containers with either input."""
+    result = {}
+    for k, v in base.items():
+        if isinstance(v, dict):
+            result[k] = deep_merge(v, {})  # Recursively copy nested dicts from base
+        else:
+            result[k] = copy.deepcopy(v)  # Deep copy other mutable types from base
+
+    for k, v_override in override.items():
+        if v_override is None:
+            if k in result:
+                del result[k]
+        elif k in result and isinstance(result[k], dict) and isinstance(v_override, dict):
+            result[k] = deep_merge(result[k], v_override)
+        elif isinstance(v_override, dict):
+            result[k] = deep_merge({}, v_override)  # Deep copy new nested dicts from override
+        else:
+            result[k] = copy.deepcopy(v_override)  # Deep copy other mutable types from override
+    return result
+=== END ===
+=== FILE: envparse.py ===
+def parse_value(text):
+    """Convert an environment string: "true"/"yes"/"on"/"1" (any case, surrounding spaces ignored) -> True,
+    "false"/"no"/"off"/"0" -> False, a decimal integer like "42" or "-7" -> int, a decimal number like "2.5" -> float,
+    "" or "null"/"none" (any case) -> None, anything else -> the stripped string unchanged. Note "1" and "0" are booleans."""
+    s = text.strip().lower()
+
+    if s in ("true", "yes", "on", "1"):
+        return True
+    if s in ("false", "no", "off", "0"):
+        return False
+    if s in ("", "null", "none"):
+        return None
+
+    try:
+        # Try parsing as int first, then float
+        return int(s)
+    except ValueError:
+        try:
+            return float(s)
+        except ValueError:
+            # If not int or float, return the stripped string unchanged (original case)
+            return text.strip()
+=== END ===

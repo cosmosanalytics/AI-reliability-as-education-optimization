@@ -12,12 +12,13 @@ class MiddlewarePipeline:
         """Run request phases forwards, invoke handler, then run response phases in reverse.
         If ctx.abort() is called during request phase, stop calling subsequent request hooks,
         but DO execute process_response on all middleware that already processed the request, in reverse order."""
+        
         executed_middlewares = []
         for mw in self.middlewares:
             mw.process_request(ctx)
             executed_middlewares.append(mw)
             if ctx.aborted:
-                # Stop calling subsequent request hooks, but proceed to response phase
+                # Stop calling subsequent request hooks
                 break
 
         if not ctx.aborted:

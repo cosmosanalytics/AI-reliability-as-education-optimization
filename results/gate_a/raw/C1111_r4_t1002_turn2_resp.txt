@@ -1,25 +1,33 @@
 === FILE: confmerge.py ===
-import copy
-
 def deep_merge(base, override):
     """Return a NEW dict: base merged with override. Nested dicts merge recursively; any other value in override replaces
     the base value (lists are replaced, not concatenated). A value of None in override REMOVES that key from the result.
     Neither input is modified and the result shares no mutable containers with either input."""
-    result = copy.deepcopy(base) # Start with a deep copy of base to ensure no shared mutable containers
+    result = {}
+    # Start with a deep copy of base to ensure no modification of base and no shared mutable containers
+    for k, v in base.items():
+        if isinstance(v, dict):
+            result[k] = deep_merge(v, {})  # Recursively copy nested dicts
+        elif isinstance(v, list):
+            result[k] = list(v)  # Copy lists
+        else:
+            result[k] = v
 
     for k, v_override in override.items():
         if v_override is None:
-            # If override value is None, remove the key from the result
+            # A value of None in override REMOVES that key from the result.
             if k in result:
                 del result[k]
         elif k in result and isinstance(result[k], dict) and isinstance(v_override, dict):
-            # If both base and override have dicts for this key, merge recursively
+            # Nested dicts merge recursively
             result[k] = deep_merge(result[k], v_override)
         else:
-            # For non-dict values, or if types don't match for recursive merge, replace the value.
-            # Ensure mutable containers from override are also deep copied.
-            if isinstance(v_override, (dict, list, set)):
-                result[k] = copy.deepcopy(v_override)
+            # Any other value in override replaces the base value (lists are replaced, not concatenated).
+            # This also handles new keys in override. Ensure mutable types are copied.
+            if isinstance(v_override, dict):
+                result[k] = deep_merge({}, v_override)  # Deep copy new dicts from override
+            elif isinstance(v_override, list):
+                result[k] = list(v_override)  # Copy lists from override
             else:
                 result[k] = v_override
     return result
@@ -30,23 +38,17 @@ def parse_value(text):
     "false"/"no"/"off"/"0" -> False, a decimal integer like "42" or "-7" -> int, a decimal number like "2.5" -> float,
     "" or "null"/"none" (any case) -> None, anything else -> the stripped string unchanged. Note "1" and "0" are booleans."""
     s = text.strip().lower()
-
     if s in ("true", "yes", "on", "1"):
         return True
     if s in ("false", "no", "off", "0"):
         return False
     if s in ("", "null", "none"):
         return None
-
     try:
         return int(s)
     except ValueError:
-        pass  # Not an integer, try float
-
-    try:
-        return float(s)
-    except ValueError:
-        pass  # Not a float, return as string
-
-    return text.strip()  # Return the original stripped string if no other type matches
+        try:
+            return float(s)
+        except ValueError:
+            return text.strip()
 === END ===

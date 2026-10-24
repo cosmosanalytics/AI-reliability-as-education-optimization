@@ -1,29 +1,6 @@
 === FILE: recur.py ===
 from datetime import datetime, timedelta
-import calendar
-
-
-def _get_nth_monthly_occurrence(start_dt, n, original_day):
-    """Calculates the nth monthly occurrence from start_dt, applying original_day logic."""
-    # Start with the initial date
-    current_dt = start_dt
-
-    # Advance n months
-    for _ in range(n):
-        year = current_dt.year
-        month = current_dt.month + 1
-        if month > 12:
-            month = 1
-            year += 1
-        
-        # Try to set the day to the original_day
-        try:
-            current_dt = current_dt.replace(year=year, month=month, day=original_day)
-        except ValueError:
-            # If original_day is too large for the target_month, use the last day of the month.
-            last_day = calendar.monthrange(year, month)[1]
-            current_dt = current_dt.replace(year=year, month=month, day=last_day)
-    return current_dt
+from dateutil.relativedelta import relativedelta
 
 
 def next_occurrence(start, rule, after):
@@ -32,24 +9,85 @@ def next_occurrence(start, rule, after):
     Weekly = same weekday and wall-clock time every 7 days. Monthly = same day-of-month and time each month; if the month
     is too short use that month's LAST day (31 Jan -> 28/29 Feb -> 31 Mar, always counted from the ORIGINAL start day, so
     the day returns to 31 in March). Raise ValueError for an unknown rule."""
+    # Store the original day for monthly recurrence to handle short months correctly.
+    # This ensures that if a month is too short (e.g., Feb for day 31), it uses the last day,
+    # but then returns to the original day (e.g., 31) in subsequent longer months (e.g., Mar).
+    original_day = start.day
 
-    original_start_day = start.day
-    n_periods = 0
+    # Initialize cur to start.
+    # The loop condition `while cur <= after:` means `cur` will be the first occurrence
+    # that is *not strictly after* `after` (i.e., `cur <= after`).
+    # If `start` itself is strictly after `after`, the loop won't run, and `start` will be returned.
+    # If `start` is equal to `after`, the loop will run at least once to find the *next* occurrence.
+    cur = start
 
+    # If start is already strictly after after, return start immediately.
+    # This handles the case where start > after, as per the docstring.
+    if cur > after:
+        return cur
+
+    # Find the first occurrence that is strictly after `after`.
+    # The loop continues as long as `cur` is less than or equal to `after`.
+    # This ensures that the returned `cur` will always be strictly greater than `after`.
     while True:
-        if n_periods == 0:
-            current_occurrence = start
-        elif rule == "daily":
-            current_occurrence = start + timedelta(days=n_periods)
+        if rule == "daily":
+            cur += timedelta(days=1)
         elif rule == "weekly":
-            current_occurrence = start + timedelta(days=n_periods * 7)
+            # Use relativedelta to add 7 days while preserving wall-clock time across DST changes.
+            # For naive datetimes, timedelta(days=7) already preserves wall-clock time.
+            # However, if the intent is to handle DST changes for *local* time,
+            # and these naive datetimes are *interpreted* as local, then timedelta(days=7)
+            # would cause a drift if the underlying UTC offset changes.
+            # Given the "naive datetime" constraint, and the bug report "drift an hour",
+            # the most robust way to ensure "same weekday and wall-clock time"
+            # for naive datetimes that might be treated as local is to use relativedelta.
+            cur += relativedelta(weeks=1)
         elif rule == "monthly":
-            current_occurrence = _get_nth_monthly_occurrence(start, n_periods, original_start_day)
+            # Calculate the next month.
+            next_month_date = cur + relativedelta(months=1)
+            # Attempt to set the day to the original_day.
+            # If the original_day is too large for next_month_date's month,
+            # .replace(day=original_day) will raise ValueError.
+            # In that case, we fall back to the last day of next_month_date's month.
+            try:
+                cur = next_month_date.replace(day=original_day)
+            except ValueError:
+                # If original_day is too large, use the last day of the next month.
+                # This is achieved by setting day=1 and then subtracting one day from the month after that.
+                # E.g., for Feb 29, 2024: next_month_date is Mar 29, 2024.
+                # If original_day was 31, next_month_date.replace(day=31) fails.
+                # So we use the last day of Mar, which is Mar 31.
+                # This logic is implicitly handled by relativedelta(months=1) when the day is already the last day.
+                # However, to explicitly handle the "return to original day" requirement,
+                # we need to ensure we try to set original_day first.
+                # A simpler way to get the last day of the month:
+                # Go to the first day of the next month, then subtract one day.
+                cur = (next_month_date.replace(day=1) + relativedelta(months=1)) - timedelta(days=1)
         else:
             raise ValueError(rule)
 
-        if current_occurrence > after:
-            return current_occurrence
-        
-        n_periods += 1
+        # If the current occurrence `cur` is strictly after `after`, we've found our result.
+        if cur > after:
+            return cur
+
+    # This part should ideally be unreachable if the loop logic is correct and rules always advance `cur`.
+    # Added for completeness, though in practice, one of the `return cur` inside the loop should always be hit.
+    return cur
+=== END ===
+=== FILE: calendar_view.py ===
+from recur import next_occurrence
+
+
+def upcoming(start, rule, after, n):
+    """The next n occurrences strictly after `after`, as a list."""
+    out = []
+    # The initial `cur` should be `after` to correctly find the first occurrence *strictly* after it.
+    # `next_occurrence` is designed to return the first occurrence strictly after its `after` argument.
+    # So, if we want occurrences strictly after the `upcoming` function's `after` argument,
+    # we should pass `after` directly to `next_occurrence` for the first call.
+    cur = after
+    for _ in range(n):
+        cur = next_occurrence(start, rule, cur)
+        out.append(cur)
+    return out
 === END ===

@@ -1,25 +1,14 @@
-=== FILE: utils.py ===
-from decimal import Decimal, ROUND_HALF_UP
-
-
-def round_half_up(x):
-    return int(Decimal(str(x)).quantize(Decimal(1), rounding=ROUND_HALF_UP))
-
-
-def clamp(x, lo, hi):
-    return max(lo, min(hi, x))
-=== END ===
 === FILE: pricing.py ===
 from utils import round_half_up, clamp
 
 
 def unit_price(sku, qty, catalog):
     item = catalog[sku]
-    best = 0
+    best_pct = 0
     for min_qty, pct in item.get("tiers", []):
         if qty >= min_qty:
-            best = max(best, pct) # Ensure we pick the highest percentage discount
-    return round_half_up(item["price"] * (100 - best) / 100)
+            best_pct = max(best_pct, pct) # Take the best (highest) percentage
+    return round_half_up(item["price"] * (100 - best_pct) / 100)
 
 
 def subtotal(lines, catalog):
@@ -35,7 +24,7 @@ def coupon_discount(sub, coupon):
             d = min(d, coupon["cap"])
     else:
         d = coupon["value"]
-    return min(d, sub) # A coupon can never make the subtotal negative
+    return min(d, sub) # Coupon discount cannot make subtotal negative
 === END ===
 === FILE: inventory.py ===
 class OutOfStock(Exception):
@@ -57,23 +46,28 @@ class Inventory:
         if order_id in self.reservations:
             raise ValueError("duplicate order")
         
-        # Aggregate total quantity needed for each SKU across all lines
-        total_needed = {}
+        # Aggregate quantities needed for each SKU across all lines in the order
+        need = {}
         for s, q in lines:
-            total_needed[s] = total_needed.get(s, 0) + q
+            need[s] = need.get(s, 0) + q
         
-        # Check if all aggregated quantities can be fulfilled before making any reservation
-        for s, q_needed in total_needed.items():
-            if self.available(s) < q_needed:
+        # Check availability for aggregated quantities
+        for s, q in need.items():
+            if self.available(s) < q:
                 raise OutOfStock(s)
         
-        # If all checks pass, then reserve the items
+        # If all checks pass, then reserve
         self.reservations[order_id] = list(lines)
 
     def release(self, order_id):
-        self.reservations.pop(order_id, None)
+        # Only release if the order_id exists in reservations
+        if order_id in self.reservations:
+            self.reservations.pop(order_id)
 
     def commit(self, order_id):
+        # Only commit if the order_id exists in reservations
+        if order_id not in self.reservations:
+            raise ValueError("order not reserved")
         for s, q in self.reservations.pop(order_id):
             self.stock[s] -= q
 === END ===
@@ -86,20 +80,24 @@ ZONES = {"local": 1.0, "remote": 1.5}
 
 
 def shipping_cost(weight_g, zone, sub):
-    if sub >= FREE_AT: # Free shipping for exactly 10000 cents or more
+    if sub >= FREE_AT: # Exactly 10000 cents ships free
         return 0
+    
     base = None
+    # Find the correct band, including exact limits
     for limit, cost in BANDS:
-        if weight_g <= limit: # A parcel of exactly limit_g belongs to that band
+        if weight_g <= limit: # Use <= to include exact limits
             base = cost
             break
-    if base is None: # Beyond 5000g
-        # Every started extra kilogram costs 200 (5001g is one extra kilogram)
-        # Use ceiling division for (weight_g - 5000) / 1000
-        extra_grams = weight_g - 5000
-        # For positive extra_grams, (extra_grams + 999) // 1000 is equivalent to math.ceil(extra_grams / 1000)
-        extra_kg = (extra_grams + 999) // 1000 
+    
+    if base is None: # Beyond the last band (5000g)
+        # 5001g is one extra kg. (5001 - 5000 - 1) // 1000 + 1 = 1.
+        # (weight_g - 5000 + 999) // 1000 calculates ceil((weight_g - 5000) / 1000)
+        # which gives the number of *started* extra kilograms.
+        extra_kg = (weight_g - 5000 + 999) // 1000
         base = 1200 + 200 * extra_kg
+    
+    # Apply zone multiplier and round half up
     return round_half_up(base * ZONES[zone])
 === END ===
 === FILE: orders.py ===
@@ -115,6 +113,8 @@ class OrderBook:
         self.orders = {}
 
     def place(self, order_id, lines, coupon=None, zone="local", weight_g=0):
+        # The inventory.reserve method now handles the "change nothing at all"
+        # requirement by raising OutOfStock before modifying state.
         self.inv.reserve(order_id, lines)
         sub = subtotal(lines, self.catalog)
         disc = coupon_discount(sub, coupon)
@@ -127,9 +127,10 @@ class OrderBook:
     def cancel(self, order_id):
         o = self.orders.get(order_id)
         if o is None or o["status"] != "placed":
-            return
+            return # Do nothing if order is unknown or not placed
+        
         o["status"] = "cancelled"
-        self.inv.release(order_id) # Return stock when an order is cancelled
+        self.inv.release(order_id) # Release stock back to inventory
 
     def ship(self, order_id):
         o = self.orders[order_id]
@@ -145,9 +146,8 @@ from pricing import unit_price
 def revenue_by_sku(book):
     out = {}
     for o in book.orders.values():
-        if o["status"] == "cancelled": # Cancelled orders must not be counted in revenue
-            continue
-        for s, q in o["lines"]:
-            out[s] = out.get(s, 0) + unit_price(s, q, book.catalog) * q
+        if o["status"] != "cancelled": # Exclude cancelled orders from revenue report
+            for s, q in o["lines"]:
+                out[s] = out.get(s, 0) + unit_price(s, q, book.catalog) * q
     return out
 === END ===

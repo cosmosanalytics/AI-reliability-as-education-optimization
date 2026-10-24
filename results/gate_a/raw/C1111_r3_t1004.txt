@@ -1,110 +1,119 @@
 === FILE: csvio.py ===
+import re
+
+def _is_number(s):
+    try:
+        float(s)
+        return True
+    except ValueError:
+        return False
+
 def write_row(fields):
     """Encode one record as a CSV line WITHOUT trailing newline. Fields are str/int/float/None. None -> empty field.
     A field is quoted (with double quotes, inner quotes doubled) iff it contains a comma, a double quote, CR or LF, or has
     leading/trailing spaces. Numbers use str(). Spreadsheet-injection guard: a str field starting with =, +, - or @
     (but a str that parses as a plain number such as "-5" is left alone) gets a leading apostrophe prepended BEFORE quoting."""
     processed_fields = []
-    for f in fields:
-        if f is None:
-            field_str = ""
-        elif isinstance(f, (int, float)):
-            field_str = str(f)
-        else: # Assume it's a string or convertible to string
-            field_str = str(f)
+    for field in fields:
+        s_field = ""
+        if field is not None:
+            s_field = str(field)
 
-            # Apply spreadsheet injection guard
-            is_numeric = False
-            try:
-                # Check if it parses as a plain number
-                float(field_str)
-                is_numeric = True
-            except ValueError:
-                pass
-
-            if field_str.startswith('='):
-                field_str = "'" + field_str
-            elif field_str.startswith('@'):
-                field_str = "'" + field_str
-            elif (field_str.startswith('+') or field_str.startswith('-')) and not is_numeric:
-                field_str = "'" + field_str
+        # Spreadsheet-injection guard
+        if isinstance(field, str) and s_field and s_field[0] in ('=', '+', '-', '@'):
+            # Apply guard if it's '=' or '@', or if it's '+' or '-' and not a number
+            if s_field[0] in ('=', '@') or not _is_number(s_field):
+                s_field = "'" + s_field
 
         # Determine if quoting is needed
-        needs_quoting = (
-            ',' in field_str or
-            '"' in field_str or
-            '\r' in field_str or
-            '\n' in field_str or
-            field_str.strip() != field_str # leading/trailing spaces
-        )
+        needs_quoting = False
+        if ',' in s_field or '"' in s_field or '\r' in s_field or '\n' in s_field:
+            needs_quoting = True
+        elif s_field != s_field.strip(): # Check for leading/trailing spaces
+            needs_quoting = True
 
         if needs_quoting:
-            field_str = '"' + field_str.replace('"', '""') + '"'
-        processed_fields.append(field_str)
-
+            # Double inner quotes and enclose in double quotes
+            s_field = '"' + s_field.replace('"', '""') + '"'
+        
+        processed_fields.append(s_field)
+    
     return ",".join(processed_fields)
 
+
+# Regex to parse a single CSV field, handling quoted fields
+# It captures either:
+# 1. A quoted field: starts with ", ends with ", allows "" inside.
+#    The content inside the quotes is captured in group 1.
+# 2. An unquoted field: any characters that are not a comma or newline.
+#    The content is captured in group 2.
+# The non-greedy quantifier `*?` for unquoted fields ensures it stops at the first comma.
+_FIELD_RE = re.compile(r'(?:"((?:[^"]|"")*)"|([^,\r\n]*?))')
 
 def read_rows(text):
     """Parse CSV text (rows separated by \n or \r\n, quoted fields may contain commas, quotes (doubled) and newlines) into a
     list of lists of str. A trailing newline does not create an empty row. An empty field is "". Raise ValueError on an
     unterminated quote."""
-    if not text:
-        return []
-
     rows = []
-    current_row_fields = []
-    current_field_chars = []
-    in_quoted_field = False
-    i = 0
-    while i < len(text):
-        char = text[i]
-
-        if in_quoted_field:
-            if char == '"':
-                # Check for doubled quote (escaped quote)
-                if i + 1 < len(text) and text[i+1] == '"':
-                    current_field_chars.append('"')
-                    i += 1 # Consume the second quote
+    for line in text.splitlines():
+        if not line: # Skip empty lines (including those from trailing newlines)
+            continue
+        
+        current_row = []
+        pos = 0
+        while pos < len(line):
+            match = _FIELD_RE.match(line, pos)
+            if not match:
+                # If we are at a comma, it means an empty field
+                if line[pos] == ',':
+                    current_row.append("")
+                    pos += 1
+                    continue
+                # If we are at a quote, it must be an unterminated quote
+                elif line[pos] == '"':
+                    raise ValueError("Unterminated quote in CSV line: %r" % line)
+                # Otherwise, it's a malformed line
                 else:
-                    # End of quoted field
-                    in_quoted_field = False
+                    raise ValueError("Malformed CSV line: %r at position %d" % (line, pos))
+
+            quoted_field_content = match.group(1)
+            unquoted_field_content = match.group(2)
+
+            if quoted_field_content is not None:
+                # It was a quoted field, unescape double quotes
+                current_row.append(quoted_field_content.replace('""', '"'))
+            elif unquoted_field_content is not None:
+                # It was an unquoted field
+                current_row.append(unquoted_field_content)
             else:
-                current_field_chars.append(char)
-        else: # Not in a quoted field
-            if char == '"':
-                # Start of a quoted field
-                if current_field_chars:
-                    # Malformed CSV: quote found in unquoted field
-                    raise ValueError(f"Malformed CSV: quote found in unquoted field at position {i}")
-                in_quoted_field = True
-            elif char == ',':
-                current_row_fields.append("".join(current_field_chars))
-                current_field_chars = []
-            elif char == '\n' or char == '\r':
-                current_row_fields.append("".join(current_field_chars)) # Add last field of the row
-                current_field_chars = []
-                rows.append(current_row_fields)
-                current_row_fields = [] # Reset for next row
+                # This case should not be reached with the current regex, but for safety
+                current_row.append("")
 
-                if char == '\r' and i + 1 < len(text) and text[i+1] == '\n':
-                    i += 1 # Consume the \n
-            else:
-                current_field_chars.append(char)
-        i += 1
+            pos = match.end()
+            if pos < len(line) and line[pos] == ',':
+                pos += 1 # Consume the comma separator
+            elif pos < len(line):
+                # If there's more content but no comma, it's malformed
+                raise ValueError("Malformed CSV line: %r (extra content after field)" % line)
+        
+        # Handle trailing empty field if line ends with a comma
+        if line.endswith(',') and (not current_row or pos == len(line)):
+            current_row.append("")
 
-    if in_quoted_field:
-        raise ValueError("Unterminated quote at end of text")
-
-    # Handle the very last field/row if not terminated by a newline
-    if current_field_chars or current_row_fields:
-        current_row_fields.append("".join(current_field_chars))
-        rows.append(current_row_fields)
-
-    # "A trailing newline does not create an empty row."
-    # If the input ends with a newline, and the last row in `rows` is `[""]`, then remove that last row.
-    if rows and len(rows[-1]) == 1 and rows[-1][0] == "" and text.endswith(('\n', '\r')):
-        rows.pop()
-
+        rows.append(current_row)
     return rows
+=== END ===
+=== FILE: export.py ===
+from csvio import write_row
+
+HEADER = ["id", "name", "note", "amount"]
+
+
+def export(customers):
+    """customers: list of dicts with id, name, note, amount (note/amount may be None). Returns the CSV text, header first,
+    every line ending in \n."""
+    lines = [write_row(HEADER)]
+    for c in customers:
+        lines.append(write_row([c["id"], c["name"], c.get("note"), c.get("amount")]))
+    return "\n".join(lines) + "\n"
 === END ===

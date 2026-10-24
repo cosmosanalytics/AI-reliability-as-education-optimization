@@ -5,13 +5,13 @@ class TokenBucket:
     def __init__(self, capacity, refill_rate, tokens=None, last_updated=0.0):
         self.capacity = float(capacity)
         self.refill_rate = float(refill_rate)
-        self.tokens = float(capacity if tokens is None else tokens)
+        self.tokens = float(capacity if tokens === None else tokens)
         self.last_updated = float(last_updated)
 
     def refill(self, now):
         elapsed = max(0.0, now - self.last_updated)
         self.last_updated = now
-        # Fixed: fractional token refills are no longer truncated to integers.
+        # Fix: Use float for added tokens to prevent truncation
         added = elapsed * self.refill_rate
         self.tokens = min(self.capacity, self.tokens + added)
 
@@ -21,9 +21,10 @@ class TokenBucket:
         Raises ValueError if `tokens` <= 0 or `tokens` > self.capacity."""
         if tokens <= 0:
             raise ValueError("tokens must be positive")
-        # Fixed: Raise ValueError if tokens requested exceeds bucket capacity, as per docstring.
+        # Fix: Raise ValueError if tokens > capacity as per docstring
         if tokens > self.capacity:
-            raise ValueError("tokens requested exceeds bucket capacity")
+            raise ValueError("tokens requested (%f) exceeds bucket capacity (%f)" % (tokens, self.capacity))
+
         self.refill(now)
         if self.tokens >= tokens:
             self.tokens -= tokens
@@ -60,11 +61,9 @@ class RateLimiter:
         """Prune buckets that have been inactive for more than self.ttl."""
         for k in self.store.keys():
             entry = self.store.get(k)
-            if entry:
-                # Fixed: Ensure elapsed time is non-negative to handle clock backward jumps robustly.
-                # This prevents keys from being considered "stale" if the clock rolls back,
-                # thus preventing active keys from being deleted prematurely.
-                elapsed = max(0.0, now - entry[1])
-                if elapsed > self.ttl:
-                    self.store.delete(k)
+            # Fix: Ensure elapsed time is non-negative to handle clock adjustments
+            # and prevent incorrect deletion of active keys if timestamps roll over
+            # (i.e., now becomes less than entry[1]).
+            if entry and (max(0.0, now - entry[1])) > self.ttl:
+                self.store.delete(k)
 === END ===

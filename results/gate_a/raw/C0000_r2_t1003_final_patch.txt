@@ -1,6 +1,6 @@
 === FILE: recur.py ===
 from datetime import datetime, timedelta
-import calendar
+from dateutil.relativedelta import relativedelta
 
 
 def next_occurrence(start, rule, after):
@@ -10,37 +10,63 @@ def next_occurrence(start, rule, after):
     is too short use that month's LAST day (31 Jan -> 28/29 Feb -> 31 Mar, always counted from the ORIGINAL start day, so
     the day returns to 31 in March). Raise ValueError for an unknown rule."""
 
-    # Store original day and time components from 'start' for the monthly rule
-    original_day = start.day
-    original_time = start.time()
+    # Store the original start day for monthly recurrence logic
+    original_start_day = start.day
 
+    # Initialize cur to start. If start is already after `after`, it's the first occurrence.
+    # Otherwise, we need to find the next one.
     cur = start
-    while True:
-        if cur > after:
-            return cur
 
+    # If start is already strictly after `after`, it's the first occurrence.
+    # The loop below will handle the case where start <= after.
+    if cur > after:
+        return cur
+
+    # Find the first occurrence that is strictly after `after`.
+    # The loop must ensure `cur` becomes strictly greater than `after`.
+    # If `start` itself is `after`, we need to advance `cur` at least once.
+    # If `start` is before `after`, we need to advance `cur` until it's strictly after `after`.
+    while True:
         if rule == "daily":
             cur += timedelta(days=1)
         elif rule == "weekly":
-            cur += timedelta(days=7)
+            # Use relativedelta to ensure wall-clock time and weekday are preserved,
+            # handling potential DST shifts more robustly than fixed timedelta(days=7)
+            # for naive datetimes when the system's interpretation of "wall-clock time"
+            # might implicitly involve timezone rules.
+            cur += relativedelta(weeks=1)
         elif rule == "monthly":
-            # Calculate the next month and year
-            year = cur.year
-            month = cur.month + 1
-            if month > 12:
-                month = 1
-                year += 1
-
-            # Determine the day for the new month
-            # Use original_day, but clamp to the last day of the target month if necessary.
-            # This ensures the day "returns to 31 in March" if original_day was 31.
-            max_day_in_month = calendar.monthrange(year, month)[1]
-            target_day = min(original_day, max_day_in_month)
-
-            # Construct the new datetime, preserving original time components
-            cur = datetime(year, month, target_day,
-                           original_time.hour, original_time.minute,
-                           original_time.second, original_time.microsecond)
+            # Calculate the next month based on the current date
+            next_month_date = cur + relativedelta(months=1)
+            
+            # Attempt to set the day to the original_start_day
+            try:
+                cur = next_month_date.replace(day=original_start_day)
+            except ValueError:
+                # If the original_start_day is too large for the next month,
+                # use the last day of that month.
+                # This is achieved by replacing day=1 and then adding one month and subtracting one day.
+                # Or more simply, by replacing day=1 and then adding relativedelta(months=1, days=-1)
+                # to get the last day of the *current* month, but we need the last day of the *next* month.
+                # A robust way is to go to the first day of the month after next, then subtract one day.
+                cur = (next_month_date.replace(day=1) + relativedelta(months=1)) - timedelta(days=1)
         else:
             raise ValueError(rule)
+        
+        # Once cur is strictly after `after`, we've found our next occurrence.
+        if cur > after:
+            return cur
+=== END ===
+=== FILE: calendar_view.py ===
+from recur import next_occurrence
+
+
+def upcoming(start, rule, after, n):
+    """The next n occurrences strictly after `after`, as a list."""
+    out = []
+    cur = after # Start searching from `after`
+    for _ in range(n):
+        cur = next_occurrence(start, rule, cur)
+        out.append(cur)
+    return out
 === END ===

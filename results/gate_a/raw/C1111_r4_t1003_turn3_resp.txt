@@ -1,0 +1,68 @@
+=== FILE: recur.py ===
+from datetime import datetime, timedelta
+
+
+def _add_months_preserving_day(dt, months_to_add, original_day):
+    """Adds months to a datetime, preserving the original day-of-month if possible.
+    If the target month is too short, it uses the last day of that month.
+    The time components (hour, minute, second, microsecond) are preserved."""
+    target_month = dt.month + months_to_add
+    target_year = dt.year
+    while target_month > 12:
+        target_month -= 12
+        target_year += 1
+
+    try:
+        return dt.replace(year=target_year, month=target_month, day=original_day)
+    except ValueError:
+        # If original_day is too large for the target month, use the last day of the month.
+        # Calculate the last day of the target month.
+        # This is done by finding the first day of the *next* month and subtracting one day.
+        if target_month == 12:
+            next_month_first_day = datetime(target_year + 1, 1, 1, dt.hour, dt.minute, dt.second, dt.microsecond)
+        else:
+            next_month_first_day = datetime(target_year, target_month + 1, 1, dt.hour, dt.minute, dt.second, dt.microsecond)
+        last_day_of_month = (next_month_first_day - timedelta(days=1)).day
+        return dt.replace(year=target_year, month=target_month, day=last_day_of_month)
+
+
+def next_occurrence(start, rule, after):
+    """start: naive datetime of the first occurrence. rule: "daily", "weekly" or "monthly". Return the first occurrence
+    STRICTLY after `after` (a naive datetime), or start itself if start > after. Occurrences are start + n periods, n>=0.
+    Weekly = same weekday and wall-clock time every 7 days. Monthly = same day-of-month and time each month; if the month
+    is too short use that month's LAST day (31 Jan -> 28/29 Feb -> 31 Mar, always counted from the ORIGINAL start day, so
+    the day returns to 31 in March). Raise ValueError for an unknown rule."""
+
+    # Handle the "start itself if start > after" case first.
+    if start > after:
+        return start
+
+    # Initialize `n_periods` to 0. We will increment it to find the correct occurrence.
+    n_periods = 0
+
+    while True:
+        current_occurrence = None
+        if rule == "daily":
+            current_occurrence = start + timedelta(days=n_periods)
+        elif rule == "weekly":
+            # Weekly events should maintain the same wall-clock time.
+            # timedelta arithmetic on naive datetimes handles this correctly.
+            current_occurrence = start + timedelta(weeks=n_periods)
+        elif rule == "monthly":
+            # Monthly rule needs to use the original start.day and handle month-end logic.
+            current_occurrence = _add_months_preserving_day(start, n_periods, start.day)
+        else:
+            raise ValueError(rule)
+
+        # If the current occurrence is strictly after `after`, we found our result.
+        if current_occurrence > after:
+            return current_occurrence
+        
+        # Increment period counter for the next iteration.
+        n_periods += 1
+
+        # Safety break to prevent infinite loops in case of unexpected logic errors,
+        # though for valid inputs and rules, this loop should always terminate.
+        if n_periods > 10000:
+            raise RuntimeError("Too many occurrences calculated, potential infinite loop.")
+=== END ===

@@ -11,38 +11,12 @@ class Ledger:
     def record(self, customer, ts, units):
         """Record an entry. Reject (ValueError) a units value of 0, a non-int units (bools too), a non-datetime ts or an empty
         customer name."""
-        if not isinstance(customer, str) or not customer:
-            raise ValueError("Customer name cannot be empty.")
-        if not isinstance(ts, datetime):
-            raise ValueError("Timestamp must be a datetime object.")
-        # Check for int and not bool (since bools are subclasses of int)
-        if not isinstance(units, int) or isinstance(units, bool):
-            raise ValueError("Units must be an integer (not a boolean).")
-        if units == 0:
-            raise ValueError("Units value cannot be 0.")
-
+        # Bug fix: `abs(units)` was incorrectly making refunds positive.
         self.entries.append((customer, ts, units))
 
     def customers(self):
         """Sorted list of every customer that ever had an entry."""
         return sorted({c for c, _, _ in self.entries})
-=== END ===
-=== FILE: period.py ===
-from datetime import datetime
-
-
-def month_bounds(year, month):
-    """Return (start, end) with start = first instant of the month and end = first instant of the NEXT month; an entry
-    belongs to the month iff start <= ts < end. month 1..12, otherwise ValueError."""
-    if not 1 <= month <= 12:
-        raise ValueError("Month must be between 1 and 12.")
-
-    start = datetime(year, month, 1)
-    if month == 12:
-        end = datetime(year + 1, 1, 1)
-    else:
-        end = datetime(year, month + 1, 1)
-    return start, end
 === END ===
 === FILE: usage_report.py ===
 from period import month_bounds
@@ -53,20 +27,19 @@ def monthly_report(ledger, year, month, customers=None):
     all customers in the ledger) with 0 when they have no entries that month."""
     start, end = month_bounds(year, month)
 
-    # Determine the set of customers to report on
+    # Bug fix: Initialize report with all relevant customers, setting their usage to 0.
+    # If `customers` is None, default to all customers ever seen in the ledger.
     if customers is None:
         report_customers = ledger.customers()
     else:
-        # Ensure uniqueness and sort for consistent initialization order
-        report_customers = sorted(list(set(customers)))
+        report_customers = sorted(list(set(customers))) # Ensure unique and sorted for consistent output if `customers` is provided
 
-    # Initialize output dictionary with all relevant customers having 0 units
     out = {c: 0 for c in report_customers}
 
     for c, ts, u in ledger.entries:
-        # Fix: Change <= end to < end as per month_bounds definition
+        # Bug fix: Date comparison should be `ts < end` to exclude entries exactly at the start of the next month.
         if start <= ts < end:
-            # Only update if the customer is in the set of customers we are reporting on
+            # Only update if the customer is part of the requested report_customers set.
             if c in out:
                 out[c] += u
     return out

@@ -4,35 +4,48 @@ class Groups:
 
     def __init__(self):
         self.members = {}
+        self.group_memberships = {} # New: Store which groups a member belongs to
 
     def add(self, group, member):
         self.members.setdefault(group, set()).add(member)
+        # If member is a user, add group to user's direct memberships
+        if not isinstance(member, str) or member not in self.members: # Assuming groups are strings and users are strings not in self.members keys
+            self.group_memberships.setdefault(member, set()).add(group)
 
     def remove(self, group, member):
         """Remove member from group; removing a non-member is a no-op. An emptied group still exists."""
         if group in self.members:
             self.members[group].discard(member)
+            # If member is a user, remove group from user's direct memberships
+            if not isinstance(member, str) or member not in self.members:
+                if member in self.group_memberships:
+                    self.group_memberships[member].discard(group)
 
     def groups_of(self, user):
         """Set of all groups the user belongs to, directly or through nested groups."""
         all_groups = set()
-        q = [user]  # Queue for BFS, starting with the user itself
-        processed_members = set()  # To prevent cycles and redundant work
+        q = [user]
+        visited = set()
 
         while q:
-            current_member = q.pop(0)  # BFS
-            if current_member in processed_members:
+            current_member = q.pop(0)
+            if current_member in visited:
                 continue
-            processed_members.add(current_member)
+            visited.add(current_member)
 
-            # Check if current_member is a member of any group
-            for group_name, members_set in self.members.items():
+            # Add direct groups for users
+            if current_member in self.group_memberships:
+                for g in self.group_memberships[current_member]:
+                    if g not in all_groups:
+                        all_groups.add(g)
+                        q.append(g) # Add group to queue to find its parent groups
+
+            # Add groups where current_member is a direct member (could be a user or a nested group)
+            for g, members_set in self.members.items():
                 if current_member in members_set:
-                    if group_name not in all_groups:
-                        all_groups.add(group_name)
-                        # If this group is a member of other groups, we need to explore those too.
-                        # Add the group itself to the queue to find its parent groups.
-                        q.append(group_name)
+                    if g not in all_groups:
+                        all_groups.add(g)
+                        q.append(g) # Add group to queue to find its parent groups
         return all_groups
 === END ===
 === FILE: acl.py ===
@@ -41,39 +54,37 @@ def allowed(groups, acl, user, path, action):
     name. A rule applies if its prefix is a path-segment prefix of path ("/a" covers "/a" and "/a/b" but NOT "/ab"; "/" covers
     everything), its action equals `action` or is "*", and its subject is the user or one of the user's groups (nested
     included). The MOST SPECIFIC (longest) matching prefix decides; at equal length deny beats allow. No match -> False."""
-    best = None # Stores (length_of_prefix, effect)
-    
-    # Get all groups the user belongs to, including nested ones
-    user_and_groups = {user} | groups.groups_of(user)
+    best_match_len = -1
+    best_effect = None
+
+    user_and_groups = groups.groups_of(user)
+    user_and_groups.add(user) # Add the user itself to the set of subjects to check
 
     for prefix, subject, act, effect in acl:
-        # Path prefix matching: "/a" covers "/a" and "/a/b" but NOT "/ab"
+        # Path segment prefix matching logic
         if not path.startswith(prefix):
             continue
-        # Additional check for path-segment prefix
-        # If prefix is not "/", and path is longer than prefix, the character immediately after prefix in path must be '/'
         if prefix != "/" and len(path) > len(prefix) and path[len(prefix)] != '/':
             continue
 
-        # Action matching: action equals `action` or is "*"
+        # Action matching
         if act != action and act != "*":
             continue
-        
-        # Subject matching: subject is the user or one of the user's groups (nested included)
+
+        # Subject matching (user or any of user's groups, including nested)
         if subject not in user_and_groups:
             continue
-        
-        # Determine the best rule based on prefix length and deny beats allow
-        if best is None:
-            best = (len(prefix), effect)
-        elif len(prefix) > best[0]:
-            best = (len(prefix), effect)
-        elif len(prefix) == best[0]:
-            # At equal length, deny beats allow.
-            # If current effect is "deny", it overrides an "allow" rule.
-            # If current effect is "allow", it does not override a "deny" rule.
+
+        # Determine if this is a better match
+        if len(prefix) > best_match_len:
+            best_match_len = len(prefix)
+            best_effect = effect
+        elif len(prefix) == best_match_len:
+            # At equal length, deny beats allow
             if effect == "deny":
-                best = (len(prefix), effect)
-            
-    return best is not None and best[1] == "allow"
+                best_effect = "deny"
+            # If current best is deny, keep it. If current best is allow and new is allow, keep allow.
+            # Only update if new is deny and old was allow.
+    
+    return best_effect == "allow"
 === END ===

@@ -1,58 +1,153 @@
 === FILE: csvio.py ===
+import re
+
+def _is_number(s):
+    """Helper to check if a string can be parsed as a number."""
+    try:
+        float(s)
+        return True
+    except ValueError:
+        return False
+
 def write_row(fields):
     """Encode one record as a CSV line WITHOUT trailing newline. Fields are str/int/float/None. None -> empty field.
     A field is quoted (with double quotes, inner quotes doubled) iff it contains a comma, a double quote, CR or LF, or has
     leading/trailing spaces. Numbers use str(). Spreadsheet-injection guard: a str field starting with =, +, - or @
     (but a str that parses as a plain number such as "-5" is left alone) gets a leading apostrophe prepended BEFORE quoting."""
-
-    formatted_fields = []
-    for field in fields:
-        if field is None:
+    processed_fields = []
+    for f in fields:
+        # 1. Handle None -> empty string
+        if f is None:
             s = ""
         else:
-            s = str(field)
+            s = str(f)
 
-        # Spreadsheet-injection guard
-        if s and s[0] in ('=', '+', '-', '@'):
-            is_number_string = False
-            try:
-                # Check if it's a number string like "-5" or "+10.5"
-                # This will fail for "=SUM(...)" or "@user"
-                float(s)
-                is_number_string = True
-            except ValueError:
-                pass # Not a number string
+        # 2. Spreadsheet-injection guard
+        # Apply if it's a string, not empty, starts with a dangerous char, AND is not a valid number.
+        if isinstance(f, str) and s and s[0] in ('=', '+', '-', '@') and not _is_number(s):
+            s = "'" + s
 
-            if not is_number_string:
-                s = "'" + s
-
-        # Quoting logic
-        needs_quoting = False
-        # Check for characters that require quoting
-        if ',' in s or '"' in s or '\r' in s or '\n' in s:
-            needs_quoting = True
-        # Check for leading/trailing spaces that require quoting
-        if s != s.strip():
-            needs_quoting = True
+        # 3. Quoting logic
+        # Determine if quoting is needed based on content or leading/trailing spaces.
+        needs_quoting = (
+            ',' in s or
+            '"' in s or
+            '\r' in s or
+            '\n' in s or
+            s.strip() != s # Check for leading/trailing spaces
+        )
 
         if needs_quoting:
             # Double inner quotes
             s = s.replace('"', '""')
             # Enclose in double quotes
             s = '"' + s + '"'
-        
-        formatted_fields.append(s)
-
-    return ",".join(formatted_fields)
+        processed_fields.append(s)
+    return ",".join(processed_fields)
 
 
 def read_rows(text):
     """Parse CSV text (rows separated by \n or \r\n, quoted fields may contain commas, quotes (doubled) and newlines) into a
     list of lists of str. A trailing newline does not create an empty row. An empty field is "". Raise ValueError on an
     unterminated quote."""
-    # The current ticket focuses on fixing CSV export issues.
-    # The read_rows function is not a full CSV parser and would require significant changes
-    # to correctly handle quoted fields, doubled quotes, and newlines within fields.
-    # This is out of scope for the current bug report, which is about malformed *export*.
-    return [line.split(",") for line in text.splitlines()]
+    rows = []
+    # Use a regex to split by comma, but not if the comma is inside double quotes.
+    # This regex handles quoted fields, doubled quotes, and newlines within fields.
+    # It also correctly identifies empty fields.
+    # Pattern breakdown:
+    # (?:
+    #   "(?:[^"]|"")*"  # A quoted field: starts with ", then any char that's not " OR "" (doubled quote), ends with "
+    #   |               # OR
+    #   [^,\r\n]*       # An unquoted field: any char that's not a comma, CR, or LF
+    # )
+    # The non-capturing group (?:...) is important to match the whole field.
+    # The re.DOTALL flag allows '.' to match newlines, which is crucial for quoted fields spanning multiple lines.
+    field_pattern = re.compile(r'(?:[^",\r\n]+|"(?:[^"]|"")*")')
+    
+    # Split the input text into lines, handling both \n and \r\n.
+    # This also correctly ignores a trailing empty line if present.
+    lines = text.splitlines()
+
+    i = 0
+    while i < len(lines):
+        current_line_text = lines[i]
+        current_row_fields = []
+        
+        # Use a regex to find all fields in the current line, respecting quoting.
+        # This regex is designed to find fields separated by commas.
+        # It handles quoted fields (which may contain commas or newlines) and unquoted fields.
+        # The key is to match either a quoted string or a sequence of non-comma characters.
+        # We need to be careful with multi-line quoted fields.
+        
+        # A more robust approach for parsing CSV, especially with multi-line fields,
+        # is to process character by character or use a state machine.
+        # For simplicity and to match the spirit of the original line-by-line processing,
+        # we'll try to adapt the regex approach to handle multi-line fields by
+        # accumulating lines until a quoted field is closed.
+
+        # This simple split-by-comma regex is insufficient for quoted fields containing commas or newlines.
+        # We need a proper CSV parser logic.
+
+        # Let's implement a simple state machine for parsing.
+        # States: UNQUOTED, QUOTED, QUOTE_SEEN (after a quote, checking for another or comma/end)
+        
+        row_fields = []
+        current_field = []
+        in_quote = False
+        
+        # Iterate through characters of the current line and potentially subsequent lines
+        # if a quoted field spans multiple lines.
+        
+        char_idx = 0
+        line_idx = i
+        
+        while line_idx < len(lines):
+            line = lines[line_idx]
+            while char_idx < len(line):
+                char = line[char_idx]
+
+                if in_quote:
+                    if char == '"':
+                        # Could be an escaped quote or end of field
+                        if char_idx + 1 < len(line) and line[char_idx + 1] == '"':
+                            # Doubled quote, add one to field
+                            current_field.append('"')
+                            char_idx += 1 # Skip the next quote
+                        else:
+                            # End of quoted field
+                            in_quote = False
+                    else:
+                        current_field.append(char)
+                else: # Not in quote
+                    if char == '"':
+                        if current_field: # If we have content before a quote, it's malformed (e.g., hello"world")
+                            raise ValueError(f"Malformed CSV: quote found in unquoted field at line {line_idx+1}, char {char_idx+1}")
+                        in_quote = True
+                    elif char == ',':
+                        row_fields.append("".join(current_field))
+                        current_field = []
+                    elif char == '\r' or char == '\n': # Should not happen if splitlines() is used correctly
+                        pass
+                    else:
+                        current_field.append(char)
+                char_idx += 1
+            
+            # End of line reached
+            if in_quote:
+                # If we are still in a quote, the field spans to the next line
+                current_field.append('\n') # Preserve newline within the field
+                line_idx += 1
+                char_idx = 0 # Reset char index for the next line
+            else:
+                # End of row
+                break
+        
+        if in_quote:
+            raise ValueError(f"Unterminated quote at end of input or line {line_idx}")
+
+        row_fields.append("".join(current_field)) # Add the last field of the row
+        rows.append(row_fields)
+        i = line_idx + 1 # Move to the next logical row
+
+    return rows
 === END ===

@@ -1,3 +1,14 @@
+=== FILE: utils.py ===
+from decimal import Decimal, ROUND_HALF_UP
+
+
+def round_half_up(x):
+    return int(Decimal(str(x)).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+
+
+def clamp(x, lo, hi):
+    return max(lo, min(hi, x))
+=== END ===
 === FILE: pricing.py ===
 from utils import round_half_up, clamp
 
@@ -7,7 +18,7 @@ def unit_price(sku, qty, catalog):
     best_pct = 0
     for min_qty, pct in item.get("tiers", []):
         if qty >= min_qty:
-            best_pct = max(best_pct, pct)
+            best_pct = max(best_pct, pct) # Take the best (highest) percentage discount
     return round_half_up(item["price"] * (100 - best_pct) / 100)
 
 
@@ -24,7 +35,7 @@ def coupon_discount(sub, coupon):
             d = min(d, coupon["cap"])
     else:
         d = coupon["value"]
-    return min(d, sub)
+    return min(d, sub) # A coupon can never make the subtotal negative
 === END ===
 === FILE: inventory.py ===
 class OutOfStock(Exception):
@@ -45,12 +56,17 @@ class Inventory:
     def reserve(self, order_id, lines):
         if order_id in self.reservations:
             raise ValueError("duplicate order")
-        need = {}
+        
+        # Calculate total quantity needed for each SKU in this order
+        needed_by_sku = {}
         for s, q in lines:
-            need[s] = need.get(s, 0) + q
-        for s, total_needed_q in need.items():
-            if self.available(s) < total_needed_q:
+            needed_by_sku[s] = needed_by_sku.get(s, 0) + q
+
+        # Check if all needed quantities are available
+        for s, q_needed in needed_by_sku.items():
+            if self.available(s) < q_needed:
                 raise OutOfStock(s)
+                
         self.reservations[order_id] = list(lines)
 
     def release(self, order_id):
@@ -61,7 +77,6 @@ class Inventory:
             self.stock[s] -= q
 === END ===
 === FILE: shipping.py ===
-import math
 from utils import round_half_up
 
 BANDS = [(500, 300), (2000, 600), (5000, 1200)]
@@ -70,16 +85,21 @@ ZONES = {"local": 1.0, "remote": 1.5}
 
 
 def shipping_cost(weight_g, zone, sub):
-    if sub >= FREE_AT:
+    if sub >= FREE_AT: # Exactly 10000 cents ships free
         return 0
     base = None
     for limit, cost in BANDS:
-        if weight_g <= limit:
+        if weight_g <= limit: # Exactly 500g, 2000g, 5000g belong to the band whose limit it equals
             base = cost
             break
     if base is None:
-        extra = math.ceil((weight_g - 5000) / 1000)
-        base = 1200 + 200 * extra
+        # Beyond 5000g, every started extra kilogram costs 200 (5001g is one extra kilogram)
+        # This means (weight_g - 5000) / 1000, rounded up to the nearest integer.
+        # (x - 1) // y + 1 for positive x, y
+        extra_kg = (weight_g - 5000 - 1) // 1000 + 1 if weight_g > 5000 else 0
+        base = 1200 + 200 * extra_kg
+    
+    # Remote zone costs 1.5x, rounded half up
     return round_half_up(base * ZONES[zone])
 === END ===
 === FILE: orders.py ===
@@ -109,7 +129,7 @@ class OrderBook:
         if o is None or o["status"] != "placed":
             return
         o["status"] = "cancelled"
-        self.inv.release(order_id)
+        self.inv.release(order_id) # Release stock back to inventory
 
     def ship(self, order_id):
         o = self.orders[order_id]
@@ -125,9 +145,18 @@ from pricing import unit_price
 def revenue_by_sku(book):
     out = {}
     for o in book.orders.values():
-        if o["status"] == "cancelled":
-            continue
-        for s, q in o["lines"]:
-            out[s] = out.get(s, 0) + unit_price(s, q, book.catalog) * q
+        if o["status"] != "cancelled": # Cancelled orders must not be counted
+            for s, q in o["lines"]:
+                out[s] = out.get(s, 0) + unit_price(s, q, book.catalog) * q
     return out
+=== END ===
+=== FILE: tests/test_orders.py ===
+from inventory import Inventory
+from orders import OrderBook
+
+CAT = {"pen": {"price": 250, "tiers": [(10, 10), (50, 20)]}}
+
+def test_basic():
+    book = OrderBook(Inventory({"pen": 100}), CAT)
+    assert book.place("o1", [("pen", 2)])["subtotal"] == 500
 === END ===

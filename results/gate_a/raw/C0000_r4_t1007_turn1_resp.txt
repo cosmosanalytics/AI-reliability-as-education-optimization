@@ -4,11 +4,12 @@ from utils import round_half_up, clamp
 
 def unit_price(sku, qty, catalog):
     item = catalog[sku]
-    best_pct = 0
+    qualifying_discounts = [0]  # Start with 0% discount
     for min_qty, pct in item.get("tiers", []):
         if qty >= min_qty:
-            best_pct = max(best_pct, pct)
-    return round_half_up(item["price"] * (100 - best_pct) / 100)
+            qualifying_discounts.append(pct)
+    best_discount = max(qualifying_discounts)
+    return round_half_up(item["price"] * (100 - best_discount) / 100)
 
 
 def subtotal(lines, catalog):
@@ -22,8 +23,9 @@ def coupon_discount(sub, coupon):
         d = round_half_up(sub * coupon["value"] / 100)
         if "cap" in coupon:
             d = min(d, coupon["cap"])
-    else:
+    else:  # fixed
         d = coupon["value"]
+    # A coupon can never make the subtotal negative
     return min(d, sub)
 === END ===
 === FILE: inventory.py ===
@@ -45,22 +47,32 @@ class Inventory:
     def reserve(self, order_id, lines):
         if order_id in self.reservations:
             raise ValueError("duplicate order")
-        
-        needed_quantities = {}
+
+        # Calculate total quantity needed for each SKU in this order
+        needed_in_order = {}
         for s, q in lines:
-            needed_quantities[s] = needed_quantities.get(s, 0) + q
-        
-        for s, q_needed in needed_quantities.items():
+            needed_in_order[s] = needed_in_order.get(s, 0) + q
+
+        # Check if all needed quantities are available
+        for s, q_needed in needed_in_order.items():
             if self.available(s) < q_needed:
                 raise OutOfStock(s)
-        
+
+        # If all checks pass, then reserve
         self.reservations[order_id] = list(lines)
 
     def release(self, order_id):
-        self.reservations.pop(order_id, None)
+        # Only release if the order exists and is not committed
+        if order_id in self.reservations:
+            self.reservations.pop(order_id)
 
     def commit(self, order_id):
-        for s, q in self.reservations.pop(order_id):
+        # Pop reservation first to ensure atomicity and prevent double commit
+        reserved_lines = self.reservations.pop(order_id, None)
+        if reserved_lines is None:
+            raise ValueError(f"Order {order_id} not reserved or already committed/released")
+
+        for s, q in reserved_lines:
             self.stock[s] -= q
 === END ===
 === FILE: shipping.py ===
@@ -72,19 +84,21 @@ ZONES = {"local": 1.0, "remote": 1.5}
 
 
 def shipping_cost(weight_g, zone, sub):
-    if sub >= FREE_AT:
+    if sub >= FREE_AT:  # Order ships free if amount after discount is exactly 10000 cents or more
         return 0
     base = None
     for limit, cost in BANDS:
-        if weight_g <= limit:
+        if weight_g <= limit:  # A parcel of exactly 500g, 2000g, or 5000g belongs to the band whose limit it equals
             base = cost
             break
     if base is None:
-        # For "every started extra kilogram", use ceiling division
-        # (x + y - 1) // y for ceil(x / y) with positive integers
-        extra = (weight_g - 5000 + 999) // 1000
-        base = 1200 + 200 * extra
-    return round_half_up(base * ZONES[zone])
+        # Beyond 5000g, every started extra kilogram costs 200 (5001g is one extra kilogram)
+        extra_kg = (weight_g - 5000 + 999) // 1000 # +999 for ceiling division
+        base = 1200 + 200 * extra_kg
+    
+    zone_multiplier = ZONES[zone]
+    # Remote zone costs 1.5x, rounded half up
+    return round_half_up(base * zone_multiplier)
 === END ===
 === FILE: orders.py ===
 from inventory import OutOfStock
@@ -99,6 +113,8 @@ class OrderBook:
         self.orders = {}
 
     def place(self, order_id, lines, coupon=None, zone="local", weight_g=0):
+        # The inventory.reserve method now handles the "change nothing at all"
+        # requirement by raising OutOfStock before modifying state.
         self.inv.reserve(order_id, lines)
         sub = subtotal(lines, self.catalog)
         disc = coupon_discount(sub, coupon)
@@ -111,9 +127,11 @@ class OrderBook:
     def cancel(self, order_id):
         o = self.orders.get(order_id)
         if o is None or o["status"] != "placed":
+            # Cancelling twice or cancelling an unknown order must do nothing
             return
-        self.inv.release(order_id)
         o["status"] = "cancelled"
+        # Cancelling an order must give its stock back
+        self.inv.release(order_id)
 
     def ship(self, order_id):
         o = self.orders[order_id]
@@ -129,6 +147,7 @@ from pricing import unit_price
 def revenue_by_sku(book):
     out = {}
     for o in book.orders.values():
+        # Cancelled orders must not be counted
         if o["status"] == "cancelled":
             continue
         for s, q in o["lines"]:

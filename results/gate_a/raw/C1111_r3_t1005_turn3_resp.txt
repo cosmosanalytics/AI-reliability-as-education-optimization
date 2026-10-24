@@ -1,0 +1,86 @@
+=== FILE: groups.py ===
+class Groups:
+    """Group membership. Groups may contain users and other groups (nesting). Cycles must not hang."""
+
+    def __init__(self):
+        self.members = {}  # group -> set of direct members (users or other groups)
+        self.reverse_memberships = {}  # member -> set of direct parent groups
+
+    def add(self, group, member):
+        self.members.setdefault(group, set()).add(member)
+        self.reverse_memberships.setdefault(member, set()).add(group)
+
+    def remove(self, group, member):
+        """Remove member from group; removing a non-member is a no-op. An emptied group still exists."""
+        if group in self.members:
+            self.members[group].discard(member)
+            if member in self.reverse_memberships:
+                self.reverse_memberships[member].discard(group)
+                if not self.reverse_memberships[member]:
+                    del self.reverse_memberships[member]
+
+    def groups_of(self, user):
+        """Set of all groups the user belongs to, directly or through nested groups."""
+        all_groups = set()
+        q = [user]  # Queue for BFS
+        visited_members = set()  # To prevent cycles and redundant processing
+
+        while q:
+            current_member = q.pop(0)
+            if current_member in visited_members:
+                continue
+            visited_members.add(current_member)
+
+            # Find groups that current_member is directly a part of
+            # These are the parent groups of current_member
+            direct_parent_groups = self.reverse_memberships.get(current_member, set())
+
+            for g in direct_parent_groups:
+                if g not in all_groups:
+                    all_groups.add(g)
+                    q.append(g)  # Add the group to the queue to find its parent groups
+
+        return all_groups
+=== END ===
+=== FILE: acl.py ===
+def allowed(groups, acl, user, path, action):
+    """acl: list of (path_prefix, subject, action, effect) with effect "allow" or "deny"; subject is a user name or group
+    name. A rule applies if its prefix is a path-segment prefix of path ("/a" covers "/a" and "/a/b" but NOT "/ab"; "/" covers
+    everything), its action equals `action` or is "*", and its subject is the user or one of the user's groups (nested
+    included). The MOST SPECIFIC (longest) matching prefix decides; at equal length deny beats allow. No match -> False."""
+    best_match_len = -1
+    best_effect = None
+
+    user_and_groups = groups.groups_of(user)
+    user_and_groups.add(user)  # Add the user itself to the set of subjects to check
+
+    for prefix, subject, act, effect in acl:
+        # Path segment prefix matching logic
+        if not path.startswith(prefix):
+            continue
+        # Ensure it's a path segment prefix, not just a string prefix
+        # "/a" covers "/a" and "/a/b" but NOT "/ab"
+        if prefix != "/" and len(path) > len(prefix) and path[len(prefix)] != '/':
+            continue
+
+        # Action matching
+        if act != action and act != "*":
+            continue
+
+        # Subject matching (user or any of user's groups, including nested)
+        if subject not in user_and_groups:
+            continue
+
+        # Determine if this is a better match
+        if len(prefix) > best_match_len:
+            best_match_len = len(prefix)
+            best_effect = effect
+        elif len(prefix) == best_match_len:
+            # At equal length, deny beats allow
+            if effect == "deny":
+                best_effect = "deny"
+            # If current best is deny, keep it. If current best is allow and new is allow, keep allow.
+            # Only update if new is deny and old was allow.
+    
+    return best_effect == "allow"
+=== END ===
