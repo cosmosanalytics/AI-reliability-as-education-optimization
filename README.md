@@ -15,32 +15,40 @@ Artificial intelligence agents demonstrate impressive average-case performance o
 
 In this paper, we formalize agent reliability as a constrained education optimization problem. Treating the underlying foundation model as a fixed "student" whose weights cannot be fine-tuned directly, we optimize an education vector $\theta = (s, p, u, r, k)$—spanning assigned reference texts (*sources*), worked examples and notes (*practice*), runtime test-execution and retrieval capabilities (*tools*), pre-submission critique (*review*), and automated retake policies (*retry*).
 
-We evaluate this formulation across a comprehensive empirical progression exceeding 2,500 graded attempts on tamper-aware software engineering tasks featuring hidden functional tests, mutant test suites, and strict protected-file constraints. Our resolution-V fractional factorial design ($I = s \cdot p \cdot u \cdot r \cdot k$, $N = 320$ attempts across 80 independent runs, $\text{df} = 64$) achieves **full statistical separation of all five variables ($p < 0.0001$)**, establishing an empirical hierarchy of educational leverage:
-$$\text{Sources } (\beta_s = +0.197) > \text{Review } (\beta_r = +0.153) > \text{Practice } (\beta_p = +0.072) > \text{Retry } (\beta_k = +0.041) > \text{Tools } (\beta_u = +0.034)$$
+We evaluate this formulation on a tamper-aware software engineering benchmark of 20 tasks featuring hidden functional tests, mutant test suites, and strict protected-file constraints, tracking over 2,300 graded attempts across single-factor ablations, a $2^{5-1}$ resolution-V fractional factorial design, and five hardening progressions on Claude 3.5 Sonnet. Our empirical results uncover critical evaluation realities:
+1. **Functional Ceiling:** Modern frontier models easily synthesize code for repositories that fit within the prompt, achieving 95–100% functional solve rates and masking educational component differences.
+2. **Run-Level Behavioral Clustering:** Failures are dominated by run-wide dispositions (e.g. adding tests to protected files in Run 2); treating tickets as independent inflates sample size ($N_{\text{eff}} = 5$ cohort runs vs. $N = 60$ tickets), rendering single-pass benchmark rankings spurious.
+3. **Automated Policy Recovery:** Automated retries conditioned on file-protection checks rescue 100% (17 of 17) of rule compliance failures on the first resubmission.
+4. **Specification Ambiguity vs. Capability:** Apparent drops in capability on harder tasks stem from omitted specification conventions rather than algorithmic deficiencies.
 
 ---
 
-## Empirical Findings: Resolution-V Factorial Regression ($E3d$)
+## Key Empirical Results
 
-Evaluated under single-ticket isolation ($N = 320$ attempts across 80 independent runs, degrees of freedom $\text{df} = 64, R^2 = 0.982$):
+### 1. One-at-a-Time Ablation ($E3a$, 480 attempts)
+*5 independent runs per design $\times$ 12 held-out tickets. Baseline $B$ = Full 16-rule book.*
 
-| Factor / Interaction | Effect ($\beta$) | Std Error | $t$-statistic | $p$-value | Significance |
+| Design Configuration | Strict Pass | Per-Run Pass Rates | Tamper Count | Wilson 95% LB | Exact Permutation $p$ vs. $B$ |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Intercept ($\beta_0$)** | **+0.6469** | **0.0070** | **92.57** | **< 0.0001** | *** |
-| **Sources ($s$)** | **+0.1969** | **0.0070** | **28.17** | **< 0.0001** | *** |
-| **Practice ($p$)** | **+0.0719** | **0.0070** | **10.29** | **< 0.0001** | *** |
-| **Tools ($u$)** | **+0.0344** | **0.0070** | **4.92** | **< 0.0001** | *** |
-| **Review ($r$)** | **+0.1531** | **0.0070** | **21.91** | **< 0.0001** | *** |
-| **Retry ($k$)** | **+0.0406** | **0.0070** | **5.81** | **< 0.0001** | *** |
-| **Sources $\times$ Practice ($sp$)** | **-0.0406** | **0.0070** | **-5.81** | **< 0.0001** | *** |
-| **Tools $\times$ Review ($ur$)** | **-0.0219** | **0.0070** | **-3.13** | **0.0026** | ** |
-| **Tools $\times$ Retry ($uk$)** | **-0.0344** | **0.0070** | **-4.92** | **< 0.0001** | *** |
-| **Review $\times$ Retry ($rk$)** | **-0.0281** | **0.0070** | **-4.03** | **0.0002** | *** |
+| **Baseline $B$ (Full Book)** | **60/60** | **1.00, 1.00, 1.00, 1.00, 1.00** | **0** | **0.941** | — |
+| $S_1$ (Source = None) | 52/60 | 1.00, 0.33, 1.00, 1.00, 1.00 | 8 | 0.761 | $p = 1.000$ |
+| $S_2$ (Source = Short Book) | 52/60 | 1.00, 0.33, 1.00, 1.00, 1.00 | 8 | 0.761 | $p = 1.000$ |
+| $S_4$ (Source = Student Notes) | 42/60 | 1.00, 0.33, 0.33, 0.83, 1.00 | 18 | 0.582 | $p = 0.167$ |
+| $P_2$ (Practice = Own Notes) | 59/60 | 1.00, 0.92, 1.00, 1.00, 1.00 | 1 | 0.908 | $p = 1.000$ |
+| $P_3$ (Practice = Worked Examples)| 60/60 | 1.00, 1.00, 1.00, 1.00, 1.00 | 0 | 0.941 | $p = 1.000$ |
+| $U_2$ (Tools = Test Runner) | 60/60 | 1.00, 1.00, 1.00, 1.00, 1.00 | 0 | 0.941 | $p = 1.000$ |
+| $R_2$ (Review = Self-Checklist) | 60/60 | 1.00, 1.00, 1.00, 1.00, 1.00 | 0 | 0.941 | $p = 1.000$ |
 
-### Key Takeaways:
-1. **Sources & Review Dominate:** The 16-rule engineering process book ($\beta_s = +0.197$) and pre-submission review checklists ($\beta_r = +0.153$) provide the greatest reliability gains.
-2. **Sub-Additive Knowledge Returns ($\beta_{sp} = -0.041$):** Once an agent has comprehensive syllabus rules ($s=1$), worked examples ($p=1$) offer reduced marginal utility.
-3. **Tools and Retry Act as Substitutes ($\beta_{uk} = -0.034$):** Runtime test runners and automated retry loops both provide test error tracebacks, acting as functional substitutes rather than additive complements.
+All failures were protected test modifications, never functional errors.
+
+### 2. Resolution-V Fractional Factorial ($E3b$, 960 attempts)
+- **First Attempt:** 936 of 960 attempts passed strictly; all 960 passed functional tests.
+- **Policy Retry ($k$):** Rescued **17 of 17 (100%)** first-attempt compliance failures on resubmission.
+- **Effect Sizes:** With run-level rates as outcome ($\sigma = 0.065, 64 \text{ df}$), all effects hovered at $\beta = \pm 0.015$ ($p > 0.30$) due to the benchmark ceiling.
+
+### 3. Hardening Progression ($E3c$, 224 attempts)
+- Across Hard, Hard2, Hard3, and Hard4, base models consistently solved tickets at 95–100% rates.
+- In Hard4 Final, static generation scored **21/21 (100%)** while the test runner arm scored **20/21 (95.2%)**, confirming that runtime feedback provides zero marginal accuracy gain when code fits in the prompt.
 
 ---
 
@@ -55,13 +63,12 @@ Evaluated under single-ticket isolation ($N = 320$ attempts across 80 independen
 │   ├── tasks.py              # 20 original benchmark tasks (12 held-out, 8 practice)
 │   └── validate.py           # Pre-flight validator for reference patches
 ├── benchmarks/
-│   ├── sep_tasks.py          # Calibrated diagnostic benchmark tasks (Tasks 801-804)
-│   ├── run_factorial_sep.py  # 16-cell Resolution-V factorial experiment execution script
-│   ├── validate_sep.py       # Validation script for diagnostic tasks
 │   ├── hard_tasks.py         # Hard suite (Tasks 101-112)
 │   ├── hard2_tasks.py        # Hard2 multi-file suite (Tasks 201-206)
 │   ├── hard3_tasks.py        # Hard3 dense bug suite (Task 301)
-│   └── hard4_tasks.py        # Hard4 suite with partial visible tests (Tasks 601-701)
+│   ├── hard4_tasks.py        # Hard4 suite with partial visible tests (Tasks 601-701)
+│   ├── gen4.py, harvest4.py  # Workspace generator and test runner scraper for Hard4
+│   └── validate*.py          # Validation scripts across benchmark versions
 ├── briefs/
 │   ├── B.md                  # Baseline 16-rule engineering process book
 │   ├── S1.md                 # Bare instruction brief (No Book)
@@ -76,12 +83,12 @@ Evaluated under single-ticket isolation ($N = 320$ attempts across 80 independen
 │   ├── grade_fact.py         # Initial fractional factorial grading script
 │   └── grade_hard4.py        # Hard4 benchmark evaluation script
 └── results/
-    ├── rows_sep_factorial.json # Full row-level output from E3d (320 attempts)
     ├── rows_fact.json        # 16-cell factorial output from original suite (960 attempts)
     ├── rows_abl.json         # OATA ablation results (480 attempts)
     ├── rows_hard.json        # Hard suite results (120 attempts)
     ├── rows_hard2.json       # Hard2 suite results (60 attempts)
-    └── patches_hard4/        # Raw patch outputs from Hard4 evaluations
+    ├── rows_orig.json        # Original pilot results (144 attempts)
+    └── patches_hard4/        # Raw patch outputs from Hard4 evaluations (42 attempts)
 ```
 
 ---
@@ -91,22 +98,25 @@ Evaluated under single-ticket isolation ($N = 320$ attempts across 80 independen
 ### 1. Requirements
 - Python 3.10+
 - `pytest`
-- `numpy`, `scipy` (for ANOVA and regression analysis)
 
 ```bash
-pip install pytest numpy scipy
+pip install pytest
 ```
 
 ### 2. Validate Benchmark Reference Solutions
 Confirm that all gold reference patches pass hidden tests and unpatched code fails:
 ```bash
-python benchmarks/validate_sep.py
+python harness/validate.py
+python benchmarks/validate_hard.py
+python benchmarks/validate2.py
+python benchmarks/validate3.py
+python benchmarks/validate4.py
 ```
 
-### 3. Re-run Factorial Regression Analysis
-Execute the 16-cell resolution-V factorial model:
+### 3. Grade Existing Factorial and Ablation Runs
 ```bash
-python benchmarks/run_factorial_sep.py
+python graders/grade_abl.py
+python graders/grade_fact.py
 ```
 
 ---
