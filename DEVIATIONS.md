@@ -59,3 +59,14 @@ This is an append-only, timestamped log recording all operational decisions, har
     - `C0000`: prompt tokens 334, completion tokens 139, response ID `RvrcaoC6DuGOytMPht7YmAI`, stop reason `FinishReason.STOP`.
   - All raw turn-by-turn audit files (`turn1_prompt.txt`, `turn1_resp.txt`, `turn2_prompt.txt`, `turn2_resp.txt`, `grade_attempt1.json`, `grade_post_review.json`, `grade_final.json`, `tool_log.json`, `transcript.json`, `rows.json`, `schedule_order.json`) written directly by `agent_runner.py`.
 - **Impact:** Phase 0 is verified live end-to-end with zero mocks and authentic provider API responses, satisfying R4-A and closing Phase 0.
+
+### [2026-10-24T18:51:00Z] Phase 1 Difficulty Gate (Gate A) Free-Tier Quota Limit (429 RESOURCE_EXHAUSTED)
+- **Context:** `runner/run_gate_a.py` was launched on the 12 multi-module tasks in `suite_e4` across cells `C0000` and `C1111` (5 runs each = 120 attempts) using the Google Gemini API (`gemini-2.5-flash`).
+- **Observation:** The first 4 attempts executed and were fully graded:
+  - `C0000` on Task 1010 (`run=1`): `final_strict=False`, `tokens_in=788`, `tokens_out=715`, `response_id=Rf3cavzDMO2-uMYPzvPCwQc`.
+  - `C1111` on Task 1001 (`run=3`): `final_strict=False`, `tokens_in=7542`, `tokens_out=1867`, `response_id=hf3capXpMv6pytMP_8yUgQQ`.
+  - `C1111` on Task 1012 (`run=3`): `final_strict=True`, `tokens_in=7584`, `tokens_out=1063`, `response_id=pf3catC8OKWB1sgPtc66iQI`.
+  - `C1111` on Task 1007 (`run=5`): `final_strict=True`, `tokens_in=9959`, `tokens_out=2548`, `response_id=0f3caovaOsyF1sgPupfsgQI`.
+  On attempt 5 (Task 1009), the Google Gemini API returned `429 RESOURCE_EXHAUSTED` with message: `"Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash, description: Generate content requests per day limit exceeded on Free Tier"`.
+- **Action Taken:** Execution halted gracefully. Logged in `DEVIATIONS.md`. Raw artifacts and rows for the 4 completed attempts remain safely saved in `results/gate_a/`.
+- **Next Steps:** Requires enabling billing / Tier 1 quota on Google AI Studio for the project, or providing an alternative provider key (`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`) to resume the remaining 116 attempts of Gate A.
