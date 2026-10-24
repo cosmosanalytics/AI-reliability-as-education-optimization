@@ -1,0 +1,46 @@
+=== FILE: recur.py ===
+from datetime import datetime, timedelta
+import calendar
+
+
+def next_occurrence(start, rule, after):
+    """start: naive datetime of the first occurrence. rule: "daily", "weekly" or "monthly". Return the first occurrence
+    STRICTLY after `after` (a naive datetime), or start itself if start > after. Occurrences are start + n periods, n>=0.
+    Weekly = same weekday and wall-clock time every 7 days. Monthly = same day-of-month and time each month; if the month
+    is too short use that month's LAST day (31 Jan -> 28/29 Feb -> 31 Mar, always counted from the ORIGINAL start day, so
+    the day returns to 31 in March). Raise ValueError for an unknown rule."""
+
+    # Store original day and time components from 'start' for the monthly rule
+    original_day = start.day
+    original_time = start.time()
+
+    cur = start
+    while True:
+        if cur > after:
+            return cur
+
+        if rule == "daily":
+            cur += timedelta(days=1)
+        elif rule == "weekly":
+            cur += timedelta(days=7)
+        elif rule == "monthly":
+            # Calculate the next month and year
+            year = cur.year
+            month = cur.month + 1
+            if month > 12:
+                month = 1
+                year += 1
+
+            # Determine the day for the new month
+            # Use original_day, but clamp to the last day of the target month if necessary.
+            # This ensures the day "returns to 31 in March" if original_day was 31.
+            max_day_in_month = calendar.monthrange(year, month)[1]
+            target_day = min(original_day, max_day_in_month)
+
+            # Construct the new datetime, preserving original time components
+            cur = datetime(year, month, target_day,
+                           original_time.hour, original_time.minute,
+                           original_time.second, original_time.microsecond)
+        else:
+            raise ValueError(rule)
+=== END ===

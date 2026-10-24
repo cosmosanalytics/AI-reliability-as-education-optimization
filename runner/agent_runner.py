@@ -25,7 +25,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
     from dotenv import load_dotenv
@@ -74,14 +76,16 @@ def compute_k_parity(s, p, u, r):
 
 def count_tokens_safe(text):
     """Counts tokens using tiktoken if available; falls back to 4-chars/token if offline."""
+    if not text:
+        return 0
     try:
         import tiktoken
 
         enc = tiktoken.get_encoding("cl100k_base")
-        return len(enc.encode(text))
+        return len(enc.encode(str(text)))
     except Exception:
         # Hermetic offline fallback
-        return max(1, len(text) // 4)
+        return max(1, len(str(text)) // 4)
 
 
 class LiveModelBackend:
@@ -208,17 +212,35 @@ class LiveModelBackend:
                 contents=full_prompt,
                 config=dict(temperature=self.temperature, max_output_tokens=16384),
             )
+            resp_text = ""
+            if getattr(res, "text", None):
+                resp_text = res.text
+            elif hasattr(res, "candidates") and res.candidates:
+                c0 = res.candidates[0]
+                content = getattr(c0, "content", None)
+                parts = getattr(content, "parts", None) if content else None
+                if parts is not None:
+                    resp_text = "".join(
+                        getattr(p, "text", "") or "" for p in parts if getattr(p, "text", None)
+                    )
+
             usage = getattr(res, "usage_metadata", None)
             in_tok = (
                 getattr(usage, "prompt_token_count", None)
-                if usage
+                if (usage and getattr(usage, "prompt_token_count", None) is not None)
                 else None
-            ) or self.count_tokens(full_prompt)
+            )
+            if in_tok is None:
+                in_tok = self.count_tokens(full_prompt)
+
             out_tok = (
                 getattr(usage, "candidates_token_count", None)
-                if usage
+                if (usage and getattr(usage, "candidates_token_count", None) is not None)
                 else None
-            ) or self.count_tokens(res.text)
+            )
+            if out_tok is None:
+                out_tok = self.count_tokens(resp_text)
+
             stop_reason = "STOP"
             if hasattr(res, "candidates") and res.candidates:
                 stop_reason = str(res.candidates[0].finish_reason)
@@ -228,7 +250,7 @@ class LiveModelBackend:
                     )
             resp_id = getattr(res, "response_id", None) or f"gemini_{int(time.time())}"
             return (
-                res.text,
+                resp_text,
                 in_tok,
                 out_tok,
                 resp_id,
@@ -734,6 +756,7 @@ def run_experiment(
     output_dir="results/exp",
     frozen_commit_sha="unknown",
     seed=42,
+    max_workers=1,
 ):
     """Executes randomized factorial experiment according to protocol."""
     os.makedirs(output_dir, exist_ok=True)
@@ -792,7 +815,31 @@ def run_experiment(
         json.dump(schedule_log, f, indent=2)
 
     rows = []
-    for i, item in enumerate(schedule):
+    existing_keys = set()
+    rows_path = os.path.join(output_dir, "rows.json")
+    if os.path.exists(rows_path):
+        try:
+            with open(rows_path, "r", encoding="utf-8") as f:
+                existing_rows = json.load(f)
+                for er in existing_rows:
+                    existing_keys.add((er.get("cell"), er.get("run"), er.get("ticket")))
+                    rows.append(er)
+            print(f"Resuming experiment: found {len(rows)} previously completed attempts.")
+        except Exception:
+            rows = []
+            existing_keys = set()
+
+    pending = [
+        (i, item)
+        for i, item in enumerate(schedule)
+        if (item[0], item[6], item[7]["id"]) not in existing_keys
+    ]
+    print(f"Pending attempts to run: {len(pending)}/{len(schedule)} (workers={max_workers})")
+
+    file_lock = threading.Lock()
+
+    def process_attempt(indexed_item):
+        i, item = indexed_item
         code, s, p, u, r, k, r_idx, ticket = item
         brief_file = os.path.join(brief_dir, f"{code}.md")
         brief_text = (
@@ -801,6 +848,10 @@ def run_experiment(
             else ""
         )
 
+        print(
+            f"[{i+1}/{len(schedule)}] Starting cell={code}, run={r_idx}, ticket={ticket['id']}...",
+            flush=True,
+        )
         res = run_single_attempt(
             cell_code=code,
             s_val=s,
@@ -817,11 +868,30 @@ def run_experiment(
             raw_dir=raw_dir,
         )
         res["order_idx"] = i
-        rows.append(res)
 
-        with open(
-            os.path.join(output_dir, "rows.json"), "w", encoding="utf-8"
-        ) as f:
-            json.dump(rows, f, indent=2)
+        with file_lock:
+            rows.append(res)
+            with open(
+                os.path.join(output_dir, "rows.json"), "w", encoding="utf-8"
+            ) as f:
+                json.dump(rows, f, indent=2)
+            print(
+                f"[{i+1}/{len(schedule)}] Finished cell={code}, run={r_idx}, ticket={ticket['id']}: "
+                f"strict={res['final_strict']} (Completed {len(rows)}/{len(schedule)})",
+                flush=True,
+            )
+        return res
+
+    if max_workers > 1 and len(pending) > 0:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(process_attempt, x) for x in pending]
+            for fut in as_completed(futures):
+                try:
+                    fut.result()
+                except Exception as e:
+                    print(f"Worker exception: {e}", flush=True)
+    else:
+        for x in pending:
+            process_attempt(x)
 
     return rows

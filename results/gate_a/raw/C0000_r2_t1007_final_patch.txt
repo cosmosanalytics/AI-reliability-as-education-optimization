@@ -1,0 +1,137 @@
+=== FILE: pricing.py ===
+from utils import round_half_up, clamp
+
+
+def unit_price(sku, qty, catalog):
+    item = catalog[sku]
+    best_pct = 0
+    for min_qty, pct in item.get("tiers", []):
+        if qty >= min_qty:
+            best_pct = max(best_pct, pct)
+    return round_half_up(item["price"] * (100 - best_pct) / 100)
+
+
+def subtotal(lines, catalog):
+    return sum(unit_price(s, q, catalog) * q for s, q in lines)
+
+
+def coupon_discount(sub, coupon):
+    if not coupon:
+        return 0
+    if coupon["type"] == "pct":
+        d = round_half_up(sub * coupon["value"] / 100)
+        if "cap" in coupon:
+            d = min(d, coupon["cap"])
+    else:
+        d = coupon["value"]
+    return min(d, sub)
+=== END ===
+=== FILE: inventory.py ===
+class OutOfStock(Exception):
+    pass
+
+
+class Inventory:
+    def __init__(self, stock):
+        self.stock = dict(stock)
+        self.reservations = {}
+
+    def reserved(self, sku):
+        return sum(q for lines in self.reservations.values() for s, q in lines if s == sku)
+
+    def available(self, sku):
+        return self.stock.get(sku, 0) - self.reserved(sku)
+
+    def reserve(self, order_id, lines):
+        if order_id in self.reservations:
+            raise ValueError("duplicate order")
+        
+        needed_quantities = {}
+        for s, q in lines:
+            needed_quantities[s] = needed_quantities.get(s, 0) + q
+        
+        for s, q_needed in needed_quantities.items():
+            if self.available(s) < q_needed:
+                raise OutOfStock(s)
+        
+        self.reservations[order_id] = list(lines)
+
+    def release(self, order_id):
+        self.reservations.pop(order_id, None)
+
+    def commit(self, order_id):
+        for s, q in self.reservations.pop(order_id):
+            self.stock[s] -= q
+=== END ===
+=== FILE: shipping.py ===
+from utils import round_half_up
+
+BANDS = [(500, 300), (2000, 600), (5000, 1200)]
+FREE_AT = 10000
+ZONES = {"local": 1.0, "remote": 1.5}
+
+
+def shipping_cost(weight_g, zone, sub):
+    if sub >= FREE_AT:
+        return 0
+    base = None
+    for limit, cost in BANDS:
+        if weight_g <= limit:
+            base = cost
+            break
+    if base is None:
+        # For "every started extra kilogram", use ceiling division
+        # (x + y - 1) // y for ceil(x / y) with positive integers
+        extra = (weight_g - 5000 + 999) // 1000
+        base = 1200 + 200 * extra
+    return round_half_up(base * ZONES[zone])
+=== END ===
+=== FILE: orders.py ===
+from inventory import OutOfStock
+from pricing import subtotal, coupon_discount
+from shipping import shipping_cost
+
+
+class OrderBook:
+    def __init__(self, inventory, catalog):
+        self.inv = inventory
+        self.catalog = catalog
+        self.orders = {}
+
+    def place(self, order_id, lines, coupon=None, zone="local", weight_g=0):
+        self.inv.reserve(order_id, lines)
+        sub = subtotal(lines, self.catalog)
+        disc = coupon_discount(sub, coupon)
+        ship = shipping_cost(weight_g, zone, sub - disc)
+        o = {"id": order_id, "lines": list(lines), "subtotal": sub, "discount": disc, "shipping": ship,
+             "total": sub - disc + ship, "status": "placed"}
+        self.orders[order_id] = o
+        return o
+
+    def cancel(self, order_id):
+        o = self.orders.get(order_id)
+        if o is None or o["status"] != "placed":
+            return
+        self.inv.release(order_id)
+        o["status"] = "cancelled"
+
+    def ship(self, order_id):
+        o = self.orders[order_id]
+        if o["status"] != "placed":
+            raise ValueError("not shippable")
+        self.inv.commit(order_id)
+        o["status"] = "shipped"
+=== END ===
+=== FILE: reports.py ===
+from pricing import unit_price
+
+
+def revenue_by_sku(book):
+    out = {}
+    for o in book.orders.values():
+        if o["status"] == "cancelled":
+            continue
+        for s, q in o["lines"]:
+            out[s] = out.get(s, 0) + unit_price(s, q, book.catalog) * q
+    return out
+=== END ===

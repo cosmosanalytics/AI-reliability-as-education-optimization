@@ -27,6 +27,7 @@ if __name__ == "__main__":
         output_dir=os.path.join(repo_root, "results", "gate_a"),
         frozen_commit_sha="f9d6c18",
         seed=42,
+        max_workers=6,
     )
 
     print("Gate A execution completed. Total rows:", len(rows))

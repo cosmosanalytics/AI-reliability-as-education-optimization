@@ -1,0 +1,54 @@
+=== FILE: ledger.py ===
+from datetime import datetime
+
+
+class Ledger:
+    """Append-only usage ledger. Entries: (customer, timestamp (naive datetime), units (int, negative for refunds))."""
+
+    def __init__(self):
+        self.entries = []
+
+    def record(self, customer, ts, units):
+        """Record an entry. Reject (ValueError) a units value of 0, a non-int units (bools too), a non-datetime ts or an empty
+        customer name."""
+        if not customer:
+            raise ValueError("customer name cannot be empty")
+        if not isinstance(ts, datetime):
+            raise ValueError("timestamp must be a datetime object")
+        # Booleans are subclasses of int, so check for bool explicitly
+        if not isinstance(units, int) or isinstance(units, bool):
+            raise ValueError("units must be an integer (not boolean)")
+        if units == 0:
+            raise ValueError("units value cannot be 0")
+        self.entries.append((customer, ts, units))
+
+    def customers(self):
+        """Sorted list of every customer that ever had an entry."""
+        return sorted({c for c, _, _ in self.entries})
+=== END ===
+=== FILE: usage_report.py ===
+from period import month_bounds
+
+
+def monthly_report(ledger, year, month, customers=None):
+    """Dict customer -> net units for the month (refunds subtract). Includes every customer in `customers` (default:
+    all customers in the ledger) with 0 when they have no entries that month."""
+    start, end = month_bounds(year, month)
+    
+    # Determine the set of customers to include in the report
+    if customers is None:
+        report_customers = set(ledger.customers())
+    else:
+        report_customers = set(customers)
+    
+    # Initialize output with these customers, all starting at 0
+    out = {c: 0 for c in report_customers}
+    
+    for c, ts, u in ledger.entries:
+        # An entry belongs to the month iff start <= ts < end
+        # and the customer is one we are reporting on
+        if start <= ts < end and c in report_customers:
+            out[c] += u # Add units (can be negative for refunds)
+            
+    return out
+=== END ===

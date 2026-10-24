@@ -1,0 +1,55 @@
+=== FILE: recur.py ===
+from datetime import datetime, timedelta
+import calendar
+
+
+def _get_nth_monthly_occurrence(start_dt, n, original_day):
+    """Calculates the nth monthly occurrence from start_dt, applying original_day logic."""
+    # Start with the initial date
+    current_dt = start_dt
+
+    # Advance n months
+    for _ in range(n):
+        year = current_dt.year
+        month = current_dt.month + 1
+        if month > 12:
+            month = 1
+            year += 1
+        
+        # Try to set the day to the original_day
+        try:
+            current_dt = current_dt.replace(year=year, month=month, day=original_day)
+        except ValueError:
+            # If original_day is too large for the target_month, use the last day of the month.
+            last_day = calendar.monthrange(year, month)[1]
+            current_dt = current_dt.replace(year=year, month=month, day=last_day)
+    return current_dt
+
+
+def next_occurrence(start, rule, after):
+    """start: naive datetime of the first occurrence. rule: "daily", "weekly" or "monthly". Return the first occurrence
+    STRICTLY after `after` (a naive datetime), or start itself if start > after. Occurrences are start + n periods, n>=0.
+    Weekly = same weekday and wall-clock time every 7 days. Monthly = same day-of-month and time each month; if the month
+    is too short use that month's LAST day (31 Jan -> 28/29 Feb -> 31 Mar, always counted from the ORIGINAL start day, so
+    the day returns to 31 in March). Raise ValueError for an unknown rule."""
+
+    original_start_day = start.day
+    n_periods = 0
+
+    while True:
+        if n_periods == 0:
+            current_occurrence = start
+        elif rule == "daily":
+            current_occurrence = start + timedelta(days=n_periods)
+        elif rule == "weekly":
+            current_occurrence = start + timedelta(days=n_periods * 7)
+        elif rule == "monthly":
+            current_occurrence = _get_nth_monthly_occurrence(start, n_periods, original_start_day)
+        else:
+            raise ValueError(rule)
+
+        if current_occurrence > after:
+            return current_occurrence
+        
+        n_periods += 1
+=== END ===
