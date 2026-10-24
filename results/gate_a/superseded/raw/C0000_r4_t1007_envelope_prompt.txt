@@ -1,0 +1,161 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Bug report from the shop team. Please fix everything below in the code (do not change the tests); each item describes the behaviour customers and finance expect.
+1. Bulk prices: an order of 60 pens must get the 20% tier price, not the 10% one (a quantity gets the best tier it qualifies for).
+2. Coupons: a coupon can never make the subtotal negative (a 300-cent fixed coupon on a 200-cent order gives a discount of 200). Percentage coupons round half up and then respect their cap.
+3. Stock: placing an order that does not fit must change nothing at all, including when the same sku appears on two lines of the order (two lines of 6 with only 10 in stock must fail). Cancelling an order must give its stock back so it can be sold again; cancelling twice or cancelling an unknown order must do nothing.
+4. Shipping: a parcel of exactly 500 g or exactly 2000 g or exactly 5000 g belongs to the band whose limit it equals; beyond 5000 g every started extra kilogram costs 200 (5001 g is one extra kilogram); an order whose amount after discount is exactly 10000 cents ships free; the remote zone costs 1.5x, rounded half up.
+5. Revenue report: cancelled orders must not be counted.
+
+REPOSITORY FILES:
+=== FILE: utils.py ===
+from decimal import Decimal, ROUND_HALF_UP
+
+
+def round_half_up(x):
+    return int(Decimal(str(x)).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+
+
+def clamp(x, lo, hi):
+    return max(lo, min(hi, x))
+=== END ===
+=== FILE: pricing.py ===
+from utils import round_half_up, clamp
+
+
+def unit_price(sku, qty, catalog):
+    item = catalog[sku]
+    best = 0
+    for min_qty, pct in item.get("tiers", []):
+        if qty >= min_qty:
+            best = pct
+    return round_half_up(item["price"] * (100 - best) / 100)
+
+
+def subtotal(lines, catalog):
+    return sum(unit_price(s, q, catalog) * q for s, q in lines)
+
+
+def coupon_discount(sub, coupon):
+    if not coupon:
+        return 0
+    if coupon["type"] == "pct":
+        d = round_half_up(sub * coupon["value"] / 100)
+        if "cap" in coupon:
+            d = min(d, coupon["cap"])
+    else:
+        d = coupon["value"]
+    return d
+=== END ===
+=== FILE: inventory.py ===
+class OutOfStock(Exception):
+    pass
+
+
+class Inventory:
+    def __init__(self, stock):
+        self.stock = dict(stock)
+        self.reservations = {}
+
+    def reserved(self, sku):
+        return sum(q for lines in self.reservations.values() for s, q in lines if s == sku)
+
+    def available(self, sku):
+        return self.stock.get(sku, 0) - self.reserved(sku)
+
+    def reserve(self, order_id, lines):
+        if order_id in self.reservations:
+            raise ValueError("duplicate order")
+        need = {}
+        for s, q in lines:
+            need[s] = need.get(s, 0) + q
+        for s, q in lines:
+            if self.available(s) < q:
+                raise OutOfStock(s)
+        self.reservations[order_id] = list(lines)
+
+    def release(self, order_id):
+        self.reservations.pop(order_id, None)
+
+    def commit(self, order_id):
+        for s, q in self.reservations.pop(order_id):
+            self.stock[s] -= q
+=== END ===
+=== FILE: shipping.py ===
+from utils import round_half_up
+
+BANDS = [(500, 300), (2000, 600), (5000, 1200)]
+FREE_AT = 10000
+ZONES = {"local": 1.0, "remote": 1.5}
+
+
+def shipping_cost(weight_g, zone, sub):
+    if sub > FREE_AT:
+        return 0
+    base = None
+    for limit, cost in BANDS:
+        if weight_g < limit:
+            base = cost
+            break
+    if base is None:
+        extra = (weight_g - 5000) // 1000
+        base = 1200 + 200 * extra
+    return round_half_up(base * ZONES[zone])
+=== END ===
+=== FILE: orders.py ===
+from inventory import OutOfStock
+from pricing import subtotal, coupon_discount
+from shipping import shipping_cost
+
+
+class OrderBook:
+    def __init__(self, inventory, catalog):
+        self.inv = inventory
+        self.catalog = catalog
+        self.orders = {}
+
+    def place(self, order_id, lines, coupon=None, zone="local", weight_g=0):
+        self.inv.reserve(order_id, lines)
+        sub = subtotal(lines, self.catalog)
+        disc = coupon_discount(sub, coupon)
+        ship = shipping_cost(weight_g, zone, sub - disc)
+        o = {"id": order_id, "lines": list(lines), "subtotal": sub, "discount": disc, "shipping": ship,
+             "total": sub - disc + ship, "status": "placed"}
+        self.orders[order_id] = o
+        return o
+
+    def cancel(self, order_id):
+        o = self.orders.get(order_id)
+        if o is None or o["status"] != "placed":
+            return
+        o["status"] = "cancelled"
+
+    def ship(self, order_id):
+        o = self.orders[order_id]
+        if o["status"] != "placed":
+            raise ValueError("not shippable")
+        self.inv.commit(order_id)
+        o["status"] = "shipped"
+=== END ===
+=== FILE: reports.py ===
+from pricing import unit_price
+
+
+def revenue_by_sku(book):
+    out = {}
+    for o in book.orders.values():
+        for s, q in o["lines"]:
+            out[s] = out.get(s, 0) + unit_price(s, q, book.catalog) * q
+    return out
+=== END ===
+=== FILE: tests/test_orders.py ===
+from inventory import Inventory
+from orders import OrderBook
+
+CAT = {"pen": {"price": 250, "tiers": [(10, 10), (50, 20)]}}
+
+def test_basic():
+    book = OrderBook(Inventory({"pen": 100}), CAT)
+    assert book.place("o1", [("pen", 2)])["subtotal"] == 500
+=== END ===

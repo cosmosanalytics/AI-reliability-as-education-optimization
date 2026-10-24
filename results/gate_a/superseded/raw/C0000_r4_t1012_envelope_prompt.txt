@@ -1,0 +1,99 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Bug report: In the distributed lease manager, attempting to renew an expired lease incorrectly re-acquires the lock instead of raising LeaseExpiredError. Furthermore, fencing tokens do not strictly increase upon renewal, and an unauthorized holder can release a lease belonging to another client. Fix manager.py and lease.py. Do not change the tests.
+
+REPOSITORY FILES:
+=== FILE: clock.py ===
+class MockClock:
+    """Monotonic clock for deterministic testing."""
+
+    def __init__(self, initial=0.0):
+        self._now = float(initial)
+
+    def now(self):
+        return self._now
+
+    def advance(self, seconds):
+        self._now += float(seconds)
+        return self._now
+=== END ===
+=== FILE: lease.py ===
+class LeaseExpiredError(Exception):
+    """Raised when renewing a lease that has already expired."""
+    pass
+
+
+class Lease:
+    def __init__(self, resource, holder, expires_at, fencing_token):
+        self.resource = resource
+        self.holder = holder
+        self.expires_at = float(expires_at)
+        self.fencing_token = int(fencing_token)
+
+    def is_valid(self, now):
+        """Lease is valid strictly if now < expires_at."""
+        return now < self.expires_at
+=== END ===
+=== FILE: manager.py ===
+from clock import MockClock
+from lease import Lease, LeaseExpiredError
+
+
+class LeaseManager:
+    """Manages distributed resource leases with monotonic fencing tokens."""
+
+    def __init__(self, clock=None, default_ttl=30.0):
+        self.clock = clock or MockClock()
+        self.default_ttl = float(default_ttl)
+        self._leases = {}
+        self._token_seq = 0
+
+    def acquire(self, resource, holder, ttl=None):
+        """Acquire lease if free or expired. Returns Lease or None if held by another."""
+        now = self.clock.now()
+        cur = self._leases.get(resource)
+        if cur and cur.is_valid(now) and cur.holder != holder:
+            return None
+
+        self._token_seq += 1
+        dur = float(ttl or self.default_ttl)
+        lease = Lease(resource, holder, now + dur, self._token_seq)
+        self._leases[resource] = lease
+        return lease
+
+    def renew(self, resource, holder, ttl=None):
+        """Extend existing lease. Raises LeaseExpiredError if lease expired or missing."""
+        now = self.clock.now()
+        cur = self._leases.get(resource)
+        # Buggy: fails to raise LeaseExpiredError if expired or wrong holder, silently re-acquires
+        if cur is None:
+            return self.acquire(resource, holder, ttl)
+
+        dur = float(ttl or self.default_ttl)
+        # Buggy: fails to increment fencing token on renewal
+        cur.expires_at = now + dur
+        return cur
+
+    def release(self, resource, holder):
+        """Release active lease. Returns True if released, False otherwise."""
+        cur = self._leases.get(resource)
+        # Buggy: does not verify that holder matches!
+        if cur:
+            del self._leases[resource]
+            return True
+        return False
+=== END ===
+=== FILE: tests/test_lease.py ===
+from clock import MockClock
+from manager import LeaseManager
+
+
+def test_basic_acquire():
+    clock = MockClock(0.0)
+    lm = LeaseManager(clock, default_ttl=10.0)
+    lease = lm.acquire("res1", "clientA")
+    assert lease is not None
+    assert lease.is_valid(clock.now()) is True
+    assert lease.fencing_token == 1
+=== END ===

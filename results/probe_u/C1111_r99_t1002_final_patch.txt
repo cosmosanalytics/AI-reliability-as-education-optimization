@@ -1,0 +1,57 @@
+=== FILE: confmerge.py ===
+def deep_merge(base, override):
+    """Return a NEW dict: base merged with override. Nested dicts merge recursively; any other value in override replaces
+    the base value (lists are replaced, not concatenated). A value of None in override REMOVES that key from the result.
+    Neither input is modified and the result shares no mutable containers with either input."""
+    result = {}
+    # Start with a deep copy of base to ensure no shared mutable containers
+    # and to handle keys present only in base
+    for k, v in base.items():
+        if isinstance(v, dict):
+            result[k] = deep_merge(v, {})  # Deep copy nested dicts
+        else:
+            result[k] = v
+
+    for k, v_override in override.items():
+        if v_override is None:
+            if k in result:
+                del result[k]
+        elif k in result and isinstance(result[k], dict) and isinstance(v_override, dict):
+            result[k] = deep_merge(result[k], v_override)
+        else:
+            result[k] = v_override
+    return result
+=== END ===
+=== FILE: envparse.py ===
+def parse_value(text):
+    """Convert an environment string: "true"/"yes"/"on"/"1" (any case, surrounding spaces ignored) -> True,
+    "false"/"no"/"off"/"0" -> False, a decimal integer like "42" or "-7" -> int, a decimal number like "2.5" -> float,
+    "" or "null"/"none" (any case) -> None, anything else -> the stripped string unchanged. Note "1" and "0" are booleans."""
+    s_stripped = text.strip()
+    s_lower = s_stripped.lower()
+
+    # Booleans
+    if s_lower in ("true", "yes", "on", "1"):
+        return True
+    if s_lower in ("false", "no", "off", "0"):
+        return False
+
+    # None
+    if s_lower in ("", "null", "none"):
+        return None
+
+    # Integers
+    try:
+        return int(s_stripped)
+    except ValueError:
+        pass
+
+    # Floats
+    try:
+        return float(s_stripped)
+    except ValueError:
+        pass
+
+    # Default to stripped string
+    return s_stripped
+=== END ===

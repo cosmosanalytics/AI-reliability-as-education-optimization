@@ -1,0 +1,63 @@
+=== FILE: confmerge.py ===
+import copy
+
+def deep_merge(base, override):
+    """Return a NEW dict: base merged with override. Nested dicts merge recursively; any other value in override replaces
+    the base value (lists are replaced, not concatenated). A value of None in override REMOVES that key from the result.
+    Neither input is modified and the result shares no mutable containers with either input."""
+    result = {}
+
+    # First, deep copy base to result to ensure no shared mutable containers with base
+    for k, v in base.items():
+        if isinstance(v, dict):
+            result[k] = deep_merge(v, {}) # Recursively deep copy nested dicts
+        elif isinstance(v, (list, set)): # Deep copy other mutable containers
+            result[k] = copy.deepcopy(v)
+        else:
+            result[k] = v
+
+    # Now, merge override into result
+    for k, v_override in override.items():
+        if v_override is None:
+            # A value of None in override REMOVES that key from the result.
+            if k in result:
+                del result[k]
+        elif isinstance(v_override, dict) and isinstance(result.get(k), dict):
+            # Nested dicts merge recursively
+            result[k] = deep_merge(result[k], v_override)
+        else:
+            # Any other value in override replaces the base value (lists are replaced, not concatenated).
+            # Ensure no mutable containers are shared with override.
+            if isinstance(v_override, (dict, list, set)):
+                result[k] = copy.deepcopy(v_override)
+            else:
+                result[k] = v_override
+    return result
+=== END ===
+=== FILE: envparse.py ===
+def parse_value(text):
+    """Convert an environment string: "true"/"yes"/"on"/"1" (any case, surrounding spaces ignored) -> True,
+    "false"/"no"/"off"/"0" -> False, a decimal integer like "42" or "-7" -> int, a decimal number like "2.5" -> float,
+    "" or "null"/"none" (any case) -> None, anything else -> the stripped string unchanged. Note "1" and "0" are booleans."""
+    s_stripped = text.strip()
+    s_lower = s_stripped.lower()
+
+    if s_lower in ("true", "yes", "on", "1"):
+        return True
+    if s_lower in ("false", "no", "off", "0"):
+        return False
+    if s_lower in ("", "null", "none"):
+        return None
+
+    try:
+        return int(s_stripped)
+    except ValueError:
+        pass
+
+    try:
+        return float(s_stripped)
+    except ValueError:
+        pass
+
+    return s_stripped
+=== END ===

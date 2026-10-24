@@ -66,9 +66,15 @@ The 16 cells of the $2^{5-1}$ resolution-V design are defined by the relation $I
 | :--- | :--- | :--- | :--- |
 | **Sources ($s$)** | $s_1$: Bare task instruction (No Book). | $s_3$: Full 16-rule engineering process book (`B.md`). | Provides global invariants: W05 test protection, W08 backward compatibility, W10 path sanitization. |
 | **Practice ($p$)** | $p_1$: Zero-shot (no practice tickets). | $p_3$: Two worked examples from practice suite (`P3.md`). | Demonstrates concrete architectural patterns and refactoring shims. |
-| **Tools ($u$)** | $u_1$: None (static diff generation only). | $u_2$: Interactive bash test runner. | Agent is provided a tool to run `pytest` against visible test files and inspect stdout/stderr. |
+| **Tools ($u$)** | $u_1$: None (static generation without tools). | $u_2$: Interactive in-turn test runner tool. | Agent is provided an interactive tool to run `pytest` against visible test files during drafting and inspect stdout/stderr before submitting. |
 | **Review ($r$)** | $r_1$: None (immediate submission). | $r_2$: Structured self-review checklist (`R2.md`). | Prompts agent to verify patch against edge cases (empty collections, negative numbers, exception types). |
-| **Retry ($k$)** | $k_1$: Single attempt ($k^-$). | $k_2$: Up to 2 retries on automated feedback ($k^+$). | Automated harness returns policy check failure or visible test traceback; agent resubmits fix. |
+| **Retry ($k$)** | $k_1$: Single attempt ($k^-$). | $k_2$: Exactly one post-submission retry on automated feedback ($k^+$). | Automated harness evaluates initial patch; on policy check failure or visible test failure, returns traceback for one corrective retry turn. |
+
+> **Pre-Registration Design Specification (Choice B):**  
+> We deliberately define $u$ and $k$ as orthogonal temporal interventions:  
+> - **Factor $u$ (In-Turn Interactive Exploration):** Grants active test runner access *during the authoring process* prior to final patch emission.  
+> - **Factor $k$ (Post-Submission Feedback Retry):** Implements an automated CI/CD grader check *after initial submission*, returning policy error diagnostics or visible test failure tracebacks for exactly one corrective retry turn ($k_2$).  
+> Cells with $u=0, k=1$ receive automated test feedback only upon failure of their initial submission, isolating the effect of reactive feedback from proactive sandbox exploration.
 
 ### Factorial Design Matrix (Resolution V)
 | Cell Code | $s$ | $p$ | $u$ | $r$ | $k$ | Cell Code | $s$ | $p$ | $u$ | $r$ | $k$ |
@@ -92,7 +98,7 @@ To prevent ambiguous intervention:
 2. **Retry Feedback ($k_2$):**
    - **On Policy Violation:** Returns exact policy error: `"Policy Check Failed: Unified diff modifies protected file: <path>. Do not modify test directory files."`
    - **On Visible Test Failure:** Returns raw pytest failure block (exit code, failure traceback, failing assertion).
-   - Maximum 2 retries allowed. All retry attempts must be logged separately as `_retry1.txt` and `_retry2.txt`.
+   - Maximum 1 retry allowed ($k_2$). The retry attempt is audited in `_transcript.json` and evaluated in `_grade_final.json`.
 
 ---
 

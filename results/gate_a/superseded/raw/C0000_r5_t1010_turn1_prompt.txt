@@ -1,0 +1,73 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Bug report: In event_dispatcher, calling event.stop_propagation() stops lower priority listeners, but fails to stop subsequent listeners registered at the same priority level. Additionally, unsubscribing a listener inside a handler during dispatch raises RuntimeError: dictionary changed size during iteration or skips listeners. Equal-priority listeners also reverse execution order. Fix dispatcher.py and event.py. Do not change the tests.
+
+REPOSITORY FILES:
+=== FILE: event.py ===
+class Event:
+    """Event object passed to subscribers."""
+
+    def __init__(self, name, data=None):
+        self.name = name
+        self.data = data or {}
+        self.cancelled = False
+
+    def stop_propagation(self):
+        """Halt dispatching to all subsequent subscribers immediately."""
+        self.cancelled = True
+=== END ===
+=== FILE: subscriber.py ===
+class Subscriber:
+    def __init__(self, handler, priority=0, once=False):
+        self.handler = handler
+        self.priority = int(priority)
+        self.once = bool(once)
+=== END ===
+=== FILE: dispatcher.py ===
+from subscriber import Subscriber
+
+
+class EventDispatcher:
+    def __init__(self):
+        self._subscribers = {}
+
+    def subscribe(self, name, handler, priority=0, once=False):
+        sub = Subscriber(handler, priority, once)
+        self._subscribers.setdefault(name, []).append(sub)
+        return sub
+
+    def unsubscribe(self, name, handler):
+        if name in self._subscribers:
+            self._subscribers[name] = [
+                s for s in self._subscribers[name] if s.handler != handler
+            ]
+
+    def dispatch(self, event):
+        """Dispatch event to subscribers sorted by priority (descending).
+        Equal priority subscribers must execute in FIFO order.
+        If event.cancelled is set, halt execution immediately."""
+        subs = self._subscribers.get(event.name, [])
+        # Buggy: sorts descending by priority but does not ensure stable FIFO tie-breaking
+        sorted_subs = sorted(subs, key=lambda s: s.priority, reverse=True)
+
+        for s in sorted_subs:
+            # Buggy: only checks cancelled between priority levels instead of before each handler
+            s.handler(event)
+            if s.once:
+                self.unsubscribe(event.name, s.handler)
+            if event.cancelled:
+                break
+=== END ===
+=== FILE: tests/test_dispatcher.py ===
+from event import Event
+from dispatcher import EventDispatcher
+
+
+def test_basic_dispatch():
+    d = EventDispatcher()
+    calls = []
+    d.subscribe("ping", lambda e: calls.append(e.data.get("v")))
+    d.dispatch(Event("ping", {"v": 42}))
+    assert calls == [42]
+=== END ===

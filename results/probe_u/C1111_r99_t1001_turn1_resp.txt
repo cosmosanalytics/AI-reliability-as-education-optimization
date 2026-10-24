@@ -1,0 +1,82 @@
+=== FILE: money.py ===
+import decimal
+
+def to_cents(x):
+    """Convert a dollar amount (int, float or str such as "1.10") to integer cents. Round half away from zero at the
+    cent: 0.285 -> 29, 2.675 -> 268, -1.005 -> -101. Never use binary float arithmetic for the conversion."""
+    # Use Decimal for precise arithmetic to avoid binary float issues.
+    # Quantize to two decimal places (cents) using ROUND_HALF_UP for "half away from zero".
+    # The context precision is set to 0 to allow for arbitrary precision during intermediate calculations,
+    # but the final quantization will handle the rounding to two decimal places.
+    with decimal.localcontext() as ctx:
+        ctx.prec = 0 # Use arbitrary precision
+        ctx.rounding = decimal.ROUND_HALF_UP
+        d = decimal.Decimal(str(x)) # Convert input to string first to avoid float precision issues
+        return int((d * 100).quantize(decimal.Decimal('1'), rounding=decimal.ROUND_HALF_UP))
+
+
+def fmt(cents):
+    """Format integer cents as dollars: 1999 -> "$19.99", 5 -> "$0.05", -150 -> "-$1.50", -5 -> "-$0.05"."""
+    sign = "-" if cents < 0 else ""
+    abs_cents = abs(cents)
+    dollars = abs_cents // 100
+    remaining_cents = abs_cents % 100
+    return f"{sign}${dollars}.{remaining_cents:02d}"
+=== END ===
+=== FILE: invoice.py ===
+from money import to_cents
+import decimal
+
+def _round_half_up(value):
+    """Helper to round a Decimal value half away from zero to the nearest integer."""
+    with decimal.localcontext() as ctx:
+        ctx.prec = 0 # Use arbitrary precision
+        ctx.rounding = decimal.ROUND_HALF_UP
+        return int(value.quantize(decimal.Decimal('1'), rounding=decimal.ROUND_HALF_UP))
+
+
+def line_total(price, qty):
+    """Cents for qty items at a dollar price."""
+    return to_cents(price) * qty
+
+
+def invoice_total(lines, discount_pct=0):
+    """lines is a list of (price_in_dollars, qty). discount_pct (0-100, may be fractional) is taken off the subtotal;
+    the discount amount is rounded half away from zero to a whole cent. Returns total cents."""
+    sub = sum(line_total(p, q) for p, q in lines)
+    # Convert subtotal to Decimal for precise discount calculation
+    sub_d = decimal.Decimal(str(sub))
+    discount_pct_d = decimal.Decimal(str(discount_pct))
+    
+    # Calculate discount amount precisely, then round half away from zero
+    discount_amount_d = sub_d * discount_pct_d / 100
+    discount_amount_cents = _round_half_up(discount_amount_d)
+    
+    return sub - discount_amount_cents
+=== END ===
+=== FILE: tax.py ===
+import decimal
+
+def _round_half_up(value):
+    """Helper to round a Decimal value half away from zero to the nearest integer."""
+    with decimal.localcontext() as ctx:
+        ctx.prec = 0 # Use arbitrary precision
+        ctx.rounding = decimal.ROUND_HALF_UP
+        return int(value.quantize(decimal.Decimal('1'), rounding=decimal.ROUND_HALF_UP))
+
+
+def vat(cents, rate):
+    """VAT in cents on `cents` at fractional `rate` (0.2 = 20%), rounded half away from zero to a whole cent."""
+    # Convert cents and rate to Decimal for precise calculation
+    cents_d = decimal.Decimal(str(cents))
+    rate_d = decimal.Decimal(str(rate))
+    
+    # Calculate VAT amount precisely, then round half away from zero
+    vat_amount_d = cents_d * rate_d
+    return _round_half_up(vat_amount_d)
+
+
+def gross(cents, rate):
+    """cents plus its VAT."""
+    return cents + vat(cents, rate)
+=== END ===

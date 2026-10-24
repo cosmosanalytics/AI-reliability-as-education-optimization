@@ -1,0 +1,74 @@
+=== FILE: event.py ===
+class Event:
+    """Event object passed to subscribers."""
+
+    def __init__(self, name, data=None):
+        self.name = name
+        self.data = data or {}
+        self.cancelled = False
+
+    def stop_propagation(self):
+        """Halt dispatching to all subsequent subscribers immediately."""
+        self.cancelled = True
+=== END ===
+=== FILE: subscriber.py ===
+class Subscriber:
+    def __init__(self, handler, priority=0, once=False):
+        self.handler = handler
+        self.priority = int(priority)
+        self.once = bool(once)
+        self._insertion_order = 0 # Added for stable sorting
+=== END ===
+=== FILE: dispatcher.py ===
+from subscriber import Subscriber
+
+
+class EventDispatcher:
+    def __init__(self):
+        self._subscribers = {}
+        self._next_insertion_order = 0 # Added for stable sorting
+
+    def subscribe(self, name, handler, priority=0, once=False):
+        sub = Subscriber(handler, priority, once)
+        sub._insertion_order = self._next_insertion_order # Assign insertion order
+        self._next_insertion_order += 1 # Increment for next subscriber
+        self._subscribers.setdefault(name, []).append(sub)
+        return sub
+
+    def unsubscribe(self, name, handler):
+        if name in self._subscribers:
+            # Filter out all subscribers with the given handler
+            self._subscribers[name] = [
+                s for s in self._subscribers[name] if s.handler != handler
+            ]
+            # Original behavior: did not remove the key if the list became empty.
+            # Keeping this behavior to avoid introducing new side effects or the "dictionary changed size" error.
+            # If the intent was to remove the key, uncomment the following lines:
+            # if not self._subscribers[name]:
+            #     del self._subscribers[name]
+
+    def dispatch(self, event):
+        """Dispatch event to subscribers sorted by priority (descending).
+        Equal priority subscribers must execute in FIFO order.
+        If event.cancelled is set, halt execution immediately."""
+        subs = self._subscribers.get(event.name, [])
+        # Sort by priority (descending) and then by insertion order (ascending) for stable FIFO tie-breaking
+        sorted_subs = sorted(subs, key=lambda s: (-s.priority, s._insertion_order))
+
+        for s in sorted_subs:
+            if event.cancelled: # Check cancelled before executing handler
+                break
+            s.handler(event)
+            if s.once:
+                # Remove this specific subscriber instance from the original list.
+                # This is safe because sorted_subs is a copy being iterated over.
+                # This addresses the "skips listeners" issue by removing only the specific instance.
+                if event.name in self._subscribers: # Should always be true if 's' was in 'subs'
+                    self._subscribers[event.name] = [
+                        sub_item for sub_item in self._subscribers[event.name] if sub_item is not s
+                    ]
+                    # If the list for this event name becomes empty, remove the key from the dictionary.
+                    # This addresses potential "dictionary changed size" issues if this was the last subscriber.
+                    if not self._subscribers[event.name]:
+                        del self._subscribers[event.name]
+=== END ===

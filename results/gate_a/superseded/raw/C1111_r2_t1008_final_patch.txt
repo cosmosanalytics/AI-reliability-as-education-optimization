@@ -1,0 +1,31 @@
+=== FILE: pipeline.py ===
+class MiddlewarePipeline:
+    """Executes middleware in onion order: process_request forwards, process_response in reverse."""
+
+    def __init__(self, middlewares=None):
+        self.middlewares = list(middlewares or [])
+
+    def add(self, mw):
+        self.middlewares.append(mw)
+
+    def execute(self, ctx, handler):
+        """Run request phases forwards, invoke handler, then run response phases in reverse.
+        If ctx.abort() is called during request phase, stop calling subsequent request hooks,
+        but DO execute process_response on all middleware that already processed the request, in reverse order."""
+        executed_middlewares = []
+        for mw in self.middlewares:
+            executed_middlewares.append(mw)
+            mw.process_request(ctx)
+            if ctx.aborted:
+                # Abort detected, stop processing further request hooks
+                break
+
+        if not ctx.aborted:
+            handler(ctx)
+
+        # Run response hooks in reverse order for all middlewares that processed the request
+        for mw in reversed(executed_middlewares):
+            mw.process_response(ctx)
+
+        return ctx
+=== END ===

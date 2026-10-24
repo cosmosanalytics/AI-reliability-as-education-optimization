@@ -1,0 +1,68 @@
+=== FILE: bucket.py ===
+class TokenBucket:
+    """Token bucket rate limiter with continuous replenishment."""
+
+    def __init__(self, capacity, refill_rate, tokens=None, last_updated=0.0):
+        self.capacity = float(capacity)
+        self.refill_rate = float(refill_rate)
+        self.tokens = float(capacity if tokens is None else tokens)
+        self.last_updated = float(last_updated)
+
+    def refill(self, now):
+        elapsed = max(0.0, now - self.last_updated)
+        self.last_updated = now
+        # Fix: Use float for added tokens to prevent truncation
+        added = elapsed * self.refill_rate
+        self.tokens = min(self.capacity, self.tokens + added)
+
+    def acquire(self, tokens, now):
+        """Attempts to consume tokens at time `now`.
+        Returns (allowed: bool, wait_time: float).
+        Raises ValueError if `tokens` <= 0 or `tokens` > self.capacity."""
+        if tokens <= 0:
+            raise ValueError("tokens must be positive")
+        # Fix: Raise ValueError if tokens requested exceed bucket capacity
+        if tokens > self.capacity:
+            raise ValueError(f"tokens ({tokens}) cannot exceed bucket capacity ({self.capacity})")
+
+        self.refill(now)
+        if self.tokens >= tokens:
+            self.tokens -= tokens
+            return True, 0.0
+        missing = tokens - self.tokens
+        wait_time = missing / self.refill_rate
+        return False, wait_time
+=== END ===
+=== FILE: limiter.py ===
+from bucket import TokenBucket
+from storage import MemoryStore
+
+
+class RateLimiter:
+    def __init__(self, default_capacity=10, default_refill_rate=1.0, ttl=3600, store=None):
+        self.default_capacity = default_capacity
+        self.default_refill_rate = default_refill_rate
+        self.ttl = ttl
+        self.store = store or MemoryStore()
+
+    def allow(self, key, tokens=1, now=0.0):
+        entry = self.store.get(key)
+        if entry is None:
+            bucket = TokenBucket(self.default_capacity, self.default_refill_rate, last_updated=now)
+        else:
+            tok, last_t = entry
+            bucket = TokenBucket(self.default_capacity, self.default_refill_rate, tokens=tok, last_updated=last_t)
+
+        allowed, wait_time = bucket.acquire(tokens, now)
+        self.store.set(key, (bucket.tokens, bucket.last_updated))
+        return allowed, wait_time
+
+    def prune_stale(self, now):
+        """Prune buckets that have been inactive for more than self.ttl."""
+        for k in self.store.keys():
+            entry = self.store.get(k)
+            # Fix: Ensure elapsed time is non-negative to prevent issues with timestamp rollovers
+            # If now < entry[1] (e.g., due to rollover), the bucket is not stale.
+            if entry and (now >= entry[1]) and ((now - entry[1]) > self.ttl):
+                self.store.delete(k)
+=== END ===

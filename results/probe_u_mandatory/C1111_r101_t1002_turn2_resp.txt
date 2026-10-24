@@ -1,0 +1,42 @@
+=== FILE: confmerge.py ===
+def deep_merge(base, override):
+    """Return a NEW dict: base merged with override. Nested dicts merge recursively; any other value in override replaces
+    the base value (lists are replaced, not concatenated). A value of None in override REMOVES that key from the result.
+    Neither input is modified and the result shares no mutable containers with either input."""
+    result = dict(base)
+    for key, value in override.items():
+        if value is None:
+            if key in result:
+                del result[key]
+        elif isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+=== END ===
+=== FILE: envparse.py ===
+def parse_value(text):
+    """Convert an environment string: "true"/"yes"/"on"/"1" (any case, surrounding spaces ignored) -> True,
+    "false"/"no"/"off"/"0" -> False, a decimal integer like "42" or "-7" -> int, a decimal number like "2.5" -> float,
+    "" or "null"/"none" (any case) -> None, anything else -> the stripped string unchanged. Note "1" and "0" are booleans."""
+    if not isinstance(text, str):
+        return text
+
+    stripped_text = text.strip()
+    lower_text = stripped_text.lower()
+
+    if lower_text in ["", "null", "none"]:
+        return None
+    elif lower_text in ["true", "yes", "on", "1"]:
+        return True
+    elif lower_text in ["false", "no", "off", "0"]:
+        return False
+    else:
+        try:
+            return int(stripped_text)
+        except ValueError:
+            try:
+                return float(stripped_text)
+            except ValueError:
+                return stripped_text
+=== END ===

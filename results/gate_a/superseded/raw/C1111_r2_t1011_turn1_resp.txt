@@ -1,0 +1,55 @@
+=== FILE: engine.py ===
+import os
+from memtable import MemTable
+from snapshot import Snapshot
+from wal import serialize_entry, parse_entry
+
+
+class KVEngine:
+    """Key-Value engine backed by append-only Write-Ahead Log."""
+
+    def __init__(self, wal_path):
+        self.wal_path = wal_path
+        self.memtable = MemTable()
+        self._recover()
+
+    def _recover(self):
+        if not os.path.exists(self.wal_path):
+            return
+        with open(self.wal_path, "r", encoding="utf-8") as f:
+            for line in f:
+                res = parse_entry(line)
+                if not res:
+                    continue
+                op, k, v = res
+                if op == "SET":
+                    self.memtable.set(k, v)
+                elif op == "DEL":  # Fix: handle DEL operations during recovery
+                    self.memtable.delete(k)
+
+    def get(self, key):
+        return self.memtable.get(key)
+
+    def set(self, key, val):
+        with open(self.wal_path, "a", encoding="utf-8") as f:
+            f.write(serialize_entry("SET", key, str(val)))
+        self.memtable.set(key, str(val))
+
+    def delete(self, key):
+        # Fix: calling delete on a non-existent key should be a no-op, not raise KeyError
+        # The memtable.delete method already handles non-existent keys gracefully.
+        with open(self.wal_path, "a", encoding="utf-8") as f:
+            f.write(serialize_entry("DEL", key))
+        self.memtable.delete(key)
+
+    def snapshot(self):
+        return Snapshot(dict(self.memtable.items()))
+
+    def compact(self):
+        """Compacts WAL by rewriting only live keys to a new log file."""
+        tmp_path = self.wal_path + ".compact"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            for k, v in self.memtable.items():
+                f.write(serialize_entry("SET", k, v))
+        os.replace(tmp_path, self.wal_path)
+=== END ===

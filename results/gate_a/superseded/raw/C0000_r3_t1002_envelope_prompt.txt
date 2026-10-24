@@ -1,0 +1,51 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Bug report: when a user config overrides one nested setting, the other settings next to it disappear, and setting an environment override to "false" still turns the feature on. Find the cause and fix it. Do not change the tests.
+
+REPOSITORY FILES:
+=== FILE: confmerge.py ===
+def deep_merge(base, override):
+    """Return a NEW dict: base merged with override. Nested dicts merge recursively; any other value in override replaces
+    the base value (lists are replaced, not concatenated). A value of None in override REMOVES that key from the result.
+    Neither input is modified and the result shares no mutable containers with either input."""
+    result = dict(base)
+    result.update(override)
+    return result
+=== END ===
+=== FILE: envparse.py ===
+def parse_value(text):
+    """Convert an environment string: "true"/"yes"/"on"/"1" (any case, surrounding spaces ignored) -> True,
+    "false"/"no"/"off"/"0" -> False, a decimal integer like "42" or "-7" -> int, a decimal number like "2.5" -> float,
+    "" or "null"/"none" (any case) -> None, anything else -> the stripped string unchanged. Note "1" and "0" are booleans."""
+    return bool(text)
+=== END ===
+=== FILE: settings.py ===
+from confmerge import deep_merge
+from envparse import parse_value
+
+DEFAULTS = {"db": {"host": "localhost", "port": 5432, "opts": {"ssl": False}}, "debug": False, "tags": ["a"]}
+
+
+def load(user_cfg, env):
+    """DEFAULTS < user_cfg < env. env keys look like APP__DB__PORT=5433 and map to the nested path ["db", "port"] (lower-cased,
+    split on "__"); values go through parse_value."""
+    cfg = deep_merge(DEFAULTS, user_cfg)
+    over = {}
+    for k, v in env.items():
+        if not k.startswith("APP__"):
+            continue
+        path = k[5:].lower().split("__")
+        cur = over
+        for p in path[:-1]:
+            cur = cur.setdefault(p, {})
+        cur[path[-1]] = parse_value(v)
+    return deep_merge(cfg, over)
+=== END ===
+=== FILE: tests/test_settings.py ===
+from settings import load
+
+def test_nested_override_keeps_siblings():
+    cfg = load({"db": {"port": 1}}, {})
+    assert cfg["db"]["host"] == "localhost" and cfg["db"]["port"] == 1
+=== END ===

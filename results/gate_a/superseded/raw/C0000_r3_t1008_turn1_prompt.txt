@@ -1,0 +1,126 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Bug report: In the middleware pipeline, when an authentication middleware or validation layer aborts a request (by calling context.abort(status, body)), the outer middleware cleanup/response hooks are never called, leaking open spans and audit logs. Furthermore, when middleware executes normally, response hooks must run in reverse (onion) order, but currently run forwards. Fix pipeline.py and middleware.py so aborting still executes response hooks in reverse order with the aborted response status and body, and ensure context.state is preserved across all layers. Do not change the tests.
+
+REPOSITORY FILES:
+=== FILE: context.py ===
+class RequestContext:
+    """Request context holding metadata, shared state, and response details."""
+
+    def __init__(self, path, method="GET", headers=None):
+        self.path = path
+        self.method = method
+        self.headers = dict(headers or {})
+        self.state = {}
+        self.response_status = None
+        self.response_body = None
+        self.aborted = False
+
+    def abort(self, status, body):
+        """Abort the request with an immediate error response."""
+        self.response_status = status
+        self.response_body = body
+        self.aborted = True
+=== END ===
+=== FILE: middleware.py ===
+class Middleware:
+    def process_request(self, ctx):
+        pass
+
+    def process_response(self, ctx):
+        pass
+
+
+class AuthMiddleware(Middleware):
+    def __init__(self, valid_tokens):
+        self.valid_tokens = set(valid_tokens)
+
+    def process_request(self, ctx):
+        token = ctx.headers.get("Authorization")
+        if token not in self.valid_tokens:
+            ctx.abort(401, "Unauthorized")
+
+
+class AuditMiddleware(Middleware):
+    def __init__(self, audit_log):
+        self.audit_log = audit_log
+
+    def process_request(self, ctx):
+        self.audit_log.append(f"REQ:{ctx.method}:{ctx.path}")
+
+    def process_response(self, ctx):
+        self.audit_log.append(f"RES:{ctx.response_status}")
+=== END ===
+=== FILE: pipeline.py ===
+class MiddlewarePipeline:
+    """Executes middleware in onion order: process_request forwards, process_response in reverse."""
+
+    def __init__(self, middlewares=None):
+        self.middlewares = list(middlewares or [])
+
+    def add(self, mw):
+        self.middlewares.append(mw)
+
+    def execute(self, ctx, handler):
+        """Run request phases forwards, invoke handler, then run response phases in reverse.
+        If ctx.abort() is called during request phase, stop calling subsequent request hooks,
+        but DO execute process_response on all middleware that already processed the request, in reverse order."""
+        for mw in self.middlewares:
+            mw.process_request(ctx)
+            if ctx.aborted:
+                # Buggy: returns immediately without running response hooks of outer layers
+                return ctx
+
+        if not ctx.aborted:
+            handler(ctx)
+
+        # Buggy: runs response hooks forwards instead of reverse
+        for mw in self.middlewares:
+            mw.process_response(ctx)
+
+        return ctx
+=== END ===
+=== FILE: app.py ===
+from pipeline import MiddlewarePipeline
+
+
+class App:
+    def __init__(self):
+        self.pipeline = MiddlewarePipeline()
+        self.routes = {}
+
+    def route(self, path):
+        def decorator(fn):
+            self.routes[path] = fn
+            return fn
+        return decorator
+
+    def handle(self, ctx):
+        def default_handler(c):
+            if c.path in self.routes:
+                c.response_status = 200
+                c.response_body = self.routes[c.path](c)
+            else:
+                c.abort(404, "Not Found")
+        return self.pipeline.execute(ctx, default_handler)
+=== END ===
+=== FILE: tests/test_pipeline.py ===
+from context import RequestContext
+from middleware import AuthMiddleware, AuditMiddleware
+from pipeline import MiddlewarePipeline
+
+
+def test_normal_flow():
+    audit = []
+    p = MiddlewarePipeline([AuditMiddleware(audit), AuthMiddleware(["secret"])])
+    ctx = RequestContext("/items", "GET", {"Authorization": "secret"})
+
+    def handler(c):
+        c.response_status = 200
+        c.response_body = "ok"
+
+    p.execute(ctx, handler)
+    assert ctx.response_status == 200
+    assert audit == ["REQ:GET:/items", "RES:200"]
+=== END ===

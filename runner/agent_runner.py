@@ -47,25 +47,29 @@ STANDARD_TASK_ENVELOPE_HEADER = (
     "Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks."
 )
 
+TOOL_TASK_ENVELOPE_HEADER = (
+    "Resolve this ticket. First read the whole ticket and every repository file below. "
+    "You have access to an interactive test execution tool (pytest). In your first turn, invoke the test runner "
+    "(see INTERACTIVE TEST RUNNER TOOL instructions at bottom). "
+    "When ready to submit your final patch, output ONLY the patch in exactly this format: for every file you create or change write a line "
+    "=== FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. "
+    "Paths are relative to the repository root. To delete a file write === DELETE: path ===. "
+    "Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks."
+)
+
 TOOL_INSTRUCTION_ENVELOPE = (
     "\n\nINTERACTIVE TEST RUNNER TOOL:\n"
-    "You have access to an interactive test execution tool to run visible unit tests in your workspace.\n"
-    "To run tests before final submission, output a tool block:\n"
+    "You have access to an interactive test execution tool in your workspace.\n"
+    "WORKFLOW REQUIREMENT:\n"
+    "In your first turn, you must invoke the test runner to observe test behavior in the repository by outputting:\n"
     "=== TOOL: pytest ===\n"
     "tests/\n"
     "=== END_TOOL ===\n"
-    "You may include draft === FILE === blocks in the same turn so tests run against your updated code.\n"
-    "You will receive the test exit code and traceback. You may run tests multiple times across turns.\n"
-    "When you are finished, output your complete final patch in the standard === FILE === block format without any tool blocks."
-)
-
-TOOL_TASK_ENVELOPE_HEADER = (
-    "Resolve this ticket. First read the whole ticket and every repository file below.\n"
-    "You have access to an interactive test execution tool (pytest). You may run tests to inspect and verify behavior "
-    "before submitting your final patch (see INTERACTIVE TEST RUNNER TOOL instructions at bottom).\n"
-    "When ready to submit your final patch, output ONLY the patch in the standard format: for every file you create or change write a line "
-    "=== FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===.\n"
-    "Paths are relative to the repository root. To delete a file write === DELETE: path ===.\n"
+    "You will receive the test execution exit code and traceback in the next turn.\n"
+    "When you are finished testing and ready to submit your final patch, output ONLY the patch in the standard format:\n"
+    "=== FILE: path/to/file ===\n"
+    "... complete file content ...\n"
+    "=== END ===\n"
     "Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks."
 )
 
@@ -246,9 +250,9 @@ class LiveModelBackend:
             thoughts_tok = (
                 getattr(usage, "thoughts_token_count", None)
                 if (usage and getattr(usage, "thoughts_token_count", None) is not None)
-                else None
+                else 0
             )
-            self.last_thoughts_tok = thoughts_tok
+            self.last_thoughts_tok = thoughts_tok or 0
 
             in_tok = (
                 getattr(usage, "prompt_token_count", None)
@@ -404,6 +408,7 @@ def run_single_attempt(
     tool_call_count = 0
     total_tokens_in = 0
     total_tokens_out = 0
+    total_thoughts_tokens = 0
     last_response_id = ""
     last_stop_reason = ""
     last_tool_tested_patch = ""
@@ -446,8 +451,10 @@ def run_single_attempt(
     resp_text, in_tok, out_tok, resp_id, stop_reason = backend_client.call(
         prompt=current_prompt, system_prompt=brief_text, history=history
     )
+    th_tok = getattr(backend_client, "last_thoughts_tok", 0) or 0
     total_tokens_in += in_tok
     total_tokens_out += out_tok
+    total_thoughts_tokens += th_tok
     last_response_id = resp_id
     last_stop_reason = stop_reason
 
@@ -459,6 +466,7 @@ def run_single_attempt(
             "response": resp_text,
             "tokens_in": in_tok,
             "tokens_out": out_tok,
+            "thoughts_tokens": th_tok,
             "response_id": resp_id,
             "stop_reason": stop_reason,
         }
@@ -496,8 +504,10 @@ def run_single_attempt(
         resp_text, in_tok, out_tok, resp_id, stop_reason = backend_client.call(
             prompt=tool_feedback, system_prompt=brief_text, history=history
         )
+        th_tok = getattr(backend_client, "last_thoughts_tok", 0) or 0
         total_tokens_in += in_tok
         total_tokens_out += out_tok
+        total_thoughts_tokens += th_tok
         last_response_id = resp_id
         last_stop_reason = stop_reason
 
@@ -511,6 +521,7 @@ def run_single_attempt(
                 "response": resp_text,
                 "tokens_in": in_tok,
                 "tokens_out": out_tok,
+                "thoughts_tokens": th_tok,
                 "response_id": resp_id,
                 "stop_reason": stop_reason,
             }
@@ -534,8 +545,10 @@ def run_single_attempt(
             system_prompt=brief_text,
             history=history,
         )
+        th_tok = getattr(backend_client, "last_thoughts_tok", 0) or 0
         total_tokens_in += in_tok
         total_tokens_out += out_tok
+        total_thoughts_tokens += th_tok
         last_response_id = resp_id
         last_stop_reason = stop_reason
 
@@ -547,6 +560,7 @@ def run_single_attempt(
                 "response": resp_text,
                 "tokens_in": in_tok,
                 "tokens_out": out_tok,
+                "thoughts_tokens": th_tok,
                 "response_id": resp_id,
                 "stop_reason": stop_reason,
             }
@@ -573,8 +587,10 @@ def run_single_attempt(
         resp_text, in_tok, out_tok, resp_id, stop_reason = backend_client.call(
             prompt=review_prompt, system_prompt=brief_text, history=history
         )
+        th_tok = getattr(backend_client, "last_thoughts_tok", 0) or 0
         total_tokens_in += in_tok
         total_tokens_out += out_tok
+        total_thoughts_tokens += th_tok
         last_response_id = resp_id
         last_stop_reason = stop_reason
 
@@ -586,6 +602,7 @@ def run_single_attempt(
                 "response": resp_text,
                 "tokens_in": in_tok,
                 "tokens_out": out_tok,
+                "thoughts_tokens": th_tok,
                 "response_id": resp_id,
                 "stop_reason": stop_reason,
             }
@@ -645,8 +662,10 @@ def run_single_attempt(
                     history=history,
                 )
             )
+            th_tok = getattr(backend_client, "last_thoughts_tok", 0) or 0
             total_tokens_in += in_tok
             total_tokens_out += out_tok
+            total_thoughts_tokens += th_tok
             last_response_id = resp_id
             last_stop_reason = stop_reason
 
@@ -658,6 +677,7 @@ def run_single_attempt(
                     "response": resp_text,
                     "tokens_in": in_tok,
                     "tokens_out": out_tok,
+                    "thoughts_tokens": th_tok,
                     "response_id": resp_id,
                     "stop_reason": stop_reason,
                 }
@@ -773,6 +793,8 @@ def run_single_attempt(
         "patch_differs_from_tool_test": patch_differs_from_tool_test,
         "tokens_in": total_tokens_in,
         "tokens_out": total_tokens_out,
+        "thoughts_tokens": total_thoughts_tokens,
+        "total_billed_tokens": total_tokens_in + total_tokens_out + total_thoughts_tokens,
         "violations": grade_final["violations"],
         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }

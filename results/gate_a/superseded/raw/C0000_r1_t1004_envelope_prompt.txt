@@ -1,0 +1,41 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Bug report: some rows in the CSV export end up split across several lines or shifted by a column, and re-importing the export gives different data than we exported (names with commas, quotes or line breaks, and values starting with = are the worst). Find the cause and fix it. Do not change the tests.
+
+REPOSITORY FILES:
+=== FILE: csvio.py ===
+def write_row(fields):
+    """Encode one record as a CSV line WITHOUT trailing newline. Fields are str/int/float/None. None -> empty field.
+    A field is quoted (with double quotes, inner quotes doubled) iff it contains a comma, a double quote, CR or LF, or has
+    leading/trailing spaces. Numbers use str(). Spreadsheet-injection guard: a str field starting with =, +, - or @
+    (but a str that parses as a plain number such as "-5" is left alone) gets a leading apostrophe prepended BEFORE quoting."""
+    return ",".join(str(f) for f in fields)
+
+
+def read_rows(text):
+    """Parse CSV text (rows separated by \n or \r\n, quoted fields may contain commas, quotes (doubled) and newlines) into a
+    list of lists of str. A trailing newline does not create an empty row. An empty field is "". Raise ValueError on an
+    unterminated quote."""
+    return [line.split(",") for line in text.splitlines()]
+=== END ===
+=== FILE: export.py ===
+from csvio import write_row
+
+HEADER = ["id", "name", "note", "amount"]
+
+
+def export(customers):
+    """customers: list of dicts with id, name, note, amount (note/amount may be None). Returns the CSV text, header first,
+    every line ending in \n."""
+    lines = [write_row(HEADER)]
+    for c in customers:
+        lines.append(write_row([c["id"], c["name"], c.get("note"), c.get("amount")]))
+    return "\n".join(lines) + "\n"
+=== END ===
+=== FILE: tests/test_export.py ===
+from export import export
+
+def test_comma_name():
+    assert export([{"id": 1, "name": "Smith, J", "note": None, "amount": 2}]).splitlines()[1] == '1,"Smith, J",,2'
+=== END ===
