@@ -348,16 +348,17 @@ $$\text{s.t.} \quad \sum_{i=1}^{M} c_i x_i \le B, \qquad x_i + x_j \le 1 \quad \
 - <strong>Successive Halving / UCB:</strong> Allocating run budgets dynamically.
 - <strong>Bayesian Optimization:</strong> GP surrogate optimization over discrete embeddings.
 - <strong>MIP Knapsack Surrogate:</strong> Polynomial-time knapsack solution over additive rule marginals.</p>
-<h3 id="52-computational-cost-estimates">5.2 Computational Cost Estimates</h3>
-<p>Based on pilot logging and file character counts:
-- <strong>Per-Attempt Tokens:</strong> Estimated at $\approx 6{,}800$ tokens per attempt based on the pilot's 12-ticket average of $\approx 82{,}000$ tokens per engineer run (30 to 58 seconds per run, tools off).
-- <strong>Brief Token Footprints (Approximations):</strong>
-  - Full Book ($s_3$, <code>B.md</code>): 4,238 chars / 696 words $\approx 1{,}050$ tokens.
-  - Short Book ($s_2$, <code>S2.md</code>): 1,530 chars / 263 words $\approx 380$ tokens.
-  - Worked Examples ($p_3$, <code>P3.md</code>): 8,162 chars / 1,220 words $\approx 2{,}000$ tokens.
-  - Self-Review Checklist ($r_2$, <code>R2.md</code>): 4,684 chars (includes book text) $\approx 1{,}170$ tokens.
-  - Test Runner Brief ($u_2$, <code>U2.md</code>): 4,657 chars (includes book text) $\approx 1{,}160$ tokens.</p>
-<p><em>Note on accounting:</em> These token totals are approximations derived from character lengths and pilot averages. Exact prompt tokens will vary by tokenizer and model family.</p>
+<h3 id="52-computational-cost-and-token-accounting">5.2 Computational Cost and Token Accounting</h3>
+<p>We measure exact prompt token counts across all brief configurations using the standard BPE tokenizer (<code>cl100k_base</code>, with verified equivalence under <code>o200k_base</code>):
+- <strong>Per-Attempt Tokens:</strong> $\approx 6{,}800$ tokens per attempt based on the pilot's 12-ticket average of $\approx 82{,}000$ tokens per engineer run (30 to 58 seconds per run, tools off).
+- <strong>Exact Brief Token Footprints (<code>cl100k_base</code>):</strong>
+  - <strong>Bare Instruction ($S_1$, <code>S1.md</code>):</strong> 136 chars / 20 words = <strong>26 tokens</strong>.
+  - <strong>Full 16-Rule Process Book ($B / s_3$, <code>B.md</code>):</strong> 4,238 chars / 696 words = <strong>871 tokens</strong> (incremental over $S_1$: $+845$ tokens).
+  - <strong>Short 5-Rule Book ($S_2$, <code>S2.md</code>):</strong> 1,530 chars / 263 words = <strong>323 tokens</strong> (incremental over $S_1$: $+297$ tokens).
+  - <strong>Student Study Notes ($S_4$, <code>S4.md</code>):</strong> 3,023 chars / 487 words = <strong>623 tokens</strong> (incremental over $S_1$: $+597$ tokens).
+  - <strong>Worked Examples ($P_3$, <code>P3.md</code>):</strong> 8,162 chars / 1,220 words = <strong>1,943 tokens</strong> (incremental over $B$: $+1{,}072$ tokens).
+  - <strong>Interactive Test Runner Brief ($U_2$, <code>U2.md</code>):</strong> 4,657 chars / 760 words = <strong>980 tokens</strong> (incremental over $B$: $+109$ tokens).
+  - <strong>Self-Review Checklist ($R_2$, <code>R2.md</code>):</strong> 4,684 chars / 770 words = <strong>966 tokens</strong> (incremental over $B$: $+95$ tokens).</p>
 <hr />
 <h2 id="6-experimental-design">6. Experimental Design</h2>
 <p>Our empirical study comprises approximately 1,950 graded attempts executed across five experimental phases using Claude Sonnet subagents (exact version not recorded):
@@ -548,9 +549,9 @@ $$\text{s.t.} \quad \sum_{i=1}^{M} c_i x_i \le B, \qquad x_i + x_j \le 1 \quad \
 - <strong>Small, Prompt-Sized Tasks:</strong> On self-contained repositories where full code context fits in the prompt, base models operate at ceiling. Optimizing $(s, p, u, r, k)$ yields negligible separation.
 - <strong>Large-Scale, Under-Specified Tasks:</strong> When repository size vastly exceeds the context window, agents cannot fit all definitions into memory. In this regime, the hypothesis that retrieval tools ($u_3\text{--}u_5$), practice-derived indexing ($p_2$), and multi-pass review ($r_3$) become non-optional remains an untested hypothesis that requires multi-module benchmarks to verify.</p>
 <h3 id="84-formulating-the-knapsack-mip-surrogate">8.4 Formulating the Knapsack MIP Surrogate</h3>
-<p>Based on estimated token footprints from Section 5.2 (Full Book $c_s \approx 1{,}050$ tokens, Short Book $c_{s2} \approx 380$ tokens, Worked Examples $c_p \approx 2{,}000$ tokens, Review Checklist $c_r \approx 1{,}170$ tokens, Test Runner Brief $c_u \approx 1{,}160$ tokens), the optimization problem:
+<p>Using the measured incremental token costs from Section 5.2 (Full Book $c_s = 845$ tokens over bare prompt, Short Book $c_{s2} = 297$ tokens, Worked Examples $c_p = 1{,}072$ tokens over book, Review Checklist $c_r = 95$ tokens over book, Test Runner Brief $c_u = 109$ tokens over book), the knapsack optimization problem:
 $$\max_{x \in {0,1}^M} \sum_{i} g_i x_i \quad \text{s.t.} \quad \sum_{i} c_i x_i \le B, \qquad x_i + x_j \le 1 \; \forall (i,j) \in \mathcal{K}$$
-serves as a local proposal mechanism. On compliance-dominated tasks, assigning the Full Book ($s_3$) yields the highest marginal compliance gain per token expended, while automated policy retries provide an effective fallback when prompt budgets are severely constrained.</p>
+serves as a proposal mechanism for budget-constrained scaffolding. On compliance-dominated tasks, assigning the Full Book ($s_3$) yields the highest marginal compliance gain per token expended, while automated policy retries provide an effective fallback when prompt budgets are severely constrained.</p>
 <hr />
 <h2 id="9-threats-to-validity-and-limitations">9. Threats to Validity and Limitations</h2>
 <ol>

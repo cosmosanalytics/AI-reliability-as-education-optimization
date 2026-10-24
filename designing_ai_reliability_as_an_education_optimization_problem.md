@@ -221,17 +221,17 @@ Evaluating every point in the full design grid ($\Theta = 675$) across 12 ticket
 - **Bayesian Optimization:** GP surrogate optimization over discrete embeddings.
 - **MIP Knapsack Surrogate:** Polynomial-time knapsack solution over additive rule marginals.
 
-### 5.2 Computational Cost Estimates
-Based on pilot logging and file character counts:
-- **Per-Attempt Tokens:** Estimated at $\approx 6{,}800$ tokens per attempt based on the pilot's 12-ticket average of $\approx 82{,}000$ tokens per engineer run (30 to 58 seconds per run, tools off).
-- **Brief Token Footprints (Approximations):**
-  - Full Book ($s_3$, `B.md`): 4,238 chars / 696 words $\approx 1{,}050$ tokens.
-  - Short Book ($s_2$, `S2.md`): 1,530 chars / 263 words $\approx 380$ tokens.
-  - Worked Examples ($p_3$, `P3.md`): 8,162 chars / 1,220 words $\approx 2{,}000$ tokens.
-  - Self-Review Checklist ($r_2$, `R2.md`): 4,684 chars (includes book text) $\approx 1{,}170$ tokens.
-  - Test Runner Brief ($u_2$, `U2.md`): 4,657 chars (includes book text) $\approx 1{,}160$ tokens.
-
-*Note on accounting:* These token totals are approximations derived from character lengths and pilot averages. Exact prompt tokens will vary by tokenizer and model family.
+### 5.2 Computational Cost and Token Accounting
+We measure exact prompt token counts across all brief configurations using the standard BPE tokenizer (`cl100k_base`, with verified equivalence under `o200k_base`):
+- **Per-Attempt Tokens:** $\approx 6{,}800$ tokens per attempt based on the pilot's 12-ticket average of $\approx 82{,}000$ tokens per engineer run (30 to 58 seconds per run, tools off).
+- **Exact Brief Token Footprints (`cl100k_base`):**
+  - **Bare Instruction ($S_1$, `S1.md`):** 136 chars / 20 words = **26 tokens**.
+  - **Full 16-Rule Process Book ($B / s_3$, `B.md`):** 4,238 chars / 696 words = **871 tokens** (incremental over $S_1$: $+845$ tokens).
+  - **Short 5-Rule Book ($S_2$, `S2.md`):** 1,530 chars / 263 words = **323 tokens** (incremental over $S_1$: $+297$ tokens).
+  - **Student Study Notes ($S_4$, `S4.md`):** 3,023 chars / 487 words = **623 tokens** (incremental over $S_1$: $+597$ tokens).
+  - **Worked Examples ($P_3$, `P3.md`):** 8,162 chars / 1,220 words = **1,943 tokens** (incremental over $B$: $+1{,}072$ tokens).
+  - **Interactive Test Runner Brief ($U_2$, `U2.md`):** 4,657 chars / 760 words = **980 tokens** (incremental over $B$: $+109$ tokens).
+  - **Self-Review Checklist ($R_2$, `R2.md`):** 4,684 chars / 770 words = **966 tokens** (incremental over $B$: $+95$ tokens).
 
 ---
 
@@ -328,9 +328,9 @@ Our findings define the operational boundary conditions under which education de
 - **Large-Scale, Under-Specified Tasks:** When repository size vastly exceeds the context window, agents cannot fit all definitions into memory. In this regime, the hypothesis that retrieval tools ($u_3\text{--}u_5$), practice-derived indexing ($p_2$), and multi-pass review ($r_3$) become non-optional remains an untested hypothesis that requires multi-module benchmarks to verify.
 
 ### 8.4 Formulating the Knapsack MIP Surrogate
-Based on estimated token footprints from Section 5.2 (Full Book $c_s \approx 1{,}050$ tokens, Short Book $c_{s2} \approx 380$ tokens, Worked Examples $c_p \approx 2{,}000$ tokens, Review Checklist $c_r \approx 1{,}170$ tokens, Test Runner Brief $c_u \approx 1{,}160$ tokens), the optimization problem:
+Using the measured incremental token costs from Section 5.2 (Full Book $c_s = 845$ tokens over bare prompt, Short Book $c_{s2} = 297$ tokens, Worked Examples $c_p = 1{,}072$ tokens over book, Review Checklist $c_r = 95$ tokens over book, Test Runner Brief $c_u = 109$ tokens over book), the knapsack optimization problem:
 $$\max_{x \in \{0,1\}^M} \sum_{i} g_i x_i \quad \text{s.t.} \quad \sum_{i} c_i x_i \le B, \qquad x_i + x_j \le 1 \; \forall (i,j) \in \mathcal{K}$$
-serves as a local proposal mechanism. On compliance-dominated tasks, assigning the Full Book ($s_3$) yields the highest marginal compliance gain per token expended, while automated policy retries provide an effective fallback when prompt budgets are severely constrained.
+serves as a proposal mechanism for budget-constrained scaffolding. On compliance-dominated tasks, assigning the Full Book ($s_3$) yields the highest marginal compliance gain per token expended, while automated policy retries provide an effective fallback when prompt budgets are severely constrained.
 
 ---
 
