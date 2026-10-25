@@ -84,7 +84,7 @@ freeze_data = {
         "taught_held_out_after_c2": taught_held_out,
     },
     "artifacts": artifacts,
-    "review_note": "Draft freeze manifest prepared for Round 18 review. Final immutable FREEZE.json will be generated upon reviewer approval in a dedicated commit before factor execution."
+    "review_note": "Draft freeze manifest prepared for Round 20 review. Final immutable FREEZE.json will be generated upon reviewer approval in a dedicated commit before factor execution."
 }
 
 out_path = os.path.join(repo_root, "FREEZE_DRAFT.json")

@@ -292,3 +292,18 @@ def test_consistency_matrix_invariants():
         tid = t["id"]
         pattern = rf"\|\s*\*\*?{tid}\*\*?\s*\|"
         assert re.search(pattern, content), f"Task {tid} missing from CONSISTENCY_MATRIX.md"
+
+
+def test_rule_sufficiency_j2():
+    """Enforce Condition J2 (Automated Rule Sufficiency):
+    For every TAUGHT, TRANSFER, and DISTRACTOR task, all required string literals,
+    error codes, header names, envelope keys, and formatting invariants asserted in
+    hidden tests must be either:
+    1. Directly present in HANDBOOK.md, OR
+    2. Directly present in the task ticket/issue, repo source code, or visible tests, OR
+    3. Deterministically derivable from a documented rule in HANDBOOK.md applied to the repo.
+    """
+    import verify_rule_sufficiency as v
+    unresolved = v.check_rule_sufficiency()
+    assert not unresolved, f"Tasks violate Rule Sufficiency (J2): {unresolved}"
+

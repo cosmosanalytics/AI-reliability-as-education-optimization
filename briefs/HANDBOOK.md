@@ -16,7 +16,7 @@ Functions accepting mutable containers (`dict`, `list`, `set`) must never mutate
 ### Rule H04: Structured Service Exception Hierarchy and Error Codes
 All domain service errors, permission failures, and schema validations must raise `ServiceError(code="ERR_<CATEGORY>_<DETAIL>", message="...")` defined in `errors.py`. Never raise generic `ValueError`, `KeyError`, or raw `Exception`. Standard error codes:
 - `"ERR_AUTH_SCOPE_DENIED"` for unauthorized access or missing scope.
-- `"ERR_PAYLOAD_SCHEMA_INVALID"` for missing or malformed request payload attributes.
+- `"ERR_PAYLOAD_SCHEMA_INVALID"` (or `"ERR_VALIDATION_FAILED"`) for missing or malformed request payload attributes and schema verification failures.
 - `"ERR_RESOURCE_LOCKED"` for concurrent modification conflicts.
 - `"ERR_RATE_LIMIT_EXCEEDED"` for quota and burst budget exhaustion.
 
@@ -30,7 +30,7 @@ Access control scopes must use the double-colon hierarchy `tenant::department::s
 When prioritizing event dispatch queues or scheduling tasks, events with identical timestamp or priority score must be ordered deterministically by payload SHA-256 digest in ascending lexicographical order. Execution order must be 100% reproducible across invocations.
 
 ### Rule H08: Message Wire Envelope and Snake-Case Key Normalization
-All internal wire messages, event stream records, and inter-service payloads must be wrapped in a standardized envelope: `{"_v": 2, "_ts": epoch_ms, "_src": service_name, "payload": data}`. All dictionary keys inside the payload must be strictly normalized to `snake_case`.
+All internal wire messages, event stream records, and inter-service payloads must be wrapped in a standardized envelope: `{"_v": 2, "_ts": epoch_ms, "_src": service_name, "payload": data}`. The `_src` identifier is the producing service's domain name (the first word of the module's file name before the underscore) followed by `_service` (e.g. `order_dispatcher.py` emits `order_service`, `activity_dispatcher.py` emits `activity_service`, `audit_formatter.py` emits `audit_service`). All dictionary keys inside the payload must be strictly normalized to `snake_case`.
 
 ### Rule H09: Canonical UTC Timestamp Formatting with Millisecond Precision
 All exported string timestamps must be formatted strictly in ISO 8601 UTC with explicit millisecond precision and uppercase `'Z'` suffix (`YYYY-MM-DDTHH:MM:SS.sssZ`, e.g. `"2026-10-25T12:00:00.000Z"`). Microsecond precision, local timezone offsets, or omission of milliseconds are rejected.

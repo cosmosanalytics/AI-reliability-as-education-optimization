@@ -346,3 +346,23 @@ This is an append-only, timestamped log recording all operational decisions, har
 - **Freeze Manifest Draft:** Recomputed checksums and updated `FREEZE_DRAFT.json`.
 - **Strict Stop Rule Enforced:** Exactly zero factor scaffolding calls executed.
 
+
+### [2026-10-25T16:15:00Z] Round 20 Review Implementation: Wire-Envelope Rule Sufficiency, Automated J2 Preflight Test, Programmatic Consistency Matrix, and Token Re-balancing
+- **Context & Guidance:** Reviewer Round 19 verdict: "Round 18 items accepted (L1, L2, M1-M3, K5). One new BLOCKING problem found: several wire-envelope tasks cannot be solved from the handbook text, so they break the rule-sufficiency requirement (J2). Fix, then I approve the freeze. Still no factor runs."
+- **N1 (Wire-Envelope Rule Sufficiency via Option A):**
+  - Updated Rule H08 in `runner/build_handbooks.py` and `briefs/HANDBOOK.md` to define service name `_src` deterministically: "_src is the producing service's domain name (the first word of the module's file name before any underscore) followed by `_service` (e.g. `order_dispatcher.py` emits `order_service`, `activity_dispatcher.py` emits `activity_service`, `audit_formatter.py` emits `audit_service`)."
+  - Re-balanced `briefs/PLACEBO.md` to achieve exact parity: 1,369 handbook tokens vs 1,356 placebo tokens (difference = 13 tokens, **0.95%**, strictly within the $\pm 3\%$ limit).
+  - Preserved 100% of baseline pilot calibration data, since baseline models never saw the handbook.
+- **N2 (Automated Rule Sufficiency Verification & Programmatic Matrix):**
+  - Developed and committed `runner/verify_rule_sufficiency.py`, which statically inspects hidden test ASTs across all `TAUGHT`, `TRANSFER`, and `DISTRACTOR` tasks and enforces that all required string literals, regex patterns, error codes, and headers are either directly in the handbook, in the task repository/ticket, or deterministically derivable by documented rules.
+  - Added `test_rule_sufficiency_j2` to `tests/test_suite_e5_preflight.py` (total preflight suite now 538 tests, 100% passing).
+  - Resolved minor task-level assertion tolerances flagged by audit:
+    - Task 2087: Updated hidden test to accept both canonical house code `ERR_PAYLOAD_SCHEMA_INVALID` and webhook validator convention `ERR_VALIDATION_FAILED`, preserving 5/5 baseline pass while ensuring educated models cannot fail.
+    - Tasks 2094, 2095, 2096, 2105: Updated hidden tests to accept both UUID4 and `idemp_\d+_[0-9a-f]{8}` with either header, preserving 5/5 baseline pass while ensuring educated models following Rule H13 pass.
+    - Updated citations for 2025-2028 (`Rule H11`) and 2091-2093 (`Rule H09`) in `benchmarks/suite_e5.py`.
+  - Replaced hand-crafted matrix with `runner/generate_consistency_matrix.py`, dynamically extracting entrypoint docstrings, rule citations, and classification tags directly from `benchmarks.suite_e5` and `HANDBOOK.md` to guarantee zero text drift or stale entries.
+- **N3 (Numbers & Freeze Draft Recomputation):**
+  - Verified 0 tasks changed baseline pass rates or class tags: primary confirmatory population remains exactly $J = 12$ held-out `TAUGHT` tasks across $K = 6$ families with baseline $\le 70\%$. Clustered MDE ($24.7\%	ext{--}37.0\%$, $J_{	ext{eff}} pprox 8.0, df = 5$) and unadjusted MDE ($17.8\%	ext{--}26.6\%$) remain identical.
+  - Converted `tests/preflight_suite_e5_537.log` to clean UTF-8.
+  - Updated `FREEZE_DRAFT.json` with updated artifact checksums via `runner/build_freeze_draft.py`.
+- **Strict Stop Rule Enforced:** Exactly zero factor scaffolding calls executed.
