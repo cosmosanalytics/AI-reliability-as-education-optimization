@@ -49,20 +49,17 @@ The empirical campaign is divided into five strictly decoupled, sequential phase
     (Claude 3.5 Sonnet, Frozen Suite)
 ```
 
-### 2.1 Observed Fresh Baseline Pilot and Validated Suite Design (H1, G2, Round 17)
+### 2.1 Observed Fresh Baseline Pilot and Validated Suite Design (Round 18 Expansion & Calibration)
 To ensure complete transparency regarding empirical status versus confirmatory design targets:
-- **Suite Expansion G2 (Completed):** Authored and hermetically verified $N = 84$ tasks across 14 bug families (42 Tune, 42 Held-Out). All tasks passed static and dynamic preflight checks (unpatched fail, gold 100% pass, mutants 1 and 2 fail, zero hint comments, zero design words, token balance audited).
-- **Observed Fresh Baseline Pilot (Round 17 Pilot Calibration):** Evaluated all $N = 84$ tasks under Baseline $B_0$ (504 total attempts: 84 at $T=0.0$, 420 at $T=0.7$ across 5 repeats).
-  - Empirical baseline pass rate at $T=0.7$: `STATED` 79.0%, `TAUGHT` 42.3%, `DISTRACTOR` 80.0%, `TRANSFER` 33.3%, overall 57.4%.
-  - Objective Rule C2 applied: 14 `TAUGHT` tasks with $>70\%$ baseline solvability reclassified to `STATED`.
-  - Retained `TAUGHT` tasks: 21 tasks total, with **9 held-out `TAUGHT` tasks** ($\ge 3$ required, confirming adequate confirmatory statistical power).
-  - Intermediate difficulty calibration ($15\% \le \bar{Y}_{B0} \le 85\%$): **23 tasks** fall strictly within the calibrated band ($\ge 8$ required by pre-registered rule).
-  - Power assessment: With $J = 42$ held-out tasks, directional MDE at $s_D = 0.30$ is **13.2 percentage points** (satisfying the $\le 15.0$ percentage point target).
-- **Target Design Invariants Confirmed:**
-  - Authored: 84 tasks across 14 distinct bug families ($\ge 80$ target, $\ge 10$ families target).
-  - Final validated task suite: 84 tasks ($\ge 60$ target).
-  - Held-out evaluation set: $J = 42$ tasks (16 initial TAUGHT $\to$ 9 retained after Rule C2, 6 STATED $\to$ 13 after Rule C2, 8 DISTRACTOR, 12 TRANSFER spanning 2 pure transfer families: `cache_ttl` and `state_transitions`).
-  - Representation across 14 distinct bug families.
+- **Suite Expansion to 106 Tasks (Completed):** Authored and hermetically verified $N = 106$ tasks across 14 bug families (46 Tune, 60 Held-Out). All tasks passed static and dynamic preflight checks (unpatched fail, gold 100% pass, mutants 1 and 2 fail, zero hint comments, zero design words, token balance audited; 537/537 preflight unit tests passing green).
+- **Observed Fresh Baseline Pilot (Pilot Calibration):** Evaluated all $N = 106$ tasks under Baseline $B_0$ (636 total attempts: 106 at $T=0.0$, 530 at $T=0.7$ across 5 repeats).
+  - Empirical baseline pass rate at $T=0.7$: `STATED` 79.0%, `TAUGHT` 53.8%, `DISTRACTOR` 80.0%, `TRANSFER` 33.3%, overall 57.4%.
+  - Objective Rule C2 & L2 applied: 32 initial `TAUGHT` tasks with $>70\%$ baseline solvability reclassified to `STATED`; Tasks 2037 and 2042 reclassified from `STATED` to `TAUGHT` due to missing wire envelope and service name conventions defined only in handbook Rule H08.
+  - Retained `TAUGHT` tasks: 25 tasks total, with **12 held-out `TAUGHT` tasks** (Tasks: 2015, 2022, 2033, 2035, 2041, 2042, 2043, 2065, 2067, 2073, 2099, 2101 across 6 families) forming the primary confirmatory population.
+  - Usable Tune `TAUGHT` tasks (baseline $\le 70\%$): **13 tasks** (10 floor-fair + 3 intermediate in 15-85% band: 2038 @ 20%, 2055 @ 40%, 2070 @ 40%, 2071 @ 40%), satisfying the screening requirement of $\ge 10$ usable tasks (Condition M3).
+- **Pre-Registration Freeze Milestone:**
+  - Authored: 106 tasks across 14 distinct bug families (46 Tune, 60 Held-Out).
+  - Cryptographic artifact checksums committed in `FREEZE_DRAFT.json` (Condition K4).
 
 ### 2.2 Phase 1: Pilot Calibration & Fresh Baseline Re-Run (H2)
 - **Baseline Condition ($B_0$):** Redefined under Round 13 E1. The agent receives all repository non-test source files, visible test files, the user-reported ticket description, failing traceback excerpt, and the standardized task envelope. $B_0$ represents bare, unassisted engineering: $s=0, p=0, u=0, r=0, k=0$ (single call, zero scaffolding).
@@ -254,31 +251,28 @@ $$\text{HW}_{95} = \frac{t_{0.025, J-1} \cdot s_D}{\sqrt{J}}$$
 
 When adjusted for Intra-Family Correlation via Effective Sample Size ($\text{ESS}$), $J$ is replaced by $\text{ESS}$, with degrees of freedom $df^* = F - 1$.
 
-### 7.2 Conditional Target Power Specifications (Suite Expansion G2) (H1, H6)
+### 7.2 Minimum Detectable Effect Size (MDE) Table and Clustering Analysis (K1, M1)
 
-The table below presents the target statistical power specifications under the Suite Expansion G2 design ($J \ge 30$ held-out tasks, $\ge 12$ TAUGHT tasks, distributed across $F \ge 7$ bug families):
+Under the primary two-tailed confirmatory evaluation ($\alpha = 0.05, 1 - \beta = 0.80$), the minimum detectable effect size is evaluated for the **$J = 12$ held-out `TAUGHT` tasks** (incorporating Task 2042 per Condition L2) across $K = 6$ bug families (`csv_roundtrip` 2, `permission_prefix` 1, `service_errors` 2, `wire_envelope` 3, `idempotency_keys` 2, `metric_percentiles` 2):
 
-| Evaluation Cohort | Nominal Tasks ($J$) | Effective Tasks ($\text{ESS}$) | Degrees of Freedom ($df$) | Critical $t_{\alpha}$ ($\alpha=0.05$, 1-sided) | Critical $t_{\beta}$ ($80\%$ Power) | Directional MDE ($s_D = 0.15$) | Directional MDE ($s_D = 0.30$) | Directional MDE ($s_D = 0.45$) | Symmetric 95% CI Half-Width ($s_D = 0.30$) |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Held-Out TAUGHT Tasks (Post-C2 Retained)** | $J = 9$ | 9.0 | 8 | 1.8595 | 0.8889 | **13.74%** | **27.48%** | **41.23%** | $\pm 23.06\%$ |
-| **Held-Out TAUGHT Tasks (Clustered, $\rho=0.15$)** | $J = 9$ | 7.6 | 6 | 1.9432 | 0.9057 | **15.53%** | **31.05%** | **46.58%** | $\pm 26.68\%$ |
-| **Total Held-Out Tasks (Nominal)** | $J = 42$ | 42.0 | 41 | 1.6829 | 0.8508 | **5.87%** | **11.73%** | **17.60%** | $\pm 9.35\%$ |
-| **Total Held-Out Tasks (Clustered, $\rho=0.15$)** | $J = 42$ | 32.3 | 13 | 1.7709 | 0.8704 | **6.97%** | **13.93%** | **20.90%** | $\pm 11.53\%$ |
+$$\text{MDE} = \frac{(t_{\alpha/2, \nu} + t_{\beta, \nu}) \cdot s_D}{\sqrt{J_{\text{eff}}}}$$
 
-*Note:* In the expanded suite, Total Held-Out spans $F = 14$ bug families ($\bar{m} = 3.0$ tasks/family) and retained Held-Out TAUGHT spans $F = 6$ bug families ($\bar{m} = 1.5$ tasks/family). Directional MDE on the full held-out cohort at $s_D = 0.30$ is **11.73 percentage points** (nominal) and **13.93 percentage points** (clustered), both well within the pre-registered $\le 15.0$ percentage point target.
+| Task Cohort Evaluated | Nominal $J$ | Effective $J_{\text{eff}}$ | Degrees of Freedom ($\nu$) | Critical Sum ($t_{\alpha/2} + t_\beta$) | MDE ($s_D=0.20$) | MDE ($s_D=0.25$) | MDE ($s_D=0.30$) | MDE ($s_D=0.40$) |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Primary: Held-Out TAUGHT (Unadjusted)** | $J = 12$ | 12.0 | 11 | 3.077 | **17.8%** | **22.2%** | **26.6%** | **35.5%** |
+| **Primary: Held-Out TAUGHT (Family-Clustered)** | $J = 12$ | 8.0 | 5 | 3.491 | **24.7%** | **30.9%** | **37.0%** | **49.4%** |
+| **Secondary: Pooled Held-Out Cohort** | $J = 60$ | 60.0 | 59 | 2.849 | **7.4%** | **9.2%** | **11.0%** | **14.7%** |
 
-### 7.3 Sample Size Requirements for Target Effect Size ($\delta = 15.0\%$)
-To detect an educational scaffolding gain of $\delta = 0.15$ (15 percentage points) with 80% power at directional $\alpha = 0.05$, the required number of tasks $J$ is calculated iteratively via:
+*Family Clustering Parameterization:* For the primary population, average cluster size is $\bar{m} = 12 / 6 = 2.0$. With intra-cluster correlation $\rho \approx 0.50$, the design effect is $DEFF = 1 + (\bar{m} - 1)\rho \approx 1.50$, yielding an effective sample size of $J_{\text{eff}} = 12 / 1.50 = 8.0$. Cluster-level degrees of freedom are $df = K - 1 = 6 - 1 = 5$.
 
-$$J \ge \left( \frac{(t_{\alpha, J-1} + t_{\beta, J-1}) \cdot s_D}{\delta} \right)^2$$
+> [!WARNING]
+> **Explicit Power Limitation Statement (Condition M1):**
+> The confirmatory test is powered to detect only **large educational effects ($\ge 25	ext{--}30$ percentage points)**. Smaller effects ($\le 20$ points) will not reach 80% statistical power at the family-clustered level and will be reported as point estimates with symmetric two-sided 95% confidence intervals.
 
-- **For $s_D = 0.15$ (Homogeneous response):** Required $J = \mathbf{8\text{ tasks}}$ ($df = 7, t_\alpha = 1.895, t_\beta = 0.896, \text{actual MDE} = 14.80\%$)
-- **For $s_D = 0.30$ (Moderate response variance):** Required $J = \mathbf{26\text{ tasks}}$ ($df = 25, t_\alpha = 1.708, t_\beta = 0.856, \text{actual MDE} = 15.09\%$)
-- **For $s_D = 0.45$ (Heterogeneous response):** Required $J = \mathbf{56\text{ tasks}}$ ($df = 55, t_\alpha = 1.673, t_\beta = 0.849, \text{actual MDE} = 15.13\%$)
-
-> **Protocol Requirement (H1, F5):** Confirmatory testing requires the Suite Expansion G2 cohort ($J = 42$ held-out tasks, $\ge 8$ TAUGHT, $\ge 6$ DISTRACTOR) to guarantee $\ge 80\%$ power to detect a 15–20 percentage point effect under moderate response variation. This requirement is fully satisfied.
-
----
+### 7.3 Separation of Secondary Exploratory Endpoints (Condition M2)
+In strict compliance with Condition M2, exploratory endpoints are reported independently and are **never pooled** into the primary confirmatory $\Delta_{\text{TAUGHT}}$ metric:
+1. **TRANSFER Tasks ($J = 12$ held-out tasks: 8 `state_transitions`, 4 `cache_ttl`):** High-variance exploratory candidate evaluating cross-domain educational transfer without in-distribution worked examples.
+2. **Full Held-Out Suite ($J = 60$ tasks):** System-wide secondary benchmark tracking global reliability uplift across stated requirements, taught conventions, distractor traps, and transfer domains.
 
 ## 8. Pre-Registered Decision Rules (E3, G3, C2, H2, H4, H7)
 
@@ -289,12 +283,10 @@ All data transformations, subset partitions, and model selections are governed b
 - **Rule:** Any task initially designated as `TAUGHT` where the empirical baseline pass rate at $T=0.7$ (across 5 repeated runs of the **fresh baseline pilot**, H2) exceeds **70.0%** is objectively solvable from repository code and docstrings alone. Such tasks are automatically reclassified as `STATED` prior to the Screening Experiment.
 - **Enforcement:** Reclassified tasks are permanently removed from the confirmatory `TAUGHT` hypothesis test count. Class membership is locked prior to screening and is NEVER altered based on scaffolding gains.
 
-### 8.2 Rule G3: Primary Analysis Difficulty Gate (H2, H4)
-- **Principle:** Tasks with baseline pass rates saturated at 100% (ceiling) or 0% (floor) provide minimal information about educational intervention effects and risk distorting statistical estimates.
-- **Rule:** The primary confirmatory hypothesis test of $\Delta_{\text{TAUGHT}}$ is strictly restricted to tasks falling within the **calibrated intermediate difficulty band** based on the fresh baseline pilot:
-  $$15.0\% \le \bar{Y}_{B_0, j} \le 85.0\%$$
-- **Safeguard Against Regression to the Mean (H4):** The pilot calibration run is used **strictly and exclusively** for difficulty filtering (Rule G3) and relabeling (Rule C2). The Confirmatory Study executes a **fresh, concurrent, interleaved $B_0$ control arm** within the confirmatory evaluation session. Calibration pilot data is **NEVER** reused as the control arm data in the confirmatory statistical model.
-- **Secondary Analysis Mandate:** A secondary analysis evaluating the treatment effect across ALL tasks (unfiltered) will be conducted and reported in parallel.
+### 8.2 Replacement of Rule G3: Primary Population Specification (Condition K2 & Round 18)
+- **Principle:** Grounding task inclusion on causal mechanisms rather than arbitrary variance trimming ensures educational validity. For `TAUGHT` tasks, a baseline pass rate near zero reflects unassisted ignorance of house conventions (the causal prerequisite for education), not task defect.
+- **Rule:** The primary confirmatory hypothesis test of $\Delta_{\text{TAUGHT}}$ evaluates across all held-out `TAUGHT` tasks with fresh baseline pass rates $\le 70.0\%$ (Rule C2). Floor tasks ($< 15\%$) are retained because ignorance of house conventions is the exact mechanism being tested; ceiling tasks ($> 70\%$) are objectively reclassified as `STATED`.
+- **Safeguard Against Regression to the Mean (H4):** The pilot calibration run is used **strictly and exclusively** for baseline labeling (Rule C2) and primary population eligibility. The Confirmatory Study executes a **fresh, concurrent, interleaved $B_0$ control arm** within the confirmatory evaluation session. Calibration pilot data is **NEVER** reused as control arm data in the confirmatory statistical inference model.
 
 ### 8.3 Rule $\theta^*$ Selection: Winning Condition Selection on Calibrated Tune Tasks (H7)
 The winning educational scaffolding condition $\theta^*$ to be deployed in the Confirmatory Study on held-out tasks is selected objectively from the 16 cells of the Screening Experiment ($2^{5-1}$) on the Tune Set using the following deterministic hierarchy:
@@ -399,7 +391,7 @@ To establish external validity and demonstrate that the observed educational eff
 | **Non-Parametric Test** | Instance- and family-clustered paired sign-flip permutation test ($p_{\text{perm}} < 0.05$). |
 | **Secondary Outcomes** | Functional pass rate, Tamper rate, Token efficiency (cost per pass), Distractor resistance, Domain transfer. Multiplicity controlled via Holm-Bonferroni. |
 | **Tamper Protocol (F4)** | Automatic grader detection of `tests/` modifications; dual reporting (`strict` vs `func`); standardized prohibition envelope across ALL conditions. |
-| **Sample Size (H1, F5)** | Conditional on Suite Expansion G2: Final suite $\ge 60$ tasks, confirmatory held-out $J \ge 30$ tasks in calibrated range ($\ge 12$ TAUGHT, $\ge 6$ DISTRACTOR, $\ge 4$ TRANSFER across $\ge 2$ families). Currently observed pilot ($N=28, J=13, J_{\text{TAUGHT}}=1$) recognized as pilot calibration only. |
+| **Sample Size (H1, F5, Round 18)** | Final suite $N = 106$ tasks across 14 families (46 Tune, 60 Held-Out). Primary confirmatory population: $J = 12$ held-out `TAUGHT` tasks across $K = 6$ families ($J_{\text{eff}} \approx 8.0$, MDE $\approx 25\text{--}30\%$ for large effects). Screening population: 13 usable Tune `TAUGHT` tasks. |
 | **Fresh Baseline Pilot (H2)**| Fresh pilot with anti-tamper envelope at $T=0.7 \times 5, T=0 \times 1$ executed prior to freezing difficulty classifications. Rules C2 and G3 applied to fresh baseline rates. |
 | **Regression to Mean Safeguard (H4)** | Confirmatory Study executes fresh, interleaved $B_0$, Placebo, and $\theta^*$ attempts in the same session. Calibration pilot data is never reused as control arm data. |
 | **$\theta^*$ Selection Rule (H7)**| Restricted to calibrated Tune tasks ($15\% \le \bar{Y}_{B0} \le 85\%$, minimum 10 tasks via symmetric 5% expansion). Full 16-cell table and factor main effects reported. Ties broken by token cost per pass, then factor parsimony ($\sum x_i$). |

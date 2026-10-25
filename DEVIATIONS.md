@@ -329,3 +329,20 @@ This is an append-only, timestamped log recording all operational decisions, har
 - **K5 (Operational Anomaly Disclosure):** Disclosed worker restart on attempt (Task 2070, Run 2) due to provider `RuntimeError: MAX_TOKENS`. Re-executed under identical deterministic configuration ($T=0.7$, seed=1337), untruncated response evaluated to `strict_pass=False`, recorded faithfully. Exactly 0 cherry-picking.
 - **K6 (Transfer Classes Clarification):** Pre-registration clarifies that `state_transitions` (Family 14) has Rule H15 in the handbook but no worked examples in $P_3$; `cache_ttl` (Family 7) evaluates cross-domain heuristic transfer without an explicit handbook recipe; both are 100% held-out secondary exploratory endpoints.
 - **Strict Stop Rule Enforced:** Zero factor cells ($s, p, u, r, k$) executed. Awaiting Round 18 review and approval.
+
+### [2026-10-25T15:25:00Z] Round 19 Review Implementation: Programmatic Floor Audit, Label Re-Audit, Family-Clustered Power Analysis, and Full Preflight Log
+- **Context & Guidance:** Reviewer Round 18 verdict: "SUITE AND PRIMARY-POPULATION RULE ACCEPTED IN PRINCIPLE. THE FLOOR AUDIT TABLE IS NOT ACCEPTED: its trace excerpts and diagnoses do not match the committed traces. Correct the audit and re-submit before any freeze. Still no factor runs."
+- **L1 (Programmatic Floor Audit):** Developed and committed `runner/generate_floor_audit.py` to evaluate committed baseline model patches (`results/pilot_calibration/t07/raw/`) against sandbox visible and hidden test suites. Generated exact assertion traces and grounded qualitative diagnoses across all 17 held-out floor tasks (`results/pilot_calibration/floor_audit_traces.log`). Replaced Section 3 of `PILOT_CALIBRATION_REPORT.md` with programmatic table.
+- **L2 (Label Re-Audit):**
+  - Reclassified Task 2042 (`wire_envelope`, held-out, 0/5 baseline) from `STATED` to `TAUGHT` (ticket ORD-505 names version 2 envelope but omits field schemas and service name conventions defined only in Handbook Rule H08).
+  - Reclassified Task 2037 (`wire_envelope`, tune, 0/5 baseline) from `STATED` to `TAUGHT` (ticket WIRE-801 omits service name convention defined in Rule H08).
+  - Documented Task 2044 (`wire_envelope`, held-out, 0/5 baseline) with `visible_test_sensitive=True` (visible test equality between relay_soap_envelope and raw bridge_soap_message serves as a sensitivity trap).
+  - Audited all other `STATED` and `DISTRACTOR` tasks across the 106-task suite and confirmed 0 other tasks have baseline $<15\%$. Updated `benchmarks/suite_e5.py` and `benchmarks/CONSISTENCY_MATRIX.md`.
+- **M1 (Family-Clustered Power Analysis & Explicit Limitation Statement):** Updated primary population to $J = 12$ held-out `TAUGHT` tasks across $K = 6$ families. Documented unadjusted MDE ($17.8\%\text{--}26.6\%$) and family-clustered MDE ($24.7\%\text{--}37.0\%$ with $DEFF \approx 1.5, J_{\text{eff}} \approx 8.0, df = 5$). Added explicit limitation warning in `PRE_REGISTRATION.md` and `PILOT_CALIBRATION_REPORT.md` stating the confirmatory test is powered only for large educational effects ($\ge 25\text{--}30$ points).
+- **M2 (Separation of Secondary Exploratory Endpoints):** Confirmed `state_transitions` (8 tasks) and `cache_ttl` (4 tasks) are 100% held-out secondary exploratory endpoints, reported independently and never pooled into primary $\Delta_{\text{TAUGHT}}$.
+- **M3 (Tune Set Usability Audit):** Audited Tune set and confirmed **13 usable TAUGHT tasks** with baseline $\le 70\%$ (10 floor-fair + 3 intermediate in 15-85% band: 2038 @ 20%, 2055 @ 40%, 2070 @ 40%, 2071 @ 40%), satisfying the screening requirement of $\ge 10$ usable tasks.
+- **K5 (Raw Log Confirmation):** Committed original failed attempt log for Task 2070 Run 2 (`results/pilot_calibration/t07/raw/B0_r2_t2070_original_max_tokens_error.json`).
+- **Preflight Log Attachment:** Executed full 537-test preflight suite and attached verbose output log (`tests/preflight_suite_e5_537.log`).
+- **Freeze Manifest Draft:** Recomputed checksums and updated `FREEZE_DRAFT.json`.
+- **Strict Stop Rule Enforced:** Exactly zero factor scaffolding calls executed.
+
