@@ -307,3 +307,56 @@ def test_rule_sufficiency_j2():
     unresolved = v.check_rule_sufficiency()
     assert not unresolved, f"Tasks violate Rule Sufficiency (J2): {unresolved}"
 
+
+def test_negative_control_h08_missing():
+    """Negative control: If Rule H08 _src definition sentence is deleted from HANDBOOK.md,
+    check_rule_sufficiency MUST detect and flag all H08 TAUGHT tasks as unresolved.
+    """
+    import verify_rule_sufficiency as v
+    handbook_file = os.path.join(_repo_root, "briefs", "HANDBOOK.md")
+    handbook_text = open(handbook_file, "r", encoding="utf-8").read()
+
+    round19_h08 = (
+        "### Rule H08: Message Wire Envelope and Snake-Case Key Normalization\n"
+        'All internal wire messages, event stream records, and inter-service payloads must be wrapped in a standardized envelope: `{"_v": 2, "_ts": epoch_ms, "_src": service_name, "payload": data}`. All dictionary keys inside the payload must be strictly normalized to `snake_case`.\n'
+    )
+    tampered_h08 = re.sub(
+        r"### Rule H08:.*?### Rule H09",
+        round19_h08 + "\n### Rule H09",
+        handbook_text,
+        flags=re.DOTALL,
+    )
+    unresolved = v.check_rule_sufficiency(tampered_h08)
+    expected_tasks = [2037, 2038, 2039, 2041, 2042, 2043]
+    for tid in expected_tasks:
+        assert tid in unresolved, f"Task {tid} must fail sufficiency check when H08 rule is missing"
+
+
+def test_negative_control_h13_missing():
+    """Negative control: If Rule H13 format specification is deleted from HANDBOOK.md,
+    check_rule_sufficiency MUST detect and flag all H13 TAUGHT tasks as unresolved.
+    """
+    import verify_rule_sufficiency as v
+    handbook_file = os.path.join(_repo_root, "briefs", "HANDBOOK.md")
+    handbook_text = open(handbook_file, "r", encoding="utf-8").read()
+    tampered_h13 = handbook_text.replace("idemp_<timestamp_ms>_<hex_token_8chars>", "")
+    unresolved = v.check_rule_sufficiency(tampered_h13)
+    expected_tasks = [2062, 2063, 2065, 2067, 2094, 2095, 2096, 2105]
+    for tid in expected_tasks:
+        assert tid in unresolved, f"Task {tid} must fail sufficiency check when H13 rule is missing"
+
+
+def test_negative_control_h04_missing():
+    """Negative control: If ERR_RESOURCE_LOCKED is deleted from HANDBOOK.md,
+    check_rule_sufficiency MUST detect and flag tasks requiring it as unresolved.
+    """
+    import verify_rule_sufficiency as v
+    handbook_file = os.path.join(_repo_root, "briefs", "HANDBOOK.md")
+    handbook_text = open(handbook_file, "r", encoding="utf-8").read()
+    tampered_h04 = handbook_text.replace("ERR_RESOURCE_LOCKED", "ERR_OTHER")
+    unresolved = v.check_rule_sufficiency(tampered_h04)
+    expected_tasks = [2033, 2085, 2103]
+    for tid in expected_tasks:
+        assert tid in unresolved, f"Task {tid} must fail sufficiency check when ERR_RESOURCE_LOCKED is missing"
+
+

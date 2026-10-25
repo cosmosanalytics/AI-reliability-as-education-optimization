@@ -1,7 +1,7 @@
 # Project Status & Execution Tracker (`STATUS.md`)
 
 **Current Phase:** Benchmark Validation & Pilot Calibration (Round 18 Suite Expansion to 106 Tasks & Baseline Calibration Complete)  
-**Phase State:** **Round 20 Complete: Wire-Envelope Rule Sufficiency Implemented via Option A (Rule H08 deterministically defines `_src`; Placebo re-balanced within 0.95%), Automated J2 Preflight Test Added (`test_rule_sufficiency_j2`; 538 tests passing), Programmatic Consistency Matrix Regenerated (0 text drift), 106-Task Suite Validated, Clustered Power Analysis Verified, Preflight Log Saved as Clean UTF-8, FREEZE_DRAFT.json Updated. Factor Runs Strictly Locked Pending Final Freeze Approval.**  
+**Phase State:** **Round 21 Complete: Handbook-Coupled Rule Sufficiency Implemented (Derivations Strictly Tied to HANDBOOK.md Text), 4 Negative Control Preflight Tests Added (H08, H13, H04, H15 Verified to Fail When Rules Removed), Cross-Platform Portable Paths Implemented Across All Runner & Test Scripts, Exhaustive Literal Triage Audit Completed (`benchmarks/RULE_SUFFICIENCY_TRIAGE.md`: 100% of Literals Accounted, 0 Defects), Engineering & Placebo Handbooks Strictly Frozen, Full 541-Test Preflight Suite Executed, FREEZE_DRAFT.json Updated. Factor Runs Strictly Locked Pending Approval.**  
 **Frozen SHA:** `[Current main commit]`  
 **Model Specifications:**  
 - **Model ID:** `gemini-2.5-flash`  

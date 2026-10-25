@@ -1,8 +1,9 @@
 import os
 import sys
 import json
+import pathlib
 
-repo_root = "C:/Users/richa/ai-engineering/repo_push"
+repo_root = str(pathlib.Path(__file__).resolve().parents[1])
 sys.path.insert(0, os.path.join(repo_root, "runner"))
 sys.path.insert(0, os.path.join(repo_root, "benchmarks"))
 import suite_e4

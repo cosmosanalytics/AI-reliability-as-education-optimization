@@ -7,8 +7,9 @@ alignment with zero stale or hand-copied entries.
 
 import os
 import sys
+import pathlib
 
-_repo_root = "c:/Users/richa/ai-engineering/repo_push"
+_repo_root = str(pathlib.Path(__file__).resolve().parents[1])
 sys.path.insert(0, os.path.join(_repo_root, "benchmarks"))
 sys.path.insert(0, os.path.join(_repo_root, "runner"))
 

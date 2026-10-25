@@ -1,7 +1,8 @@
 import os
+import pathlib
 import tiktoken
 
-repo_root = "C:/Users/richa/ai-engineering/repo_push"
+repo_root = str(pathlib.Path(__file__).resolve().parents[1])
 briefs_dir = os.path.join(repo_root, "briefs")
 enc = tiktoken.get_encoding("cl100k_base")
 
