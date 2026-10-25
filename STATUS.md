@@ -2,7 +2,7 @@
 
 **Current Phase:** Pre-Registration v2.0 & Suite Architecture (Round 15 Specification)  
 **Phase State:** **H1–H9 Applied to `PRE_REGISTRATION.md`, Handbook v2 / Placebo v2 Token-Balanced (0.62%), Preflight Green, Zero Factor Runs (Stop Rule Enforced)**  
-**Frozen SHA:** *Submitting for Round 16 Review*  
+**Frozen SHA:** `3251ad6`  
 **Model Specifications:**  
 - **Model ID:** `gemini-2.5-flash` (for upcoming pilot calibration upon benchmark validation approval)  
 - **Sampling Settings:** `temperature=0.0`, `max_output_tokens=16384`, `thinking_budget=2048`  
