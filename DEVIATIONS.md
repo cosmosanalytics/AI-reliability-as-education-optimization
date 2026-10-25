@@ -262,3 +262,22 @@ This is an append-only, timestamped log recording all operational decisions, har
     - Pre-registered decision rules: Rule C2 (relabeling at $>70\%$ baseline solvability), Rule G3 (difficulty gate: primary analysis restricted to calibrated range $15\% \le \bar{Y}_{B0} \le 85\%$, secondary analysis on all tasks), and Rule $\theta^*$ (winning condition selection on Tune Set factorial by strict-pass, then token efficiency, then factor parsimony).
 - **Preflight Verification:** 146 / 146 unit tests green (`tests/test_suite_e5_preflight.py`).
 - **Stop Rule Enforced:** Zero factor calls made. Suite expansion architecture and pre-registration submitted for Round 15 review.
+
+### [2026-10-25T05:25:00Z] Round 15 Pre-Registration Refinement & Handbook v2 (H1–H9, G2)
+- **Pre-Registration Protocol v2.0 (H1–H9 Compliant):**
+  - Updated `PRE_REGISTRATION.md` to v2.0 resolving all Round 15 blocking findings:
+    - **H1 (Sample Size Separation):** Explicitly separated empirical currently observed baseline pilot ($N=28, J=13, J_{\text{TAUGHT}}=1$) from the target design conditional on Suite Expansion G2 ($N \ge 80$ authored, $\ge 60$ final, $J \ge 30$ calibrated held-out).
+    - **H2 (Fresh Pilot Re-run):** Pre-registered fresh baseline pilot under finalized anti-tamper envelope and finalized tasks ($T=0.7 \times 5, T=0 \times 1$) prior to freezing difficulty classifications. Rules C2 and G3 will apply to these fresh rates.
+    - **H3 (Family-Level Clustering & HLMM):** Specified three-level Hierarchical Linear Mixed Model ($Y_{fjk} = \beta_0 + \beta_1 \cdot \text{Condition}_{fjk} + \gamma_f + u_{fj} + \epsilon_{fjk}$) accounting for intra-family correlation ($\rho_{\text{fam}}$), effective sample size ($\text{ESS}$), and held-out family diversity ($\ge 7\text{--}8$ families, $\ge 2$ pure TRANSFER).
+    - **H4 (Regression to Mean Safeguard):** Confirmatory Study pre-registered to run fresh, interleaved attempts for $B_0$, Placebo, and $\theta^*$ in the same session. Zero pilot data reused as control arm data.
+    - **H5 (Fixed-Sequence Gatekeeping Hierarchy):** Pre-registered Step 1 ($\theta^*$ vs fresh $B_0$, $\alpha=0.05$) and Step 2 ($\theta^*$ vs Placebo, $\alpha=0.05$, only if Step 1 passes). Full decision matrix specified; Holm-Bonferroni correction on secondary outcomes.
+    - **H6 (Statistical Alignment):** Directional one-sided test ($\alpha=0.05$) paired with mandatory symmetric two-sided 95% confidence intervals to ensure potential harms (e.g. distractor degradation) are exposed.
+    - **H7 ($\theta^*$ Selection Rule):** Selection on Tune Set restricted to tasks in calibrated range ($15\% \le \bar{Y}_{B0} \le 85\%$, minimum 10 tasks via symmetric 5% expansion), reporting factor main effects and 16-cell table.
+    - **H8 (Freeze Package):** Created cryptographic freeze manifest section with commit SHA, SHA-256 hashes, model specs, and randomized interleaving order.
+    - **H9 (Multi-Model Replication):** Specified exact replication study on Anthropic Claude (`claude-3-5-sonnet-20241022`).
+- **Handbook v2 and Placebo v2 Authored & Token-Balanced (G2):**
+  - Expanded `briefs/HANDBOOK.md` to 16 comprehensive, distinct House Conventions (H01–H16) defining non-standard organizational rules (half-up ledger rounding, `ServiceError` codes, `::` access scopes, SHA-256 priority tie-breaking, wire envelope, millisecond ISO 8601, TSV backslash escaping, cache key namespaces, deduplicated list concatenation, idempotency headers, nearest-rank percentiles, FSM state audit tuples, and token bucket integer truncation).
+  - Balanced `briefs/PLACEBO.md` with 16 matching software engineering best practices.
+  - Token counts verified via `cl100k_base`: Handbook v2 = 1291 tokens, Placebo v2 = 1283 tokens (**difference = 8 tokens, 0.62%**, well within $\le 3.0\%$).
+- **Preflight Verification:** 146 / 146 tests green.
+- **Stop Rule Enforced:** Zero factor calls made. Awaiting Round 16 review.

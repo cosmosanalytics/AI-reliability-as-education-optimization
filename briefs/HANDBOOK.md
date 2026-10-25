@@ -5,35 +5,53 @@ This handbook defines the mandatory engineering conventions and architectural in
 ## Core Invariants
 
 ### Rule H01: Test Directory Protection
-Never modify, delete, or create files within any `tests/` directory. All bug fixes, refactorings, and feature additions must reside strictly within production source modules. Test files define immutable correctness contracts.
+Never modify, delete, or create files within any `tests/` directory. All bug fixes, refactorings, and feature implementations must reside strictly within production source modules. Test files define immutable correctness contracts.
 
-### Rule H02: Monetary Arithmetic and Banker's Rounding
-All monetary calculations, prices, discounts, and tax computations must be conducted using fixed-point integer cents or `decimal.Decimal` with banker's rounding (`ROUND_HALF_EVEN`). Floating-point arithmetic and naive truncation are strictly prohibited. In cases of exact ties at half-cents, round to the nearest even cent.
+### Rule H02: Monetary Arithmetic and Half-Up Rounding Convention
+All financial ledger balances, invoice line adjustments, price conversions, and monetary allocations must use fixed-point arithmetic with half-up rounding (`ROUND_HALF_UP`: ties broken towards positive infinity). Naive floating-point arithmetic and standard banker's rounding (`ROUND_HALF_EVEN`) are strictly prohibited in financial ledger modules.
 
-### Rule H03: Input Immutability and Defensive Copying
-Functions accepting mutable containers (`dict`, `list`, `set`) must never mutate caller-supplied arguments in place. Always perform defensive deep copies or construct new collection instances prior to modification. Functions must return newly allocated data structures.
+### Rule H03: Container Immutability and Defensive Allocation
+Functions accepting mutable containers (`dict`, `list`, `set`) must never mutate caller-supplied arguments in place. Always perform defensive deep copies or allocate new collection instances prior to modification. Functions must return newly allocated data structures.
 
-### Rule H04: Deterministic Exception Hierarchy
-Always raise explicit standard exception types:
-- Raise `ValueError` when an argument has the appropriate type but an invalid value, empty payload, or out-of-range magnitude.
-- Raise `KeyError` when accessing an unregistered configuration or lookup key.
-- Raise `PermissionError` when an operation is denied by access control policies.
-Never raise unadorned `Exception` or return sentinel `None` to indicate failure.
+### Rule H04: Structured Service Exception Hierarchy and Error Codes
+All domain service errors, permission failures, and schema validations must raise `ServiceError(code="ERR_<CATEGORY>_<DETAIL>", message="...")` defined in `errors.py`. Never raise generic `ValueError`, `KeyError`, or raw `Exception`. Standard error codes:
+- `"ERR_AUTH_SCOPE_DENIED"` for unauthorized access or missing scope.
+- `"ERR_PAYLOAD_SCHEMA_INVALID"` for missing or malformed request payload attributes.
+- `"ERR_RESOURCE_LOCKED"` for concurrent modification conflicts.
+- `"ERR_RATE_LIMIT_EXCEEDED"` for quota and burst budget exhaustion.
 
-### Rule H05: Half-Open Interval Representation
-All temporal periods, date ranges, and numerical spans must follow the half-open interval convention $[\text{start}, \text{end})$: inclusive of the start boundary and strictly exclusive of the end boundary. A reporting period covering day $D_1$ through day $D_2$ includes timestamps where $\text{start} \le t < \text{end}$.
+### Rule H05: Temporal Representation (Half-Open vs Inclusive Spans)
+Standard query intervals, analytics reporting spans, and metric windows must follow the half-open interval convention $[\text{start}, \text{end})$: inclusive of the start boundary and strictly exclusive of the end boundary ($\text{start} \le t < \text{end}$). However, scheduled maintenance windows and cron reservation spans use the closed inclusive convention $[\text{start}, \text{end}]$: $\text{start} \le t \le \text{end}$.
 
-### Rule H06: Path and Prefix Normalization
-Resource paths and access control rule prefixes must be normalized before matching. Strip all redundant trailing slashes from prefixes (except the root `"/"`) before splitting on path segments. A prefix rule of `"/api/"` covers `"/api"` and `"/api/v1"`, but never `"/apiv1"`.
+### Rule H06: Hierarchical Access Control Scopes and Wildcards
+Access control scopes must use the double-colon hierarchy `tenant::department::service::action` (e.g. `"corp::billing::invoices::write"`). Sibling paths must be checked against `::` segment boundaries. The single asterisk wildcard `*` matches exactly one segment; the double asterisk `**` matches arbitrary multi-segment prefixes.
 
-### Rule H07: Stable Ordering and Deterministic Tie-Breaking
-When prioritizing queues, scheduled tasks, or dispatched events, ties in primary priority must be broken deterministically using secondary keys (such as chronological registration sequence or unique task ID in ascending order). Execution order must be 100% reproducible across invocations.
+### Rule H07: Event Priority Queue Ordering and Deterministic SHA-256 Tie-Breaking
+When prioritizing event dispatch queues or scheduling tasks, events with identical timestamp or priority score must be ordered deterministically by payload SHA-256 digest in ascending lexicographical order. Execution order must be 100% reproducible across invocations.
 
-### Rule H08: Safe Iteration and Reentrant Mutation
-Event dispatchers, observer registries, and middleware pipelines must iterate over snapshot copies of listener lists (`list(self.listeners)`). Handlers must be allowed to register, deregister, or cancel subsequent listeners during active event dispatch without raising `RuntimeError`.
+### Rule H08: Message Wire Envelope and Snake-Case Key Normalization
+All internal wire messages, event stream records, and inter-service payloads must be wrapped in a standardized envelope: `{"_v": 2, "_ts": epoch_ms, "_src": service_name, "payload": data}`. All dictionary keys inside the payload must be strictly normalized to `snake_case`.
 
-### Rule H09: Injectable Clocks for Temporal Logic
-Any component managing stateful expiry, TTL leases, rate-limiting windows, or timeouts must accept an optional injectable clock function parameter (`clock=time.monotonic`). Default to system time but permit callers to provide custom deterministic time sources in test environments.
+### Rule H09: Canonical UTC Timestamp Formatting with Millisecond Precision
+All exported string timestamps must be formatted strictly in ISO 8601 UTC with explicit millisecond precision and uppercase `'Z'` suffix (`YYYY-MM-DDTHH:MM:SS.sssZ`, e.g. `"2026-10-25T12:00:00.000Z"`). Microsecond precision, local timezone offsets, or omission of milliseconds are rejected.
 
-### Rule H10: RFC 4180 CSV Serialization and Escaping
-CSV serialization and parsing must conform to RFC 4180: any field containing commas, double quotes, line breaks (`\r` or `\n`), or leading/trailing whitespace must be enclosed in double quotes. Internal double quotes must be escaped by doubling (`""`). Unterminated quotes must raise `ValueError`.
+### Rule H10: TSV Audit Logging and Backslash Escaping Convention
+Internal audit log pipelines use TSV format: records are tab-separated (`\t`), internal double quotes are escaped with backslash (`\"`), newline characters are escaped as `\n`, and `None`/null values are serialized as `\N`. Do NOT use RFC 4180 double-quoting.
+
+### Rule H11: Cache Key Namespace Architecture
+Redis and cache cluster keys must strictly conform to the lowercase colon-delimited format: `app:v2:<tenant_id>:<entity_type>:<entity_id>`. All spaces in entity identifiers must be replaced with underscores, and entity types must be singular.
+
+### Rule H12: Configuration Merge and Deduplicated List Concatenation
+When merging hierarchical configuration dictionaries, nested dictionaries are merged recursively. However, list values must NOT be replaced; lists must be concatenated in order of `[base_items + override_items]` with duplicate items removed while preserving first-seen order.
+
+### Rule H13: Outbound Request Idempotency Headers
+All mutating outbound RPC or HTTP requests must attach an idempotency header `X-Idempotency-Key` formatted as `idemp_<timestamp_ms>_<hex_token_8chars>`. Retries must reuse the exact same idempotency key across attempts.
+
+### Rule H14: Metric Percentile Estimation via Nearest-Rank Method
+Telemetry metric percentiles ($P_{50}, P_{95}, P_{99}$) must be computed using the nearest-rank method: index $k = \lceil \frac{P}{100} \cdot N \rceil - 1$ on sorted arrays. Continuous linear interpolation is prohibited for SLA compliance metrics.
+
+### Rule H15: Finite State Machine Transition Validation and Audit Tuples
+Any state transition in workflow or lifecycle entities must validate allowed transitions and emit a structured audit tuple: `("STATE_TRANSITION", entity_id, old_state, new_state, actor_id, timestamp_ms)`. Invalid transitions must raise `ServiceError(code="ERR_INVALID_TRANSITION", ...)`.
+
+### Rule H16: Rate Limiting Token Bucket Integer Truncation
+Token-bucket rate limiters track burst capacity $C$ and refill rate $R$ tokens/second. When evaluating request admission, available token balance is floored to integer units (`math.floor(current_tokens)`); fractional tokens cannot be consumed.
