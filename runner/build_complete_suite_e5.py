@@ -158,36 +158,39 @@ def validate_suite():
     print("ALL SUITE INTEGRITY & REACHABILITY INVARIANTS PASSED!")
 
 def generate_splits():
-    """Generates stratified tune (18) / held-out (10) split.
-    Tune set: 18 instances (3 from each of families 1-6; 6 STATED, 10 TAUGHT, 2 DISTRACTOR).
-    Held-out set: 10 instances (1 from each of families 1-6 + all 4 TRANSFER tasks in family 7).
+    """Generates class-stratified tune (15) / held-out (13) split (C1 resolution).
+    Tune set: 15 instances (7 TAUGHT, 7 STATED, 1 DISTRACTOR, 0 TRANSFER).
+    Held-out set: 13 instances (4 TAUGHT, 3 STATED, 2 DISTRACTOR, 4 TRANSFER).
+    Ensures held-out confirmatory evaluation has adequate statistical power to test
+    the primary hypothesis on TAUGHT tasks (>= 4 TAUGHT, >= 3 STATED, >= 2 DISTRACTOR, >= 3 TRANSFER).
     """
     tune_ids = [
-        2001, 2002, 2004,  # Family 1 (STATED, TAUGHT, DISTRACTOR)
+        2001, 2002,        # Family 1 (STATED, TAUGHT)
         2005, 2006, 2008,  # Family 2 (STATED, TAUGHT, DISTRACTOR)
-        2009, 2010, 2012,  # Family 3 (STATED, TAUGHT, TAUGHT)
-        2013, 2014, 2015,  # Family 4 (STATED, TAUGHT, TAUGHT)
+        2009, 2012,        # Family 3 (STATED, TAUGHT)
+        2013, 2014,        # Family 4 (STATED, TAUGHT)
         2017, 2018, 2020,  # Family 5 (STATED, TAUGHT, TAUGHT)
-        2021, 2022, 2024,  # Family 6 (STATED, TAUGHT, TAUGHT)
+        2021, 2023, 2024,  # Family 6 (STATED, STATED, TAUGHT)
     ]
     held_out_ids = [
-        2003,  # Family 1 (TAUGHT)
-        2007,  # Family 2 (STATED)
-        2011,  # Family 3 (STATED)
-        2016,  # Family 4 (DISTRACTOR)
-        2019,  # Family 5 (STATED)
-        2023,  # Family 6 (STATED)
+        2003, 2004,        # Family 1 (TAUGHT, DISTRACTOR)
+        2007,              # Family 2 (STATED)
+        2010, 2011,        # Family 3 (TAUGHT, STATED)
+        2015, 2016,        # Family 4 (TAUGHT, DISTRACTOR)
+        2019,              # Family 5 (STATED)
+        2022,              # Family 6 (TAUGHT)
         2025, 2026, 2027, 2028  # Family 7 (TRANSFER - deliberate family-held-out design)
     ]
     
     splits_data = {
         "metadata": {
-            "strategy": "Stratified by bug family and class tag; 18 Tune (64.3%) and 10 Held-out (35.7%)",
+            "strategy": "Class-stratified partition; 15 Tune (53.6%) and 13 Held-out (46.4%)",
             "tune_count": len(tune_ids),
             "held_out_count": len(held_out_ids),
             "total_count": len(tune_ids) + len(held_out_ids),
-            "distractor_in_tune_count": 2,
-            "distractor_in_held_out_count": 1,
+            "tune_breakdown": {"TAUGHT": 7, "STATED": 7, "DISTRACTOR": 1, "TRANSFER": 0},
+            "held_out_breakdown": {"TAUGHT": 4, "STATED": 3, "DISTRACTOR": 2, "TRANSFER": 4},
+            "per_class_minimums_met": True,
             "all_transfer_held_out": True,
             "transfer_design": "Deliberate family-held-out domain generalization test on Family 7 (cache_ttl)"
         },
@@ -329,22 +332,34 @@ def generate_fairness_md():
         "| **Decoy Files** | 0 unimported filler files | **0 decoys** across all 28 repositories (100% on reachability path) | **PASS** |",
         "| **Neutral Test IDs** | 0 design words in test IDs/tracebacks | **0 occurrences** of taught/stated/distractor/transfer/sensitive/hidden | **PASS** |",
         "| **Traceback Purity** | Symptoms only; zero rule giveaways | **100% symptom-only** pytest assertions (`assert actual == expected`) | **PASS** |",
-        "| **Tune / Held-Out Split** | ~2/3 Tune, ~1/3 Held-out | **18 Tune (64.3%)** / **10 Held-Out (35.7%)** | **PASS** |",
+        "| **Tune / Held-Out Split** | Class-stratified (~2/3 Tune, ~1/3 Held-out) | **15 Tune (53.6%)** / **13 Held-Out (46.4%)** | **PASS** |",
+        "| **Held-Out TAUGHT Power** | >= 4 TAUGHT in Held-out | **4 TAUGHT** (Tasks 2003, 2010, 2015, 2022) | **PASS** |",
         "",
         "---",
         "",
-        "## 2. Pre-Registered Tune / Held-Out Partition (B3 Resolution)",
+        "## 2. Pre-Registered Tune / Held-Out Partition (C1 Resolution)",
         "",
-        "- **Screening Experiment Split (Tuning Set, 18 instances = 64.3%):**",
-        "  `[2001, 2002, 2004, 2005, 2006, 2008, 2009, 2010, 2012, 2013, 2014, 2015, 2017, 2018, 2020, 2021, 2022, 2024]`",
-        "  - Composition: 6 STATED, 10 TAUGHT, 2 DISTRACTOR (Tasks 2004, 2008).",
-        "  - Power: 18 tasks $\\times$ 16 cells $\\times$ 5 runs = 1,440 attempts in screening factorial.",
-        "  - Stratification: Exactly 3 instances from each of Families 1–6.",
-        "- **Confirmatory Study Split (Held-Out Set, 10 instances = 35.7%):**",
-        "  `[2003, 2007, 2011, 2016, 2019, 2023, 2025, 2026, 2027, 2028]`",
-        "  - Composition: 4 STATED, 1 TAUGHT, 1 DISTRACTOR (Task 2016) + **all 4 TRANSFER instances** from Family 7 (`cache_ttl`).",
-        "  - Stratification: Exactly 1 instance from each of Families 1–6 PLUS all 4 instances of the held-out transfer family.",
-        "  - **Deliberate Transfer Design:** TRANSFER is intentionally structured as a domain-held-out transfer family (Family 7: `cache_ttl`), evaluating whether procedural heuristics transfer across domain boundaries without negative interference.",
+        "To ensure the confirmatory study has sufficient statistical power to test the primary research hypothesis (that the handbook reliably teaches conventions absent from standard pretraining without harmful distraction), the partition is class-stratified:",
+        "",
+        "- **Screening Experiment Split (Tuning Set, 15 instances = 53.6%):**",
+        "  `[2001, 2002, 2005, 2006, 2008, 2009, 2012, 2013, 2014, 2017, 2018, 2020, 2021, 2023, 2024]`",
+        "  - **Class Breakdown:** 7 TAUGHT, 7 STATED, 1 DISTRACTOR (Task 2008), 0 TRANSFER.",
+        "  - **Screening Power:** >= 4 tasks per core class (TAUGHT >= 4, STATED >= 4) across Families 1–6.",
+        "  - **Design Balance:** 15 tasks $\\times$ 16 cells $\\times$ 5 runs = 1,200 attempts in the Resolution-V factorial.",
+        "",
+        "- **Confirmatory Study Split (Held-Out Set, 13 instances = 46.4%):**",
+        "  `[2003, 2004, 2007, 2010, 2011, 2015, 2016, 2019, 2022, 2025, 2026, 2027, 2028]`",
+        "  - **Class Breakdown:** 4 TAUGHT, 3 STATED, 2 DISTRACTOR (Tasks 2004, 2016), 4 TRANSFER.",
+        "  - **Primary Hypothesis Power:** 4 TAUGHT instances (2003, 2010, 2015, 2022) across distinct bug families ensure the central confirmatory hypothesis test ($\Delta_{\\text{TAUGHT}} = \\bar{Y}_{\\theta^*} - \\bar{Y}_0 > 0$) is statistically powered and not anecdotal.",
+        "  - **Domain Generalization:** 100% of TRANSFER instances (Family 7: `cache_ttl`, Tasks 2025–2028) held out for evaluating cross-domain heuristic transfer.",
+        "",
+        "### 2.1 Pre-Registration Relabel Rule (C2 Resolution)",
+        "",
+        "> [!IMPORTANT]",
+        "> **Objective Relabeling Criterion:** To prevent confirmation bias in class definitions:",
+        "> 1. Any task initially labeled `TAUGHT` where the empirical baseline pass rate during Pilot Calibration ($B_0$, repeated runs) exceeds **70.0%** will be automatically reclassified as `STATED`.",
+        "> 2. Reclassified tasks will be dropped from the confirmatory `TAUGHT` hypothesis test.",
+        "> 3. Class labels are finalized strictly based on measured empirical baseline solvability before the Screening Experiment begins, and NEVER adjusted based on post-hoc handbook gains.",
         "",
         "---",
         "",

@@ -155,3 +155,19 @@ This is an append-only, timestamped log recording all operational decisions, har
      - For all 12 Hidden Root Cause tasks, verified the root-cause module is directly imported by the entrypoint file.
      - Added automated preflight tests `test_root_cause_reachability` and `test_zero_unimported_decoy_files`.
 - **Preflight Verification:** 146 / 146 tests passing in `tests/test_suite_e5_preflight.py`. Zero model inference calls made. Phase remains locked pending Round 11 review approval.
+
+### [2026-10-25T00:55:00Z] Benchmark Validation Round 3: Resolution of C1 (Split Power) and C2 (Relabel Rule)
+- **Context:** Claude Round 11 review accepted B1, B2, B4 fixes but identified that the held-out set had only 1 TAUGHT task (an artifact of family-stride sampling), leaving the confirmatory study without statistical power to test the central hypothesis ($\Delta_{\text{TAUGHT}} > 0$). Additionally, item C2 noted that some TAUGHT labels might be solvable by a capable baseline and required an objective pre-registration relabel rule.
+- **Action & Resolution:**
+  1. **C1 (Class-Stratified Split & Per-Class Minimums):**
+     - Replaced family-stride selection with class-stratified partition in `benchmarks/splits_e5.json`:
+       - **Tune Set (15 tasks = 53.6%):** 2001, 2002, 2005, 2006, 2008, 2009, 2012, 2013, 2014, 2017, 2018, 2020, 2021, 2023, 2024. Composition: 7 TAUGHT, 7 STATED, 1 DISTRACTOR (Task 2008), 0 TRANSFER. Guarantees $\ge 4$ tasks per core class to estimate factor effects in screening.
+       - **Held-Out Set (13 tasks = 46.4%):** 2003, 2004, 2007, 2010, 2011, 2015, 2016, 2019, 2022, 2025, 2026, 2027, 2028. Composition: 4 TAUGHT, 3 STATED, 2 DISTRACTOR (Tasks 2004, 2016), 4 TRANSFER (100% held out).
+     - Added CI assertions in `tests/test_suite_e5_preflight.py::test_splits_e5_stratification` enforcing per-class minimums:
+       - Held-out: `TAUGHT >= 4`, `STATED >= 3`, `DISTRACTOR >= 2`, `TRANSFER >= 3` (4 actual).
+       - Tune: `TAUGHT >= 4`, `STATED >= 4`, `DISTRACTOR >= 1`, `TRANSFER == 0`.
+  2. **C2 (Pre-Registration Relabel Rule Committed):**
+     - Formally pre-registered in `STATUS.md` and `benchmarks/FAIRNESS_e5.md`: During Pilot Calibration ($B_0$, repeated runs on the tune set), any task currently designated `TAUGHT` where the empirical baseline pass rate exceeds **70.0%** will be automatically reclassified as `STATED` prior to the Screening Experiment and dropped from the confirmatory `TAUGHT` count.
+     - Labels will be decided strictly by empirical baseline solvability before factorial screening begins, never by post-hoc handbook gains.
+  3. **Deliverables Synchronized:** Re-generated `benchmarks/splits_e5.json`, `benchmarks/suite_e5.py`, and `benchmarks/FAIRNESS_e5.md`.
+- **Preflight Verification:** 146 / 146 tests passing in `tests/test_suite_e5_preflight.py`. Zero model calls made. Ready for Round 12 review.

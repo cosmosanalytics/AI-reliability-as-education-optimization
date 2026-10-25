@@ -167,7 +167,12 @@ def test_e5_tag_distribution():
 
 
 def test_splits_e5_stratification():
-    """Assert splits_e5.json partitions tasks into 18 Tune (64.3%) and 10 Held-out (35.7%)."""
+    """Assert splits_e5.json partitions tasks into class-stratified Tune (15) and Held-out (13).
+    Enforces per-class minimums (C1 resolution) so that the confirmatory study is statistically powered
+    on the primary TAUGHT class:
+    - Held-out: >= 4 TAUGHT, >= 3 STATED, >= 2 DISTRACTOR, >= 3 TRANSFER (all 4 held out).
+    - Tune: >= 4 TAUGHT, >= 4 STATED, >= 1 DISTRACTOR, 0 TRANSFER.
+    """
     splits_path = os.path.join(_repo_root, "benchmarks", "splits_e5.json")
     assert os.path.exists(splits_path), "splits_e5.json missing"
     
@@ -177,19 +182,35 @@ def test_splits_e5_stratification():
     tune = splits["tune"]
     held_out = splits["held_out"]
     
-    assert len(tune) == 18, f"Expected 18 tune tasks, found {len(tune)}"
-    assert len(held_out) == 10, f"Expected 10 held-out tasks, found {len(held_out)}"
+    assert len(tune) == 15, f"Expected 15 tune tasks, found {len(tune)}"
+    assert len(held_out) == 13, f"Expected 13 held-out tasks, found {len(held_out)}"
     assert set(tune).isdisjoint(set(held_out)), "Tune and held-out sets must be disjoint"
     assert len(set(tune) | set(held_out)) == 28, "Split must cover all 28 tasks"
     
     task_map = {t["id"]: t for t in suite_e5.T}
-    distractor_in_tune = [tid for tid in tune if task_map[tid]["class_tag"] == "DISTRACTOR"]
-    assert len(distractor_in_tune) >= 1, f"Expected >= 1 DISTRACTOR in tune, found {len(distractor_in_tune)}"
     
-    transfer_in_tune = [tid for tid in tune if task_map[tid]["class_tag"] == "TRANSFER"]
-    assert len(transfer_in_tune) == 0, f"TRANSFER tasks cannot be in tune set: {transfer_in_tune}"
+    # Held-out per-class minimums
+    taught_in_held_out = [tid for tid in held_out if task_map[tid]["class_tag"] == "TAUGHT"]
+    stated_in_held_out = [tid for tid in held_out if task_map[tid]["class_tag"] == "STATED"]
+    distractor_in_held_out = [tid for tid in held_out if task_map[tid]["class_tag"] == "DISTRACTOR"]
     transfer_in_held_out = [tid for tid in held_out if task_map[tid]["class_tag"] == "TRANSFER"]
+    
+    assert len(taught_in_held_out) >= 4, f"Expected >= 4 TAUGHT in held-out, found {len(taught_in_held_out)}"
+    assert len(stated_in_held_out) >= 3, f"Expected >= 3 STATED in held-out, found {len(stated_in_held_out)}"
+    assert len(distractor_in_held_out) >= 2, f"Expected >= 2 DISTRACTOR in held-out, found {len(distractor_in_held_out)}"
+    assert len(transfer_in_held_out) >= 3, f"Expected >= 3 TRANSFER in held-out, found {len(transfer_in_held_out)}"
     assert len(transfer_in_held_out) == 4, f"All 4 TRANSFER tasks must be in held-out, found {len(transfer_in_held_out)}"
+    
+    # Tune per-class minimums (for screening experiment estimation)
+    taught_in_tune = [tid for tid in tune if task_map[tid]["class_tag"] == "TAUGHT"]
+    stated_in_tune = [tid for tid in tune if task_map[tid]["class_tag"] == "STATED"]
+    distractor_in_tune = [tid for tid in tune if task_map[tid]["class_tag"] == "DISTRACTOR"]
+    transfer_in_tune = [tid for tid in tune if task_map[tid]["class_tag"] == "TRANSFER"]
+    
+    assert len(taught_in_tune) >= 4, f"Expected >= 4 TAUGHT in tune, found {len(taught_in_tune)}"
+    assert len(stated_in_tune) >= 4, f"Expected >= 4 STATED in tune, found {len(stated_in_tune)}"
+    assert len(distractor_in_tune) >= 1, f"Expected >= 1 DISTRACTOR in tune, found {len(distractor_in_tune)}"
+    assert len(transfer_in_tune) == 0, f"TRANSFER tasks cannot be in tune set: {transfer_in_tune}"
 
 
 def test_no_design_words_in_tests_or_traces():

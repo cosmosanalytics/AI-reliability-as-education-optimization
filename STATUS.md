@@ -1,8 +1,8 @@
 # Project Status & Execution Tracker (`STATUS.md`)
 
-**Current Phase:** Benchmark Validation (`suite_e5` Offline Suite, Invariants & Fairness Review — Awaiting Claude Round 11 Review)  
+**Current Phase:** Benchmark Validation (`suite_e5` Offline Suite, Invariants & Fairness Review — Awaiting Claude Round 12 Review)  
 **Phase State:** **Benchmark Validation Complete & Hermetically Verified (146/146 Preflight Tests Passing; Zero Model Calls Made)**  
-**Frozen SHA:** `04c886e` (Benchmark Validation Suite e5 Verified)  
+**Frozen SHA:** `be38fd0` (Benchmark Validation Suite e5 Verified)  
 **Model Specifications:**  
 - **Model ID:** `gemini-2.5-flash` (for upcoming pilot calibration upon benchmark validation approval)  
 - **Sampling Settings:** `temperature=0.0`, `max_output_tokens=16384`, `thinking_budget=2048`  
@@ -27,17 +27,33 @@
 |:---|:---|:---:|:---:|:---|
 | **Phase 0** | Infrastructure & Protocol Setup | **Complete and Verified** | `c81d851` | Evaluation runner (`agent_runner.py`), grader (`grader.py`), 16 cell briefs (`briefs/DIFF.md`), exact token accounting, Resolution-V parity, interactive tool loop, standardized task envelope, audit trail, 10 hermetic unit tests. Live dry run verified on `gemini-2.5-flash`. |
 | **Pilot Calibration (suite_e4)** | Difficulty Calibration Only | **Complete (Difficulty Calibrated)** | `915711b` | 12 multi-module tasks (`suite_e4`), 120 live attempts ($C0000=56.7\%$, $C1111=61.7\%$, $p=0.8750$). Established as difficulty calibration only (ceiling broken); per-task effects did not replicate across runs. |
-| **Benchmark Validation (suite_e5)** | Modular Task Suite $e5$, Invariants & Preflight | **Complete (146/146 Verified)** | `04c886e` | Strictly offline. 28 modular instances across 7 families (`benchmarks/suite_e5.py`), `HANDBOOK.md` vs `PLACEBO.md` token balance (761 vs 754, 0.920% diff $\le 3\%$), 2 worked examples (`briefs/P3.md`), per-assertion audit table (`benchmarks/FAIRNESS_e5.md`), tune/held-out split (`benchmarks/splits_e5.json`), 146/146 passing preflight tests (`tests/test_suite_e5_preflight.py`). S-1..S-6 and B1..B4 resolved. |
-| **Pilot Calibration (suite_e5)** | Baseline B0 Calibration Run | **LOCKED (Pending Benchmark Validation Approval)** | — | Live B0 calibration on `suite_e5` (frozen runner config, $\ge 10$ runs per instance on tune split). Calibrates baseline difficulty without scaffolding bias. Zero model calls until validation passes. |
-| **Pre-Registration** | Formal Pre-Registration Document | **LOCKED (Pending Pilot Calibration)** | — | Primary hypothesis, instance-clustered permutation tests, $\theta^*$ selection rule, secondary metrics committed before screening experiment. |
-| **Screening Experiment** | Tune-Set Factorial ($2^{5-1}$) | **LOCKED (Pending Pre-Registration)** | — | 16 cells $\times \ge 5$ runs on the 18 tune tasks (`benchmarks/splits_e5.json`). |
-| **Confirmatory Study** | Held-Out Confirmation & Multi-Model Replication | **LOCKED** | — | Confirmatory evaluation on 10 held-out tasks (including 4 transfer tasks) and second-model replication as budget allows. |
+| **Benchmark Validation (suite_e5)** | Modular Task Suite $e5$, Invariants & Preflight | **Complete (146/146 Verified)** | `be38fd0` | Strictly offline. 28 modular instances across 7 families (`benchmarks/suite_e5.py`), `HANDBOOK.md` vs `PLACEBO.md` token balance (761 vs 754, 0.920% diff $\le 3\%$), 2 worked examples (`briefs/P3.md`), per-assertion audit table (`benchmarks/FAIRNESS_e5.md`), class-stratified split (`benchmarks/splits_e5.json`: 15 Tune, 13 Held-Out), 146/146 passing preflight tests (`tests/test_suite_e5_preflight.py`). S-1..S-6, B1..B4, and C1..C2 resolved. |
+| **Pilot Calibration (suite_e5)** | Baseline B0 Calibration Run | **LOCKED (Pending Benchmark Validation Approval)** | — | Live B0 calibration on `suite_e5` (frozen runner config, $\ge 10$ runs per instance on tune split). Calibrates baseline difficulty without scaffolding bias. Implements pre-registered relabel rule (C2: relabel TAUGHT as STATED if baseline > 70%). Zero model calls until validation passes. |
+| **Pre-Registration** | Formal Pre-Registration Document | **LOCKED (Pending Pilot Calibration)** | — | Primary hypothesis ($\Delta_{\text{TAUGHT}} > 0$), instance-clustered permutation tests, $\theta^*$ selection rule, C2 baseline-solvability relabel rule, and stopping rules committed before screening experiment. |
+| **Screening Experiment** | Tune-Set Factorial ($2^{5-1}$) | **LOCKED (Pending Pre-Registration)** | — | 16 cells $\times \ge 5$ runs on the 15 tune tasks (`benchmarks/splits_e5.json`). |
+| **Confirmatory Study** | Held-Out Confirmation & Multi-Model Replication | **LOCKED** | — | Confirmatory evaluation on 13 held-out tasks (4 TAUGHT, 3 STATED, 2 DISTRACTOR, 4 TRANSFER) and second-model replication as budget allows. |
 
 ---
 
-## 2. Benchmark Validation Resolution: S-1 through S-6 and B1 through B4 Fixes
+## 2. Benchmark Validation Resolution: S-1..S-6, B1..B4, and C1..C2 Fixes
 
-In response to Round 9 and Round 10 reviews, all construct-validity requirements have been fully addressed offline with zero model calls:
+In response to Round 9, Round 10, and Round 11 reviews, all construct-validity requirements have been fully addressed offline with zero model calls:
+
+### C1: Class-Stratified Partition & Confirmatory Statistical Power
+- **Root Cause:** The previous partition was stratified solely by family, resulting in an artifact where the Held-Out set contained only 1 `TAUGHT` task (and 4 `STATED`), rendering the confirmatory test of the primary research hypothesis anecdotal.
+- **Resolution:** Replaced family-stride selection with strict class-stratified sampling across all 28 tasks committed in `benchmarks/splits_e5.json`:
+  - **Tune Set (15 instances = 53.6%):** 2001, 2002, 2005, 2006, 2008, 2009, 2012, 2013, 2014, 2017, 2018, 2020, 2021, 2023, 2024.
+    - Class Composition: **7 TAUGHT**, **7 STATED**, **1 DISTRACTOR** (2008), 0 TRANSFER.
+    - Guarantees $\ge 4$ tasks per class needed to estimate factor main effects and interactions in the Screening Experiment ($2^{5-1}$).
+  - **Held-Out Set (13 instances = 46.4%):** 2003, 2004, 2007, 2010, 2011, 2015, 2016, 2019, 2022, 2025, 2026, 2027, 2028.
+    - Class Composition: **4 TAUGHT**, **3 STATED**, **2 DISTRACTOR** (2004, 2016), **4 TRANSFER** (100% held out).
+    - Statistical Power: 4 distinct TAUGHT tasks (2003, 2010, 2015, 2022) across 4 different families provide robust statistical power for the primary confirmatory hypothesis ($\Delta_{\text{TAUGHT}} = \bar{Y}_{\theta^*} - \bar{Y}_0 > 0$).
+  - Added CI invariant check in `test_splits_e5_stratification` enforcing per-class minimums for both sets.
+
+### C2: Pre-Registration Relabel Rule (Objective Baseline Solvability)
+- **Criterion:** To prevent circularity or subjective label bias, class labels will not be trusted on intuition alone.
+- **Rule Committed:** During Pilot Calibration ($B_0$, repeated runs on the tune set), any task currently designated `TAUGHT` where the empirical baseline pass rate exceeds **70.0%** will be automatically reclassified as `STATED` prior to the Screening Experiment and dropped from the confirmatory `TAUGHT` count.
+- Class membership is governed strictly by empirical baseline solvability before factorial screening begins, and NEVER adjusted post-hoc based on handbook gain.
 
 ### B1: Design Word Leakage Elimination
 - Replaced all test IDs, function names, and filenames containing design tags (`taught`, `stated`, `distractor`, `transfer`, `visible_sensitive`, `_visible`, `_hidden`) with neutral domain-specific names (`test_case_1` style or domain-neutral function names such as `test_quote_escaping`, `test_sibling_path_boundary`).
@@ -116,7 +132,7 @@ In response to Round 9 and Round 10 reviews, all construct-validity requirements
   - `test_no_hint_comments_in_provided_files`: 28/28 PASSED (0 hint regex matches).
   - `test_handbook_placebo_token_balance`: PASSED (0.920% difference $\le 3.0\%$).
   - `test_e5_tag_distribution`: PASSED (all structural and class tag invariants satisfied).
-  - `test_splits_e5_stratification`: PASSED (18 Tune / 10 Held-out stratification, $\ge 1$ DISTRACTOR in Tune, 100% TRANSFER hold-out confirmed).
+  - `test_splits_e5_stratification`: PASSED (class-stratified partition: Held-out TAUGHT >= 4, STATED >= 3, DISTRACTOR >= 2, TRANSFER == 4; Tune TAUGHT >= 4, STATED >= 4, DISTRACTOR >= 1, TRANSFER == 0).
   - `test_no_design_words_in_tests_or_traces`: PASSED (zero design words in visible tests, hidden tests, or tracebacks).
   - `test_root_cause_reachability`: PASSED (root cause file imported by entrypoint in all 12 HRC tasks).
   - `test_zero_unimported_decoy_files`: PASSED (all non-test files actively called on execution path; decoys = 0).

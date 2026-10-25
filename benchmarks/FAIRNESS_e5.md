@@ -19,22 +19,34 @@ This document establishes the construct-validity, task fairness, reachability, a
 | **Decoy Files** | 0 unimported filler files | **0 decoys** across all 28 repositories (100% on reachability path) | **PASS** |
 | **Neutral Test IDs** | 0 design words in test IDs/tracebacks | **0 occurrences** of taught/stated/distractor/transfer/sensitive/hidden | **PASS** |
 | **Traceback Purity** | Symptoms only; zero rule giveaways | **100% symptom-only** pytest assertions (`assert actual == expected`) | **PASS** |
-| **Tune / Held-Out Split** | ~2/3 Tune, ~1/3 Held-out | **18 Tune (64.3%)** / **10 Held-Out (35.7%)** | **PASS** |
+| **Tune / Held-Out Split** | Class-stratified (~2/3 Tune, ~1/3 Held-out) | **15 Tune (53.6%)** / **13 Held-Out (46.4%)** | **PASS** |
+| **Held-Out TAUGHT Power** | >= 4 TAUGHT in Held-out | **4 TAUGHT** (Tasks 2003, 2010, 2015, 2022) | **PASS** |
 
 ---
 
-## 2. Pre-Registered Tune / Held-Out Partition (B3 Resolution)
+## 2. Pre-Registered Tune / Held-Out Partition (C1 Resolution)
 
-- **Screening Experiment Split (Tuning Set, 18 instances = 64.3%):**
-  `[2001, 2002, 2004, 2005, 2006, 2008, 2009, 2010, 2012, 2013, 2014, 2015, 2017, 2018, 2020, 2021, 2022, 2024]`
-  - Composition: 6 STATED, 10 TAUGHT, 2 DISTRACTOR (Tasks 2004, 2008).
-  - Power: 18 tasks $\times$ 16 cells $\times$ 5 runs = 1,440 attempts in screening factorial.
-  - Stratification: Exactly 3 instances from each of Families 1–6.
-- **Confirmatory Study Split (Held-Out Set, 10 instances = 35.7%):**
-  `[2003, 2007, 2011, 2016, 2019, 2023, 2025, 2026, 2027, 2028]`
-  - Composition: 4 STATED, 1 TAUGHT, 1 DISTRACTOR (Task 2016) + **all 4 TRANSFER instances** from Family 7 (`cache_ttl`).
-  - Stratification: Exactly 1 instance from each of Families 1–6 PLUS all 4 instances of the held-out transfer family.
-  - **Deliberate Transfer Design:** TRANSFER is intentionally structured as a domain-held-out transfer family (Family 7: `cache_ttl`), evaluating whether procedural heuristics transfer across domain boundaries without negative interference.
+To ensure the confirmatory study has sufficient statistical power to test the primary research hypothesis (that the handbook reliably teaches conventions absent from standard pretraining without harmful distraction), the partition is class-stratified:
+
+- **Screening Experiment Split (Tuning Set, 15 instances = 53.6%):**
+  `[2001, 2002, 2005, 2006, 2008, 2009, 2012, 2013, 2014, 2017, 2018, 2020, 2021, 2023, 2024]`
+  - **Class Breakdown:** 7 TAUGHT, 7 STATED, 1 DISTRACTOR (Task 2008), 0 TRANSFER.
+  - **Screening Power:** >= 4 tasks per core class (TAUGHT >= 4, STATED >= 4) across Families 1–6.
+  - **Design Balance:** 15 tasks $\times$ 16 cells $\times$ 5 runs = 1,200 attempts in the Resolution-V factorial.
+
+- **Confirmatory Study Split (Held-Out Set, 13 instances = 46.4%):**
+  `[2003, 2004, 2007, 2010, 2011, 2015, 2016, 2019, 2022, 2025, 2026, 2027, 2028]`
+  - **Class Breakdown:** 4 TAUGHT, 3 STATED, 2 DISTRACTOR (Tasks 2004, 2016), 4 TRANSFER.
+  - **Primary Hypothesis Power:** 4 TAUGHT instances (2003, 2010, 2015, 2022) across distinct bug families ensure the central confirmatory hypothesis test ($\Delta_{\text{TAUGHT}} = \bar{Y}_{\theta^*} - \bar{Y}_0 > 0$) is statistically powered and not anecdotal.
+  - **Domain Generalization:** 100% of TRANSFER instances (Family 7: `cache_ttl`, Tasks 2025–2028) held out for evaluating cross-domain heuristic transfer.
+
+### 2.1 Pre-Registration Relabel Rule (C2 Resolution)
+
+> [!IMPORTANT]
+> **Objective Relabeling Criterion:** To prevent confirmation bias in class definitions:
+> 1. Any task initially labeled `TAUGHT` where the empirical baseline pass rate during Pilot Calibration ($B_0$, repeated runs) exceeds **70.0%** will be automatically reclassified as `STATED`.
+> 2. Reclassified tasks will be dropped from the confirmatory `TAUGHT` hypothesis test.
+> 3. Class labels are finalized strictly based on measured empirical baseline solvability before the Screening Experiment begins, and NEVER adjusted based on post-hoc handbook gains.
 
 ---
 
@@ -48,7 +60,7 @@ This document establishes the construct-validity, task fairness, reachability, a
 | **2002** | `money_rounding` | `test_multi_line_allocation` | HANDBOOK.md Rule H02: Banker's rounding on half-cent boundaries | **No** | *Pending Pilot Calibration* | `TAUGHT` | `models.py, utils.py, discount.py` | **None (0)** | Tune |
 | **2003** | `money_rounding` | `test_fx_conversion` | HANDBOOK.md Rule H02: Banker's rounding on half-cents | **No** | *Pending Pilot Calibration* | `TAUGHT` | `rates.py, fx_engine.py, converter.py` | **None (0)** | Held-Out |
 | **2003** | `money_rounding` | `test_fx_engine_contract` | HANDBOOK.md Rule H02: Banker's rounding on half-cents | **No** | *Pending Pilot Calibration* | `TAUGHT` | `rates.py, fx_engine.py, converter.py` | **None (0)** | Held-Out |
-| **2004** | `money_rounding` | `test_payroll_deduction_rate` | payroll.py docstring: 'MUST round fractional cents UP (ceiling)' | **Yes** | *Pending Pilot Calibration* | `DISTRACTOR` | `models.py, validator.py, payroll.py` | **None (0)** | Tune |
+| **2004** | `money_rounding` | `test_payroll_deduction_rate` | payroll.py docstring: 'MUST round fractional cents UP (ceiling)' | **Yes** | *Pending Pilot Calibration* | `DISTRACTOR` | `models.py, validator.py, payroll.py` | **None (0)** | Held-Out |
 | **2005** | `config_merge` | `test_config_isolation` | routing.py docstring: 'Inputs must remain strictly immutable' | **Yes** | *Pending Pilot Calibration* | `STATED` | `models.py, schema.py, routing.py` | **None (0)** | Tune |
 | **2006** | `config_merge` | `test_pool_defaults_isolation` | HANDBOOK.md Rule H03: Input immutability & defensive copying | **No** | *Pending Pilot Calibration* | `TAUGHT` | `options.py, pool.py, env_loader.py` | **None (0)** | Tune |
 | **2006** | `config_merge` | `test_env_loader_contract` | HANDBOOK.md Rule H03: Input immutability & defensive copying | **No** | *Pending Pilot Calibration* | `TAUGHT` | `options.py, pool.py, env_loader.py` | **None (0)** | Tune |
@@ -57,8 +69,8 @@ This document establishes the construct-validity, task fairness, reachability, a
 | **2008** | `config_merge` | `test_nested_accumulator_identity` | session.py docstring: 'MUST mutate accumulator in-place ... Do NOT create deep copies' | **Yes** | *Pending Pilot Calibration* | `DISTRACTOR` | `state.py, metrics.py, session.py` | **None (0)** | Tune |
 | **2009** | `calendar_recurrence` | `test_interval_end_boundary` | intervals.py docstring: 'half-open interval [start, end), where start is inclusive and end is exclusive' | **Yes** | *Pending Pilot Calibration* | `STATED` | `calendar_models.py, formatters.py, intervals.py` | **None (0)** | Tune |
 | **2009** | `calendar_recurrence` | `test_interval_subsecond_boundary` | intervals.py docstring: 'half-open interval [start, end)' | **Yes** | *Pending Pilot Calibration* | `STATED` | `calendar_models.py, formatters.py, intervals.py` | **None (0)** | Tune |
-| **2010** | `calendar_recurrence` | `test_window_expiration` | HANDBOOK.md Rule H05: Half-open intervals [start, end) | **No** | *Pending Pilot Calibration* | `TAUGHT` | `rules.py, subscription.py, period_calc.py` | **None (0)** | Tune |
-| **2010** | `calendar_recurrence` | `test_period_calc_contract` | HANDBOOK.md Rule H05: Half-open intervals [start, end) | **No** | *Pending Pilot Calibration* | `TAUGHT` | `rules.py, subscription.py, period_calc.py` | **None (0)** | Tune |
+| **2010** | `calendar_recurrence` | `test_window_expiration` | HANDBOOK.md Rule H05: Half-open intervals [start, end) | **No** | *Pending Pilot Calibration* | `TAUGHT` | `rules.py, subscription.py, period_calc.py` | **None (0)** | Held-Out |
+| **2010** | `calendar_recurrence` | `test_period_calc_contract` | HANDBOOK.md Rule H05: Half-open intervals [start, end) | **No** | *Pending Pilot Calibration* | `TAUGHT` | `rules.py, subscription.py, period_calc.py` | **None (0)** | Held-Out |
 | **2011** | `calendar_recurrence` | `test_touching_slot_boundaries` | maintenance.py docstring: 'slots are half-open intervals [start, end)' | **Yes** | *Pending Pilot Calibration* | `STATED` | `slots.py, audit.py, maintenance.py` | **None (0)** | Held-Out |
 | **2011** | `calendar_recurrence` | `test_nested_slot` | maintenance.py docstring: 'slots are half-open intervals [start, end)' | **Yes** | *Pending Pilot Calibration* | `STATED` | `slots.py, audit.py, maintenance.py` | **None (0)** | Held-Out |
 | **2012** | `calendar_recurrence` | `test_retention_window_cutoff` | HANDBOOK.md Rule H05: Half-open intervals [start, end) | **No** | *Pending Pilot Calibration* | `TAUGHT` | `log_store.py, window_evaluator.py, retention.py` | **None (0)** | Tune |
@@ -67,8 +79,8 @@ This document establishes the construct-validity, task fairness, reachability, a
 | **2013** | `csv_roundtrip` | `test_multiline_csv` | csv_writer.py docstring: 'If field contains comma, newline, or double quote' | **Yes** | *Pending Pilot Calibration* | `STATED` | `schema.py, io_helpers.py, csv_writer.py` | **None (0)** | Tune |
 | **2014** | `csv_roundtrip` | `test_item_quote_escaping` | HANDBOOK.md Rule H10: RFC 4180 CSV serialization | **No** | *Pending Pilot Calibration* | `TAUGHT` | `item.py, catalog_validator.py, serializer.py` | **None (0)** | Tune |
 | **2014** | `csv_roundtrip` | `test_comma_enclosure` | HANDBOOK.md Rule H10: RFC 4180 CSV serialization | **No** | *Pending Pilot Calibration* | `TAUGHT` | `item.py, catalog_validator.py, serializer.py` | **None (0)** | Tune |
-| **2015** | `csv_roundtrip` | `test_metric_quote_escaping` | HANDBOOK.md Rule H10: RFC 4180 CSV serialization | **No** | *Pending Pilot Calibration* | `TAUGHT` | `metric.py, sanitizer.py, exporter.py` | **None (0)** | Tune |
-| **2015** | `csv_roundtrip` | `test_sanitizer_contract` | HANDBOOK.md Rule H10: RFC 4180 CSV serialization | **No** | *Pending Pilot Calibration* | `TAUGHT` | `metric.py, sanitizer.py, exporter.py` | **None (0)** | Tune |
+| **2015** | `csv_roundtrip` | `test_metric_quote_escaping` | HANDBOOK.md Rule H10: RFC 4180 CSV serialization | **No** | *Pending Pilot Calibration* | `TAUGHT` | `metric.py, sanitizer.py, exporter.py` | **None (0)** | Held-Out |
+| **2015** | `csv_roundtrip` | `test_sanitizer_contract` | HANDBOOK.md Rule H10: RFC 4180 CSV serialization | **No** | *Pending Pilot Calibration* | `TAUGHT` | `metric.py, sanitizer.py, exporter.py` | **None (0)** | Held-Out |
 | **2016** | `csv_roundtrip` | `test_quote_formatting` | tsv_formatter.py docstring: 'fields must be tab-delimited and internal quotes must be backslash-escaped (\") ... Do NOT use RFC 4180' | **Yes** | *Pending Pilot Calibration* | `DISTRACTOR` | `cmd_models.py, cmd_log.py, tsv_formatter.py` | **None (0)** | Held-Out |
 | **2017** | `permission_prefix` | `test_trailing_slash_normalization` | guard.py docstring: 'Normalizes trailing slashes ... Matches only full path segments' | **Yes** | *Pending Pilot Calibration* | `STATED` | `policy.py, url_normalizer.py, guard.py` | **None (0)** | Tune |
 | **2018** | `permission_prefix` | `test_path_normalization` | HANDBOOK.md Rule H06: Trailing slash and path prefix normalization | **No** | *Pending Pilot Calibration* | `TAUGHT` | `path_resolver.py, audit_logger.py, rbac.py` | **None (0)** | Tune |
@@ -77,8 +89,8 @@ This document establishes the construct-validity, task fairness, reachability, a
 | **2020** | `permission_prefix` | `test_channel_routing` | HANDBOOK.md Rule H06: Trailing slash and path prefix normalization | **No** | *Pending Pilot Calibration* | `TAUGHT` | `webhook.py, prefix_validator.py, scope_checker.py` | **None (0)** | Tune |
 | **2020** | `permission_prefix` | `test_prefix_validator_contract` | HANDBOOK.md Rule H06: Trailing slash and path prefix normalization | **No** | *Pending Pilot Calibration* | `TAUGHT` | `webhook.py, prefix_validator.py, scope_checker.py` | **None (0)** | Tune |
 | **2021** | `event_ordering` | `test_equal_priority_tiebreak` | dispatcher.py docstring: 'Sort jobs by descending priority ... job_id in ascending order' | **Yes** | *Pending Pilot Calibration* | `STATED` | `job.py, queue_metrics.py, dispatcher.py` | **None (0)** | Tune |
-| **2022** | `event_ordering` | `test_timestamp_order` | HANDBOOK.md Rule H07: Stable ordering and deterministic tiebreaker | **No** | *Pending Pilot Calibration* | `TAUGHT` | `notification.py, formatter.py, sorter.py` | **None (0)** | Tune |
-| **2023** | `event_ordering` | `test_sequence_ordering` | rebalancer.py docstring: 'Sort tasks by weight in descending order ... sequence in ascending order' | **Yes** | *Pending Pilot Calibration* | `STATED` | `task_item.py, metrics.py, rebalancer.py` | **None (0)** | Held-Out |
+| **2022** | `event_ordering` | `test_timestamp_order` | HANDBOOK.md Rule H07: Stable ordering and deterministic tiebreaker | **No** | *Pending Pilot Calibration* | `TAUGHT` | `notification.py, formatter.py, sorter.py` | **None (0)** | Held-Out |
+| **2023** | `event_ordering` | `test_sequence_ordering` | rebalancer.py docstring: 'Sort tasks by weight in descending order ... sequence in ascending order' | **Yes** | *Pending Pilot Calibration* | `STATED` | `task_item.py, metrics.py, rebalancer.py` | **None (0)** | Tune |
 | **2024** | `event_ordering` | `test_stream_sequencing` | HANDBOOK.md Rule H07: Stable ordering and deterministic tiebreaker | **No** | *Pending Pilot Calibration* | `TAUGHT` | `event_packet.py, sort_helper.py, sequencer.py` | **None (0)** | Tune |
 | **2024** | `event_ordering` | `test_sort_helper_contract` | HANDBOOK.md Rule H07: Stable ordering and deterministic tiebreaker | **No** | *Pending Pilot Calibration* | `TAUGHT` | `event_packet.py, sort_helper.py, sequencer.py` | **None (0)** | Tune |
 | **2025** | `cache_ttl` | `test_token_expiry` | HANDBOOK.md Rule H09: Injectable clocks and monotonic TTL expiration | **No** | *Pending Pilot Calibration* | `TRANSFER` | `token_record.py, cache_utils.py, cache.py` | **None (0)** | Held-Out |
