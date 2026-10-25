@@ -1,0 +1,28 @@
+=== FILE: fulfillment_engine.py ===
+"""Warehouse order fulfillment transition controller."""
+from typing import Dict, Set, Any
+from errors import ServiceError
+from fulfillment_models import FulfillmentOrder
+
+FULFILLMENT_TRANSITIONS: Dict[str, Set[str]] = {
+    "AWAITING_PAYMENT": {"PAID", "CANCELLED"},
+    "PAID": {"PICKING", "CANCELLED"},
+    "PICKING": {"SHIPPED", "CANCELLED"},
+    "SHIPPED": {"DELIVERED"},
+    "DELIVERED": set(),
+    "CANCELLED": set(),
+}
+
+def transition_order_fulfillment(order: FulfillmentOrder, target_state: str, actor_id: str, timestamp_ms: int) -> None:
+    """Transitions fulfillment order to target state."""
+    cur_state = order.state
+
+    if target_state not in FULFILLMENT_TRANSITIONS.get(cur_state, set()):
+        raise ServiceError("INVALID_TRANSITION", f"Cannot transition order '{order.entity_id}' from {cur_state} to {target_state}.")
+
+    order.audit_trail.append((cur_state, target_state, actor_id, timestamp_ms))
+    order.state = target_state
+
+def get_fulfillment_status(order: FulfillmentOrder) -> Dict[str, Any]:
+    return {"id": order.entity_id, "state": order.state, "delivered": order.is_delivered()}
+=== END ===

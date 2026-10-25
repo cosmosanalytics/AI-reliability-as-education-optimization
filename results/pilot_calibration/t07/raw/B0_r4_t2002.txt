@@ -11,41 +11,48 @@ def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[
     """
     if not validate_line_totals(line_totals):
         raise ValueError("Line totals must be non-negative integers")
-    total_line_value = sum(line_totals)
-    if total_line_value == 0:
-        return [0] * len(line_totals)
+    total_invoice_cents = sum(line_totals)
+    num_lines = len(line_totals)
 
-    # Calculate base allocations using float division to retain precision
-    # and store the fractional part for remainder distribution.
-    allocations_with_fractions = []
+    if total_invoice_cents == 0:
+        return [0] * num_lines
+
+    # Calculate initial proportional allocation using integer division
+    allocations = []
     for cents in line_totals:
-        exact_allocation = (cents * total_discount_cents) / total_line_value
-        allocations_with_fractions.append(exact_allocation)
+        allocations.append(cents * total_discount_cents // total_invoice_cents)
 
-    # Calculate initial integer allocations by truncating
-    final_allocations = [int(alloc) for alloc in allocations_with_fractions]
-    current_total_allocated = sum(final_allocations)
-
-    # Distribute remaining cents (penny mismatch)
+    # Calculate the remainder that needs to be distributed
+    current_total_allocated = sum(allocations)
     remainder = total_discount_cents - current_total_allocated
 
-    if remainder > 0:
-        # Calculate the fractional part for each line
-        fractional_parts = [alloc - int(alloc) for alloc in allocations_with_fractions]
+    # Distribute the remainder (e.g., "penny mismatch")
+    # Distribute one cent at a time to lines with the largest fractional parts
+    # To do this robustly without floating point, we can calculate the remainders
+    # of the division `(cents * total_discount_cents) % total_invoice_cents`
+    # and distribute to lines with the largest non-zero remainders first.
+    # A simpler approach for small remainders is to distribute to the first `remainder` lines.
+    # This approach ensures the total discount is fully allocated if `remainder` is non-negative.
 
-        # Create a list of (fractional_part, original_index) tuples
-        # Sort in descending order of fractional part to prioritize lines that lost more due to truncation
-        sorted_fractions = sorted(
-            enumerate(fractional_parts), key=lambda x: x[1], reverse=True
-        )
+    # Calculate the "true" proportional values (with fractions) to determine tie-breaking
+    # We use tuples (fractional_remainder, original_index) to sort stably
+    # The fractional_remainder is `(cents * total_discount_cents) % total_invoice_cents`
+    # The larger this remainder, the 'closer' the original proportional value was to the next cent.
+    fractional_parts = []
+    for i, cents in enumerate(line_totals):
+        fractional_parts.append(((cents * total_discount_cents) % total_invoice_cents, i))
 
-        # Distribute the remainder cents one by one to the lines with the largest fractional parts
-        for i in range(remainder):
-            # The index is the original index of the line item
-            original_index = sorted_fractions[i][0]
-            final_allocations[original_index] += 1
+    # Sort in descending order of fractional parts.
+    # If fractional parts are equal, the original order (index) serves as a tie-breaker.
+    fractional_parts.sort(key=lambda x: x[0], reverse=True)
 
-    return final_allocations
+    # Distribute the remainder to the lines with the largest fractional parts
+    for i in range(remainder):
+        # The index in `allocations` corresponds to the original_index
+        original_index = fractional_parts[i][1]
+        allocations[original_index] += 1
+
+    return allocations
 
 def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
     """Wrapper returning structured allocation result."""

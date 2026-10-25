@@ -22,7 +22,7 @@ class TokenCache:
         if not entry:
             return None
         now = self._clock()
-        if now >= entry.expires_at:
+        if entry.is_expired_at(now):
             del self._store[norm_key]
             return None
         return entry.token_str

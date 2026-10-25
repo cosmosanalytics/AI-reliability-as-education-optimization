@@ -1,31 +1,25 @@
 === FILE: path_normalizer.py ===
-"""Storage path normalization engine."""
-def validate_prefix_match(scope_prefix: str, asset_path: str) -> bool:
-    # Normalize both paths to ensure consistent handling of leading/trailing slashes
-    # and to treat a scope like "/assets" as a directory.
-    normalized_scope = normalize_bucket_path(scope_prefix)
-    normalized_asset_path = normalize_bucket_path(asset_path)
+"""Storage scope normalization engine."""
+def validate_prefix_match(scope_prefix: str, asset_scope: str) -> bool:
+    """
+    Checks if an asset's scope matches a required scope prefix, respecting
+    double-colon (::) segment boundaries.
 
-    # If the asset path is exactly the scope, it's a match (e.g., /assets matches /assets)
-    if normalized_asset_path == normalized_scope:
+    A match occurs if:
+    1. The asset_scope is identical to the scope_prefix.
+    2. The asset_scope starts with the scope_prefix, and the character
+       immediately following the prefix in asset_scope is '::', indicating
+       a direct child scope.
+    """
+    if asset_scope == scope_prefix:
         return True
-
-    # If the asset path starts with the scope, ensure it's a full directory segment match.
-    # This means the character immediately after the scope in the asset path must be a '/'.
-    # For example, "/assets/image.png" starts with "/assets" and the next char is '/', so it matches.
-    # "/assets-private/image.png" starts with "/assets" but the next char is '-', so it does not match.
-    if normalized_asset_path.startswith(normalized_scope):
-        # Check if the character immediately following the scope is a '/'
-        # This handles cases like /assets matching /assets/image.png but not /assets-private
-        if len(normalized_asset_path) > len(normalized_scope) and normalized_asset_path[len(normalized_scope)] == '/':
-            return True
+    if asset_scope.startswith(scope_prefix + "::"):
+        return True
     return False
 
-def get_scope_depth(path: str) -> int:
-    return len([seg for seg in path.split("/") if seg])
+def get_scope_depth(scope_str: str) -> int:
+    return len([seg for seg in scope_str.split("::") if seg])
 
-def normalize_bucket_path(path: str) -> str:
-    # Ensure path starts with a '/' and remove any trailing '/' unless it's the root '/'
-    normalized = "/" + path.strip("/")
-    return normalized
+def normalize_scope(scope_str: str) -> str:
+    return scope_str.strip()
 === END ===

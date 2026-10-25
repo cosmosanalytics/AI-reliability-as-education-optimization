@@ -1,0 +1,25 @@
+=== FILE: path_normalizer.py ===
+"""Storage path normalization engine."""
+def validate_prefix_match(scope_prefix: str, asset_path: str) -> bool:
+    normalized_scope = normalize_bucket_path(scope_prefix)
+    normalized_asset_path = normalize_bucket_path(asset_path)
+
+    # An exact match means the asset itself is the scope or its root.
+    if normalized_asset_path == normalized_scope:
+        return True
+
+    # If the asset path starts with the scope, we must ensure it's a full segment match.
+    # This means the character immediately following the scope_prefix in the asset_path
+    # must be a '/' to denote a subdirectory, preventing partial matches like /assets-private for /assets.
+    if normalized_asset_path.startswith(normalized_scope):
+        # Check if there's a character after the scope and if it's a directory separator.
+        if len(normalized_asset_path) > len(normalized_scope):
+            return normalized_asset_path[len(normalized_scope)] == '/'
+    return False
+
+def get_scope_depth(path: str) -> int:
+    return len([seg for seg in path.split("/") if seg])
+
+def normalize_bucket_path(path: str) -> str:
+    return "/" + path.strip("/")
+=== END ===

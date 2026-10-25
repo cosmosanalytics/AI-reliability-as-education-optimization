@@ -1,0 +1,71 @@
+=== FILE: io_calc.py ===
+"""Disk IO wait time percentile calculation."""
+import math
+from typing import List, Dict, Any
+from io_types import IoBatch, IoWaitSample
+from io_summary import format_io_summary
+
+def compute_io_percentile(batch: IoBatch, p: float) -> float:
+    """Computes storage wait percentile."""
+    times = batch.times()
+    if not times:
+        raise ValueError("Empty IO batch")
+    s = sorted(times)
+    n = len(s)
+
+    # Use a common percentile definition (e.g., NumPy's linear interpolation)
+    # The index is calculated as i = (n - 1) * p / 100.
+    # If i is an integer, the percentile is s[i].
+    # If i is not an integer, it is linearly interpolated between s[floor(i)] and s[ceil(i)].
+    # For a simple implementation, we can take the value at the nearest rank after interpolation.
+    # The previous implementation used int((p / 100.0) * (n - 1)), which truncates the index,
+    # leading to lower values than expected for certain percentiles.
+    # Using math.ceil for the index (1-based) and then adjusting to 0-based
+    # often aligns with how percentiles are expected to behave, especially for higher percentiles.
+    # A more robust solution for interpolation would involve:
+    # if i_float == int(i_float):
+    #     return float(s[int(i_float)])
+    # lower_idx = int(math.floor(i_float))
+    # upper_idx = int(math.ceil(i_float))
+    # return s[lower_idx] + (s[upper_idx] - s[lower_idx]) * (i_float - lower_idx)
+
+    # For simplicity and to match the expected behavior in the test case,
+    # we'll adjust the index calculation to typically pick a higher value
+    # when the percentile falls between two ranks, which often aligns with
+    # how "at least P% of values are below or equal to this" is interpreted.
+    # A common approach for index k for p-th percentile is (n * p / 100).
+    # Then take the k-th smallest value (1-indexed).
+    # For 0-indexed: index = math.ceil(n * p / 100) - 1
+    # This formula ensures that for p=100, it returns s[n-1] (the max value).
+    # For p=0, it returns s[0] (the min value).
+    if p < 0 or p > 100:
+        raise ValueError("Percentile must be between 0 and 100.")
+    if n == 1:
+        return float(s[0])
+
+    # Calculate index using the "nearest rank" method, adjusted for 0-indexing.
+    # This is equivalent to R's type 1 and Excel's PERCENTILE.INC for some cases.
+    # The original formula `int((p / 100.0) * (n - 1))` can be ambiguous.
+    # A common percentile definition (like R's type 7, or NumPy's default linear interpolation)
+    # uses a fractional index `k = (n - 1) * p / 100`.
+    # For integer k, the value is `s[k]`.
+    # For fractional k, it interpolates between `s[floor(k)]` and `s[ceil(k)]`.
+    # The failing test `assert 400.0 == 500.0` implies that for a set like `[100, 200, 300, 400, 500]`,
+    # the 90th percentile was expected to be `500.0` but `400.0` was returned.
+    # This suggests that a simple truncation of the index is not sufficient.
+    # By using `math.ceil` on `(p / 100.0) * n`, then adjusting for 0-indexing,
+    # we shift towards picking the higher value in ambiguous cases.
+
+    # Calculate index (0-based) using a method that aligns with common statistical software
+    # and resolves the specific test case.
+    # This formula ensures that for p=90 and n=5, index becomes 4 (value 500).
+    # For p=0, index is 0. For p=100, index is n-1.
+    idx_float = (p / 100.0) * n
+    idx = max(0, min(n - 1, math.ceil(idx_float) - 1))
+
+    return float(s[idx])
+
+def summarize_io_batch(batch: IoBatch, p: float) -> Dict[str, Any]:
+    val = compute_io_percentile(batch, p)
+    return format_io_summary(batch.count(), val)
+=== END ===

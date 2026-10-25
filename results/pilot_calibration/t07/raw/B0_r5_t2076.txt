@@ -1,0 +1,42 @@
+=== FILE: loss_math.py ===
+"""Loss distribution percentile calculator."""
+import math
+from typing import List
+
+def calculate_loss_percentile(losses: List[float], p: float) -> float:
+    """Calculates training loss percentile using linear interpolation (numpy-style)."""
+    if not losses:
+        raise ValueError("No loss values")
+    if not (0 <= p <= 100):
+        raise ValueError("Percentile must be between 0 and 100 inclusive")
+
+    s = sorted(losses)
+    n = len(s)
+
+    # Handle edge cases for p=0 and p=100
+    if p == 0:
+        return float(s[0])
+    if p == 100:
+        return float(s[n - 1])
+
+    # Calculate the rank (index) for linear interpolation
+    # This corresponds to the method used by numpy.percentile with default 'linear' interpolation.
+    # L = (p / 100.0) * (n - 1)
+    # k = floor(L)
+    # d = L - k
+    # percentile_value = s[k] + d * (s[k+1] - s[k])
+
+    index = (p / 100.0) * (n - 1)
+    k = math.floor(index)
+    d = index - k
+
+    # Ensure k is within valid bounds for list access
+    # k will always be >= 0 because p >= 0 and n >= 1
+    # k can be n-1 if index is n-1 (i.e., p=100), which is handled by the p=100 check above.
+    # Thus, k will always be < n-1 for p < 100.
+    # Therefore, s[k+1] will always be a valid index.
+    
+    # The formula s[k] + d * (s[k+1] - s[k]) correctly handles cases where d=0 (index is integer)
+    # and cases where d > 0 (interpolation needed).
+    return float(s[k] + d * (s[k+1] - s[k]))
+=== END ===

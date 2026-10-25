@@ -1,0 +1,20 @@
+=== FILE: token_builder.py ===
+"""RPC header token builders for compute instances."""
+import uuid
+from typing import Dict, Optional
+
+def build_mutation_headers() -> Dict[str, str]:
+    """Generates standard request mutation headers."""
+    return {
+        "X-Request-Id": str(uuid.uuid4()),
+        "X-Idempotency-Key": str(uuid.uuid4()),
+    }
+
+def is_valid_header_dict(hdrs: dict) -> bool:
+    """Validates that header mapping is non-empty."""
+    return isinstance(hdrs, dict) and len(hdrs) > 0
+
+def extract_request_token(hdrs: dict) -> Optional[str]:
+    """Extracts existing request identifier if present."""
+    return hdrs.get("X-Request-Id")
+=== END ===

@@ -1,0 +1,40 @@
+=== FILE: exporter.py ===
+"""Metric telemetry exporter."""
+from typing import List
+from sanitizer import sanitize_cell
+from metric import MetricEntry
+
+def _csv_escape_field(field: str) -> str:
+    """
+    Escapes a string according to CSV rules:
+    - If the field contains a comma, double quote, or newline,
+      the entire field is enclosed in double quotes.
+    - Any double quotes within the field are doubled.
+    """
+    if ',' in field or '"' in field or '\n' in field:
+        return f'"{field.replace('"', '""')}"'
+    return field
+
+def format_metric_row(entry: MetricEntry) -> str:
+    """Format single metric row into CSV line."""
+    # Apply general sanitization first, then CSV-specific escaping.
+    # The sanitize_cell function is assumed to handle internal content
+    # like removing harmful characters or basic escaping (e.g., backslashes).
+    # The _csv_escape_field then ensures the entire cell is properly
+    # formatted for CSV, handling delimiters and quote doubling.
+    key_sanitized = sanitize_cell(entry.key)
+    value_label_sanitized = sanitize_cell(entry.value_label)
+
+    key_escaped = _csv_escape_field(key_sanitized)
+    value_label_escaped = _csv_escape_field(value_label_sanitized)
+
+    return f"{key_escaped},{value_label_escaped}"
+
+def export_metric_batch(metrics: List[MetricEntry]) -> str:
+    return "\n".join(format_metric_row(m) for m in metrics)
+
+def export_with_header(metrics: List[MetricEntry]) -> str:
+    header = "metric_key,value_label"
+    rows = export_metric_batch(metrics)
+    return f"{header}\n{rows}" if rows else header
+=== END ===

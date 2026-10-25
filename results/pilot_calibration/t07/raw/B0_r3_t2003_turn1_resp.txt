@@ -3,12 +3,12 @@
 from typing import Tuple
 
 def apply_fx_rate(cents: int, rate: float) -> int:
-    """Compute converted currency amount in cents, rounded to the nearest integer (half up)."""
-    # Calculate the exact floating point value
-    result_float = cents * rate
-    # Round to the nearest integer, with .5 rounding up.
-    # This is achieved by adding 0.5 and then truncating for positive numbers.
-    return int(result_float + 0.5)
+    """Compute converted currency amount in cents.
+    Rounds to the nearest cent, with halves rounded up (away from zero).
+    """
+    # For financial calculations, rounding .5 up (away from zero) is often preferred.
+    # For positive numbers, this can be achieved by adding 0.5 before truncating.
+    return int(cents * rate + 0.5)
 
 def compute_spread(cents: int, base_rate: float, spread_bps: int = 10) -> Tuple[int, float]:
     effective_rate = base_rate * (1.0 + spread_bps / 10000.0)

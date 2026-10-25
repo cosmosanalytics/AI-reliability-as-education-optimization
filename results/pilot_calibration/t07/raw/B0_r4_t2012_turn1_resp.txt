@@ -1,10 +1,6 @@
 === FILE: window_evaluator.py ===
 """Retention window evaluator."""
 def is_within_retention(ts: int, start_ts: int, end_ts: int) -> bool:
-    """
-    Checks if a timestamp falls within the retention window [start_ts, end_ts).
-    Records at the exact end_ts are considered expired and not retained.
-    """
     return start_ts <= ts < end_ts
 
 def get_window_span(start_ts: int, end_ts: int) -> int:

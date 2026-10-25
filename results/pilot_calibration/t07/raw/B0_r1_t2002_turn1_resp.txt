@@ -5,53 +5,75 @@ from models import AllocationResult
 from utils import validate_line_totals
 
 def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
-    """Prorate discount across lines proportionally to their value, handling fractional cents.
+    """Prorate discount across lines proportionally to their value.
+    Distributes any remaining cents (due to rounding) to lines with the largest
+    proportional values first.
     line_totals: list of integer cents.
     Returns list of discount cents per line.
     """
     if not validate_line_totals(line_totals):
         raise ValueError("Line totals must be non-negative integers")
 
-    total_line_value = sum(line_totals)
+    total_value = sum(line_totals)
     num_lines = len(line_totals)
 
-    if total_line_value == 0:
+    if total_value == 0:
         return [0] * num_lines
 
-    if total_discount_cents == 0:
-        return [0] * num_lines
+    # Calculate initial proportional allocation and store fractional parts
+    allocations_with_fractions = []
+    for cents in line_totals:
+        proportional_value = (cents * total_discount_cents) / total_value
+        allocations_with_fractions.append(proportional_value)
 
-    # Calculate base allocations and remainders
-    allocations = [0] * num_lines
-    remainders = []
-    
-    for i, cents in enumerate(line_totals):
-        # Calculate the proportional share using float division to preserve fractional parts
-        raw_allocation = (cents * total_discount_cents) / total_line_value
+    # Convert to integer cents (truncating)
+    initial_allocations = [int(p) for p in allocations_with_fractions]
+    total_allocated_initially = sum(initial_allocations)
+
+    # Calculate remaining cents to distribute
+    remainder = total_discount_cents - total_allocated_initially
+
+    if remainder > 0:
+        # Create a list of (fractional_part, original_index) to sort by largest fractional part
+        # fractional_part = proportional_value - int(proportional_value)
+        # Using negative proportional_value as a tie-breaker for stable sort (larger original value gets preference)
+        # Alternatively, using the remainder of the division by 1 for the fractional part
+        # and then the proportional value itself as a secondary sort key (desc) to ensure consistency.
         
-        # Take the integer part as the base allocation
-        base_allocation = int(raw_allocation)
-        allocations[i] = base_allocation
+        # Calculate the actual fractional parts to determine distribution priority
+        fractional_parts_and_indices = []
+        for i, prop_val in enumerate(allocations_with_fractions):
+            fractional_part = prop_val - initial_allocations[i]
+            fractional_parts_and_indices.append((fractional_part, i))
+
+        # Sort in descending order of fractional part. If fractional parts are equal,
+        # sort by original proportional value in descending order (to give preference to larger lines).
+        # Python's sort is stable, so if we sort by fractional part first, and then rely on the
+        # order of items with equal fractional parts, we might not get deterministic results
+        # if the original proportional values are not distinct.
+        # A more robust approach is to sort by (fractional_part, original_proportional_value, original_index)
+        # where fractional_part is descending, original_proportional_value is descending, and original_index is ascending.
         
-        # Store the remainder for later distribution
-        remainders.append((raw_allocation - base_allocation, i))
+        # For simplicity and common practice, we'll sort by fractional part descending.
+        # Python's sort is stable, so if fractional_parts are equal, the original order (by index) is preserved.
+        # However, to be explicit about tie-breaking for identical fractional parts, we can use the original value.
+        
+        # Sort by fractional part descending, then by original line value descending (as a tie-breaker)
+        # We need original line_totals for the tie-breaker.
+        sorted_indices = sorted(
+            range(num_lines),
+            key=lambda i: (allocations_with_fractions[i] - initial_allocations[i], line_totals[i]),
+            reverse=True
+        )
 
-    # Calculate the sum of base allocations
-    sum_allocated = sum(allocations)
-    
-    # Determine the unallocated amount (the "pennies" to distribute)
-    unallocated_cents = total_discount_cents - sum_allocated
+        # Distribute the remainder one by one
+        for i in sorted_indices:
+            if remainder <= 0:
+                break
+            initial_allocations[i] += 1
+            remainder -= 1
 
-    # Distribute the unallocated cents to lines with the largest remainders
-    # Sort remainders in descending order. If remainders are equal, original index can break ties.
-    remainders.sort(key=lambda x: x[0], reverse=True)
-
-    for i in range(unallocated_cents):
-        # Add 1 cent to the line with the current largest remainder
-        # The index is taken from the sorted remainders list (x[1])
-        allocations[remainders[i][1]] += 1
-            
-    return allocations
+    return initial_allocations
 
 def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
     """Wrapper returning structured allocation result."""

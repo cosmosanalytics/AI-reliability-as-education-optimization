@@ -1,0 +1,21 @@
+=== FILE: journal_writer.py ===
+"""API gateway request journal writer."""
+from datetime import datetime
+from journal_entry import JournalEntry
+from status_catalog import is_error_status, get_status_label
+
+def record_request(request_id: str, status_code: int, dt: datetime) -> JournalEntry:
+    """Records incoming HTTP request journal entry.
+    Timestamps must be formatted strictly in ISO 8601 UTC with explicit millisecond
+    precision and uppercase 'Z' suffix: YYYY-MM-DDTHH:MM:SS.sssZ.
+    """
+    _ = is_error_status(status_code)
+    label = get_status_label(status_code)
+    ts = dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    return JournalEntry(
+        request_id=request_id,
+        status_code=status_code,
+        logged_at=ts,
+        context={"label": label}
+    )
+=== END ===

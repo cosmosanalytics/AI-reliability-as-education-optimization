@@ -1,0 +1,12 @@
+=== FILE: snapshot_manifest.py ===
+"""Snapshot manifest timestamp formatting."""
+from datetime import datetime, timezone
+
+def format_snapshot_timestamp(dt: datetime) -> str:
+    # Format timestamp to ISO 8601 with milliseconds and 'Z' for UTC.
+    # Ensure the datetime object is in UTC for consistent 'Z' suffix.
+    return dt.astimezone(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
+
+def parse_snapshot_epoch(dt: datetime) -> int:
+    return int(dt.timestamp())
+=== END ===

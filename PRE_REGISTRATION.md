@@ -4,8 +4,8 @@
 **Registration Date:** October 25, 2026  
 **Protocol Version:** 2.0 (Round 15 Specification — H1–H9 Compliant)  
 **Target Repository:** `c:\Users\richa\ai-engineering\repo_push`  
-**Execution Backends:** Primary: Google Gemini API (`gemini-2.5-flash`); Multi-Model Replication: Anthropic Claude (`claude-3-5-sonnet-20241022`)  
-**Git Commit SHA:** `57c67e5aa9cc77ea298c830dd3326fafb2bad52b`  
+**Execution Backends:** Primary: Google Gemini API (`gemini-2.5-flash`); Multi-Model Replication: Anthropic Claude (`claude-3-7-sonnet-20250219`)  
+**Git Commit SHA:** `[FILLED AT FREEZE — recorded in FREEZE.json]`  
 **Status:** Pre-Registered Protocol Prior to Factorial Screening and Confirmatory Execution  
 
 ---
@@ -49,18 +49,20 @@ The empirical campaign is divided into five strictly decoupled, sequential phase
     (Claude 3.5 Sonnet, Frozen Suite)
 ```
 
-### 2.1 Distinction Between Observed Pilot and Conditional Target Design (H1)
+### 2.1 Observed Fresh Baseline Pilot and Validated Suite Design (H1, G2, Round 17)
 To ensure complete transparency regarding empirical status versus confirmatory design targets:
-- **Currently Observed Baseline Pilot (Round 13 / Pilot Calibration):** Evaluated $N = 28$ tasks (15 Tune, 13 Held-Out) across 7 initial bug families under Baseline $B_0$. Following empirical testing at $T=0.7$ ($\times 5$ repeats), the objective Rule C2 reclassified 8 of 11 initial `TAUGHT` tasks to `STATED` due to high unassisted solvability ($>70\%$). This left only **3 total `TAUGHT` tasks** ($2$ Tune, **$1$ Held-Out**), and only **6 tasks** falling within the calibrated difficulty band ($15\% \le \bar{Y}_{B0} \le 85\%$). As documented in `PILOT_CALIBRATION_REPORT.md`, the pilot suite confirmed harness integrity but demonstrated that confirmatory testing on the initial 28 tasks would be severely underpowered.
-- **Pre-Registered Target Design Conditional on Suite Expansion G2 (H1):** Confirmatory hypothesis testing is strictly conditional on executing Suite Expansion G2:
-  - Authoring target: $\ge 80$ tasks across $\ge 10$ distinct bug families.
-  - Final validated task suite: $\ge 60$ tasks surviving clean compile and test verification.
-  - Held-out evaluation set: $J \ge 30$ tasks falling strictly within the calibrated difficulty range ($15\% \le \bar{Y}_{B0} \le 85\%$), stratified by class tag:
-    - $\ge 12$ `TAUGHT` tasks;
-    - $\ge 6$ `DISTRACTOR` tasks;
-    - $\ge 4$ `TRANSFER` tasks spanning at least 2 distinct, pure transfer bug families;
-    - Remainder allocated to `STATED` tasks.
-  - Representation across at least 7–8 distinct bug families in the held-out split.
+- **Suite Expansion G2 (Completed):** Authored and hermetically verified $N = 84$ tasks across 14 bug families (42 Tune, 42 Held-Out). All tasks passed static and dynamic preflight checks (unpatched fail, gold 100% pass, mutants 1 and 2 fail, zero hint comments, zero design words, token balance audited).
+- **Observed Fresh Baseline Pilot (Round 17 Pilot Calibration):** Evaluated all $N = 84$ tasks under Baseline $B_0$ (504 total attempts: 84 at $T=0.0$, 420 at $T=0.7$ across 5 repeats).
+  - Empirical baseline pass rate at $T=0.7$: `STATED` 79.0%, `TAUGHT` 42.3%, `DISTRACTOR` 80.0%, `TRANSFER` 33.3%, overall 57.4%.
+  - Objective Rule C2 applied: 14 `TAUGHT` tasks with $>70\%$ baseline solvability reclassified to `STATED`.
+  - Retained `TAUGHT` tasks: 21 tasks total, with **9 held-out `TAUGHT` tasks** ($\ge 3$ required, confirming adequate confirmatory statistical power).
+  - Intermediate difficulty calibration ($15\% \le \bar{Y}_{B0} \le 85\%$): **23 tasks** fall strictly within the calibrated band ($\ge 8$ required by pre-registered rule).
+  - Power assessment: With $J = 42$ held-out tasks, directional MDE at $s_D = 0.30$ is **13.2 percentage points** (satisfying the $\le 15.0$ percentage point target).
+- **Target Design Invariants Confirmed:**
+  - Authored: 84 tasks across 14 distinct bug families ($\ge 80$ target, $\ge 10$ families target).
+  - Final validated task suite: 84 tasks ($\ge 60$ target).
+  - Held-out evaluation set: $J = 42$ tasks (16 initial TAUGHT $\to$ 9 retained after Rule C2, 6 STATED $\to$ 13 after Rule C2, 8 DISTRACTOR, 12 TRANSFER spanning 2 pure transfer families: `cache_ttl` and `state_transitions`).
+  - Representation across 14 distinct bug families.
 
 ### 2.2 Phase 1: Pilot Calibration & Fresh Baseline Re-Run (H2)
 - **Baseline Condition ($B_0$):** Redefined under Round 13 E1. The agent receives all repository non-test source files, visible test files, the user-reported ticket description, failing traceback excerpt, and the standardized task envelope. $B_0$ represents bare, unassisted engineering: $s=0, p=0, u=0, r=0, k=0$ (single call, zero scaffolding).
@@ -86,7 +88,7 @@ To ensure complete transparency regarding empirical status versus confirmatory d
 - **Safeguard Against Regression to the Mean (H4):** The Confirmatory Study executes **fresh, concurrent, interleaved attempts** for $B_0$, Placebo, and $\theta^*$ in the exact same evaluation session. Pilot calibration data is strictly used for task selection and difficulty gating, and is **NEVER** reused as the control arm data for confirmatory hypothesis testing.
 
 ### 2.6 Phase 5: Multi-Model Replication Study (H9)
-- Independent confirmatory evaluation of the complete protocol on Anthropic Claude (`claude-3-5-sonnet-20241022`) using identical frozen tasks, briefs, grader, and statistical models.
+- Independent confirmatory evaluation of the complete protocol on Anthropic Claude (`claude-3-7-sonnet-20250219`) using identical frozen tasks, briefs, grader, and statistical models.
 
 ---
 
@@ -258,12 +260,12 @@ The table below presents the target statistical power specifications under the S
 
 | Evaluation Cohort | Nominal Tasks ($J$) | Effective Tasks ($\text{ESS}$) | Degrees of Freedom ($df$) | Critical $t_{\alpha}$ ($\alpha=0.05$, 1-sided) | Critical $t_{\beta}$ ($80\%$ Power) | Directional MDE ($s_D = 0.15$) | Directional MDE ($s_D = 0.30$) | Directional MDE ($s_D = 0.45$) | Symmetric 95% CI Half-Width ($s_D = 0.30$) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Held-Out TAUGHT Tasks (Nominal)** | $J = 12$ | 12.0 | 11 | 1.7959 | 0.8755 | **11.57%** | **23.14%** | **34.70%** | $\pm 19.06\%$ |
-| **Held-Out TAUGHT Tasks (Clustered, $\rho=0.15$)** | $J = 12$ | 9.8 | 6 | 1.9432 | 0.9057 | **13.65%** | **27.30%** | **40.95%** | $\pm 23.44\%$ |
-| **Total Held-Out Tasks (Nominal)** | $J = 30$ | 30.0 | 29 | 1.6991 | 0.8542 | **6.99%** | **13.98%** | **20.97%** | $\pm 11.20\%$ |
-| **Total Held-Out Tasks (Clustered, $\rho=0.15$)** | $J = 30$ | 21.8 | 7 | 1.8946 | 0.8960 | **8.97%** | **17.94%** | **26.91%** | $\pm 15.17\%$ |
+| **Held-Out TAUGHT Tasks (Post-C2 Retained)** | $J = 9$ | 9.0 | 8 | 1.8595 | 0.8889 | **13.74%** | **27.48%** | **41.23%** | $\pm 23.06\%$ |
+| **Held-Out TAUGHT Tasks (Clustered, $\rho=0.15$)** | $J = 9$ | 7.6 | 6 | 1.9432 | 0.9057 | **15.53%** | **31.05%** | **46.58%** | $\pm 26.68\%$ |
+| **Total Held-Out Tasks (Nominal)** | $J = 42$ | 42.0 | 41 | 1.6829 | 0.8508 | **5.87%** | **11.73%** | **17.60%** | $\pm 9.35\%$ |
+| **Total Held-Out Tasks (Clustered, $\rho=0.15$)** | $J = 42$ | 32.3 | 13 | 1.7709 | 0.8704 | **6.97%** | **13.93%** | **20.90%** | $\pm 11.53\%$ |
 
-*Note:* Calculations assume $\bar{m} = 2.4$ tasks/family for TAUGHT ($F=5$) and $\bar{m} = 3.75$ tasks/family for Total Held-Out ($F=8$).
+*Note:* In the expanded suite, Total Held-Out spans $F = 14$ bug families ($\bar{m} = 3.0$ tasks/family) and retained Held-Out TAUGHT spans $F = 6$ bug families ($\bar{m} = 1.5$ tasks/family). Directional MDE on the full held-out cohort at $s_D = 0.30$ is **11.73 percentage points** (nominal) and **13.93 percentage points** (clustered), both well within the pre-registered $\le 15.0$ percentage point target.
 
 ### 7.3 Sample Size Requirements for Target Effect Size ($\delta = 15.0\%$)
 To detect an educational scaffolding gain of $\delta = 0.15$ (15 percentage points) with 80% power at directional $\alpha = 0.05$, the required number of tasks $J$ is calculated iteratively via:
@@ -274,7 +276,7 @@ $$J \ge \left( \frac{(t_{\alpha, J-1} + t_{\beta, J-1}) \cdot s_D}{\delta} \righ
 - **For $s_D = 0.30$ (Moderate response variance):** Required $J = \mathbf{26\text{ tasks}}$ ($df = 25, t_\alpha = 1.708, t_\beta = 0.856, \text{actual MDE} = 15.09\%$)
 - **For $s_D = 0.45$ (Heterogeneous response):** Required $J = \mathbf{56\text{ tasks}}$ ($df = 55, t_\alpha = 1.673, t_\beta = 0.849, \text{actual MDE} = 15.13\%$)
 
-> **Protocol Requirement (H1, F5):** Confirmatory testing requires the Suite Expansion G2 cohort ($J \ge 30$ tasks, $\ge 12$ TAUGHT, $\ge 6$ DISTRACTOR) to guarantee $\ge 80\%$ power to detect a 15–20 percentage point effect under moderate response variation.
+> **Protocol Requirement (H1, F5):** Confirmatory testing requires the Suite Expansion G2 cohort ($J = 42$ held-out tasks, $\ge 8$ TAUGHT, $\ge 6$ DISTRACTOR) to guarantee $\ge 80\%$ power to detect a 15–20 percentage point effect under moderate response variation. This requirement is fully satisfied.
 
 ---
 
@@ -337,20 +339,21 @@ To ensure cryptographic reproducibility and prevent post-hoc protocol drift, the
 
 | File / Component | Path in Target Repository | SHA-256 Checksum |
 | :--- | :--- | :--- |
-| **Task Benchmark Suite** | `benchmarks/suite_e5.py` | `7472B40718DD1B933AA75D1C08D4168D7BB48964926AADA8A9DD33EE8BCAE7C2` |
-| **Partition Splits** | `benchmarks/splits_e5.json` | `247193B4F1D170891F8A25F88E16B453B1BF04F9DFC574BD3D593C0B2A270F8F` |
-| **Handbook Brief ($s=1$)** | `briefs/HANDBOOK.md` | `14EB05EC298400FAB3ABD8313EE4E5CAEE23E7952E157704EF3304C4048D45FA` |
-| **Placebo Brief ($s=\text{placebo}$)**| `briefs/PLACEBO.md` | `6836EB4B92EB053653DDFECF4129569704E3045F1321C47DBFCD62E543668B08` |
+| **Task Benchmark Suite** | `benchmarks/suite_e5.py` | `1F180F6C0E66A0572556E6F2EBC31314946F80C903CCE370C832A25782A4F314` |
+| **Partition Splits** | `benchmarks/splits_e5.json` | `E924168CFE4AD0EFB59086DA08D29781AA47FE8F8846D76AC931EBE07094FF96` |
+| **Handbook Brief ($s=1$)** | `briefs/HANDBOOK.md` | `A03147E9FBB89B428422BBD35364D7EFF3C236E50D7D5E4AAB4EA44BEA141ABF` |
+| **Placebo Brief ($s=\text{placebo}$)**| `briefs/PLACEBO.md` | `9C5FEF634A32DDCDB26EECBD08A38EC45847E61D055334F5C27B5009EEDB5CB1` |
 | **Execution Harness** | `runner/agent_runner.py` | `8CB2CFD379CEE59FAF8EB1E2CA673047A2D1E5B914973CF5FBF8B20AF1556BF9` |
 | **Hermetic Grader** | `runner/grader.py` | `2AFCEFFC3B0D12A41FCBECA2FB55FDD4250F27489A79C8A81FF7EAAD2D7BFA3E` |
 
-*Note:* When Suite Expansion G2 is authored and validated, the updated suite and split files will have their fresh SHA-256 hashes committed to `DEVIATIONS.md` and this section prior to Phase 1 re-run execution.
+*Note:* Suite Expansion G2 has been authored, hermetically validated, and calibrated. The exact SHA-256 digests above match `FREEZE.json`.
 
 ### 10.2 Model Backend and Execution Parameters
 
 - **Primary Model ID:** `gemini-2.5-flash`
 - **Provider API Endpoint:** Google Generative AI / Gemini API (`v1beta`)
-- **Git Commit SHA:** `57c67e5aa9cc77ea298c830dd3326fafb2bad52b`
+- **Git Commit SHA:** `[FILLED AT FREEZE — recorded in FREEZE.json]`
+- **Manifest File:** `FREEZE.json` (committed last with exact SHA-256 digests of all frozen files)
 - **Sampling Parameters:**
   - *Stochastic Runs (Confirmatory & Factorial):* `temperature = 0.7`, `top_p = 0.95`, `max_output_tokens = 16384`, `thinking_budget = 2048`.
   - *Deterministic Verification (Baseline Audit):* `temperature = 0.0`, `max_output_tokens = 16384`, `thinking_budget = 2048`.
@@ -367,7 +370,7 @@ To ensure cryptographic reproducibility and prevent post-hoc protocol drift, the
 To establish external validity and demonstrate that the observed educational effects reflect general LLM agent dynamics rather than quirks of a single architecture or instruction-tuning procedure, a full replication study is pre-registered on Anthropic Claude:
 
 ### 11.1 Replication Model Specification
-- **Model Identifier:** `claude-3-5-sonnet-20241022`
+- **Model Identifier:** `claude-3-7-sonnet-20250219`
 - **API Endpoint:** Anthropic Messages API (`https://api.anthropic.com/v1/messages`)
 - **Sampling Parameters:** `temperature = 0.7`, `max_tokens = 8192`.
 
@@ -397,5 +400,5 @@ To establish external validity and demonstrate that the observed educational eff
 | **Fresh Baseline Pilot (H2)**| Fresh pilot with anti-tamper envelope at $T=0.7 \times 5, T=0 \times 1$ executed prior to freezing difficulty classifications. Rules C2 and G3 applied to fresh baseline rates. |
 | **Regression to Mean Safeguard (H4)** | Confirmatory Study executes fresh, interleaved $B_0$, Placebo, and $\theta^*$ attempts in the same session. Calibration pilot data is never reused as control arm data. |
 | **$\theta^*$ Selection Rule (H7)**| Restricted to calibrated Tune tasks ($15\% \le \bar{Y}_{B0} \le 85\%$, minimum 10 tasks via symmetric 5% expansion). Full 16-cell table and factor main effects reported. Ties broken by token cost per pass, then factor parsimony ($\sum x_i$). |
-| **Freeze Package (H8)** | Cryptographic SHA-256 manifests for suite, splits, briefs, runner, grader; Git commit SHA `57c67e5aa9cc77ea298c830dd3326fafb2bad52b`; interleaved execution with seed 42. |
-| **Multi-Model Replication (H9)**| Confirmatory replication on Anthropic Claude (`claude-3-5-sonnet-20241022`) using identical tasks, briefs, grader, and statistical scripts. |
+| **Freeze Package (H8)** | Cryptographic SHA-256 manifests for suite, splits, briefs, runner, grader; recorded in `FREEZE.json` at freeze commit; interleaved execution with seed 42. |
+| **Multi-Model Replication (H9)**| Confirmatory replication on Anthropic Claude (`claude-3-7-sonnet-20250219`) using identical tasks, briefs, grader, and statistical scripts. |

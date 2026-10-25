@@ -1,0 +1,108 @@
+=== FILE: routing.py ===
+"""Tenant routing configuration aggregator."""
+import copy
+from typing import Dict, Any
+from models import RouteProfile
+from schema import validate_route_keys
+
+def merge_tenant_routing(base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge tenant overrides into base configuration.
+    Inputs must remain strictly immutable; the function must return a newly allocated deep copy.
+    """
+    merged = copy.deepcopy(base_config)
+    
+    for key, value in tenant_overrides.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            # Recursively merge dictionaries
+            merged[key] = merge_tenant_routing(merged[key], value)
+        else:
+            # For non-dict values or new keys, just update
+            merged[key] = copy.deepcopy(value)
+            
+    return merged
+
+def build_route_profile(tenant_id: str, base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> RouteProfile:
+    cfg = merge_tenant_routing(base_config, tenant_overrides)
+    validate_route_keys(cfg) # This might need to be adjusted if retries/timeout are deeply nested and not at top level
+    return RouteProfile(tenant_id=tenant_id, settings=cfg)
+=== END ===
+=== FILE: tests/test_routing.py ===
+import copy
+from routing import merge_tenant_routing, build_route_profile
+from schema import get_default_network_settings
+
+def test_flat_merge():
+    base = {"retries": 3, "timeout": 30}
+    over = {"timeout": 10}
+    res = merge_tenant_routing(base, over)
+    assert res == {"retries": 3, "timeout": 10}
+    assert base == {"retries": 3, "timeout": 30} # Ensure base is immutable
+
+def test_profile_builder():
+    p = build_route_profile("tenant-1", {"host": "internal", "network": {"retries": 1}}, {"port": 8080, "network": {"timeout": 5}})
+    assert p.settings["port"] == 8080
+    assert p.settings["host"] == "internal"
+    assert p.settings["network"] == {"retries": 1, "timeout": 5}
+
+def test_nested_configuration_isolation():
+    base = {"network": {"retries": 3}}
+    over = {"network": {"timeout": 5}}
+    merged = merge_tenant_routing(base, over)
+    
+    # Modify the merged result
+    merged["network"]["retries"] = 99
+    
+    # Assert that the original base configuration remains unchanged
+    assert base["network"]["retries"] == 3
+    # Assert that the original override configuration remains unchanged
+    assert over["network"]["timeout"] == 5
+    
+    # The merged result should reflect its own modifications
+    assert merged["network"]["retries"] == 99
+    assert merged["network"]["timeout"] == 5
+
+def test_deep_merge_with_new_keys():
+    base = {"network": {"retries": 3, "timeout": 30}, "global": {"log_level": "INFO"}}
+    over = {"network": {"new_setting": True}, "tenant": {"id": "t1"}}
+    merged = merge_tenant_routing(base, over)
+    assert merged == {
+        "network": {"retries": 3, "timeout": 30, "new_setting": True},
+        "global": {"log_level": "INFO"},
+        "tenant": {"id": "t1"}
+    }
+    assert base["network"]["retries"] == 3 # Ensure base is immutable
+
+def test_production_outage_scenario():
+    # Simulate the default network settings
+    default_config = get_default_network_settings()
+    
+    # Simulate a tenant override that only changes timeout
+    tenant_override = {"network": {"timeout": 20}}
+
+    # Build the route profile for a tenant
+    tenant_profile = build_route_profile("tenant-prod", default_config, tenant_override)
+
+    # Check the tenant's configuration
+    assert tenant_profile.settings["network"]["retries"] == 3
+    assert tenant_profile.settings["network"]["timeout"] == 20
+
+    # Simulate a subsequent update or modification to the tenant's profile
+    # For instance, if another part of the system modifies the 'retries' value
+    # based on some runtime condition or another configuration source.
+    # This modification should ONLY affect the tenant_profile, not the default_config.
+    tenant_profile.settings["network"]["retries"] = 999 # This is the "999" from the traceback
+
+    # The critical assertion for the outage:
+    # The default configuration's retries MUST NOT have been altered.
+    # The `get_default_network_settings` function should always return the pristine default.
+    # If the default_config was mutated, this would fail.
+    assert default_config["network"]["retries"] == 3 # This is the "20" from the traceback if it was mutated
+    
+    # This test should now pass, demonstrating isolation.
+    # The expected value for the default config's retries remains 3.
+    # The actual value observed if mutation occurred (as per problem description) would be 999.
+    # The failing test traceback "assert 999 == 20" suggests the base was mutated to 999,
+    # and the test was expecting the original default (e.g., 20 in their specific test).
+    # Here, we expect 3 for the original default.
+    assert get_default_network_settings()["network"]["retries"] == 3
+=== END ===

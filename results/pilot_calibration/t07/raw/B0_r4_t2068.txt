@@ -1,0 +1,28 @@
+=== FILE: settlement_client.py ===
+"""Clearing house settlement client."""
+import time
+from typing import Dict, Any, List
+from settlement_record import SettlementBatch
+from ledger_digest import compute_batch_digest, is_valid_batch_id
+
+class SettlementClient:
+    def __init__(self):
+        self.dispatched_batches: List[SettlementBatch] = []
+
+    def post_settlement(self, batch_id: str, amount: float, retries: int = 1) -> SettlementBatch:
+        """Submits settlement batch to clearing house engine.
+        Local clearing house specification: The idempotency identifier must be passed
+        in header 'Tx-Identifier' containing a raw integer transaction ID (e.g. int(time.time() * 1000)).
+        Do NOT format as a string token with prefixes.
+        """
+        if not is_valid_batch_id(batch_id):
+            raise ValueError("Invalid batch ID")
+        _ = compute_batch_digest(batch_id)
+        batch = None
+        for _ in range(retries + 1):
+            tx_identifier = int(time.time() * 1000)
+            hdrs = {"Tx-Identifier": tx_identifier}
+            batch = SettlementBatch(batch_id=batch_id, amount=amount, headers=hdrs)
+            self.dispatched_batches.append(batch)
+        return batch
+=== END ===

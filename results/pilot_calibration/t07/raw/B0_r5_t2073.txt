@@ -1,0 +1,136 @@
+=== FILE: cache_percentile.py ===
+"""Cache lookup quantile engine."""
+import math
+from typing import List
+
+def get_quantile(latencies: List[float], q: float) -> float:
+    """Calculates latency quantile for cache cluster.
+
+    This implementation uses the "nearest rank" method (type 1 in R's quantile)
+    for integer ranks, and linear interpolation for non-integer ranks when
+    interpreting 'q' as the proportion of values *strictly less than* the
+    quantile, or using the sorted list as the values at (i-1)/(n-1) indices.
+
+    A common alternative (used by numpy.percentile with interpolation='linear')
+    calculates the index as (q/100.0) * (n - 1). This method is equivalent to
+    R's type 7.
+
+    The incident indicates a disagreement where 45.0 is returned but 40.0 is
+    expected. This suggests that the definition of percentile used by the
+    auditing system is different.
+
+    Let's consider a sorted list `s` and percentile `q`.
+    If `s = [10, 20, 30, 40, 50, 60]` and `q = 70`.
+    `n = 6`.
+
+    Current implementation (R type 7 / numpy default linear):
+    `idx = (q / 100.0) * (n - 1) = (70 / 100.0) * (6 - 1) = 0.7 * 5 = 3.5`
+    `low = 3`, `high = 4`, `frac = 0.5`
+    `val = s[3] + 0.5 * (s[4] - s[3]) = 40 + 0.5 * (50 - 40) = 40 + 5 = 45.0`
+
+    If 40.0 is expected for 70th percentile of `[10, 20, 30, 40, 50, 60]`,
+    it suggests a different index calculation.
+
+    Consider a definition where the k-th percentile is the value at index
+    `k/100 * n` (or `(k/100 * n) - 1` for 0-indexed).
+    Some definitions for the p-th percentile define it as the smallest value
+    such that at least p% of the data is less than or equal to it.
+
+    A simpler definition for percentile index is `p * n / 100`.
+    If `p * n / 100` is an integer `k`, take the average of `s[k-1]` and `s[k]`.
+    If not, round up to the next integer, and take `s[ceil(k)-1]`.
+
+    Let's try a different common definition:
+    `idx = (q / 100.0) * n`
+    If `s = [10, 20, 30, 40, 50, 60]` and `q = 70`.
+    `n = 6`.
+    `idx = (70 / 100.0) * 6 = 0.7 * 6 = 4.2`
+    If we round this up to 5, the 5th element (0-indexed `s[4]`) is 50.0.
+    This doesn't match 40.0.
+
+    Another common definition (e.g., in Excel's PERCENTILE.EXC, or R's type 6)
+    uses `idx = (q / 100.0) * (n + 1)`.
+
+    Let's re-examine the expected value: `assert 45.0 == 40.0`.
+    This means our function calculated 45.0, but 40.0 was expected.
+    The example `s = [10, 20, 30, 40, 50, 60]` and `q = 70` yields 45.0.
+    If the expected value for this scenario is 40.0, it implies that the 70th
+    percentile is considered to be `s[3]`.
+
+    This could happen if the index `idx = (q / 100.0) * n` is used, and then
+    `floor(idx)` is taken as the index.
+    `idx = (70 / 100.0) * 6 = 4.2`.
+    `floor(4.2) = 4`. If the result is `s[floor(idx)-1]` (1-indexed to 0-indexed),
+    then `s[3]` which is 40.0.
+
+    This corresponds to the definition sometimes called "empirical distribution function"
+    or "nearest rank" (R's type 1 method, or `numpy.percentile` with `interpolation='lower'`).
+
+    Let's try to implement this:
+    `index = (q / 100.0) * n`
+    If `index` is an integer, the value is `s[int(index) - 1]`.
+    If `index` is not an integer, the value is `s[int(math.ceil(index)) - 1]`.
+
+    Example: `s = [10, 20, 30, 40, 50, 60]`, `q = 70`. `n = 6`.
+    `index = 0.7 * 6 = 4.2`.
+    `math.ceil(4.2) = 5`.
+    `s[5 - 1] = s[4] = 50`. This is not 40.0.
+
+    What if the percentile `q` refers to the `k`-th observation where `k = ceil(q * n / 100)`?
+    For `q=70, n=6`: `k = ceil(0.7 * 6) = ceil(4.2) = 5`. The 5th observation is `s[4] = 50`.
+
+    The most common reason for this type of disagreement (`45.0 == 40.0`) is a subtle difference in the `idx` calculation.
+    The original formula `idx = (q / 100.0) * (n - 1)` is for linear interpolation between points treated as `( (i-1)/(n-1), s[i] )`.
+
+    If the expected value is 40.0 for `[10, 20, 30, 40, 50, 60]` at `q=70`,
+    it means the 70th percentile is `s[3]`.
+    `s = [s0, s1, s2, s3, s4, s5]`
+    `s[3]` is the 4th element.
+    If we want `s[k]`, then `k` must be 3.
+
+    Let's consider `numpy.percentile` with `interpolation='lower'`.
+    `np.percentile([10, 20, 30, 40, 50, 60], 70, interpolation='lower')` would return 40.0.
+    The `interpolation='lower'` means:
+    `idx = (q / 100.0) * (n - 1)`
+    The result is `s[math.floor(idx)]`.
+
+    Let's test this:
+    `s = [10, 20, 30, 40, 50, 60]`, `q = 70`. `n = 6`.
+    `idx = (70 / 100.0) * (6 - 1) = 0.7 * 5 = 3.5`.
+    `math.floor(3.5) = 3`.
+    `s[3] = 40.0`. This matches the expected value!
+
+    So the fix is to use `math.floor(idx)` instead of linear interpolation.
+    This implies the audit system uses a "lower" interpolation method, or a definition that maps directly to the lowest value at or above the percentile.
+    """
+    if not latencies:
+        raise ValueError("No latency records")
+    s = sorted(latencies)
+    n = len(s)
+
+    if q < 0 or q > 100:
+        raise ValueError("Percentile q must be between 0 and 100")
+
+    # For 0th percentile, it's the minimum value.
+    if q == 0:
+        return float(s[0])
+    # For 100th percentile, it's the maximum value.
+    if q == 100:
+        return float(s[n - 1])
+
+    # Calculate index using the standard linear interpolation formula.
+    # This index is 0-based.
+    idx = (q / 100.0) * (n - 1)
+
+    # The original implementation used linear interpolation:
+    # low = int(math.floor(idx))
+    # high = int(math.ceil(idx))
+    # frac = idx - low
+    # return float(s[low] + frac * (s[high] - s[low]))
+
+    # The incident traceback suggests that the expected percentile calculation
+    # corresponds to the 'lower' interpolation method (numpy.percentile with
+    # interpolation='lower'), where the value at the floor of the index is returned.
+    # This means we take the value at the largest index less than or equal to the calculated index.
+    return float(s[int(math.floor(idx))])
+=== END ===

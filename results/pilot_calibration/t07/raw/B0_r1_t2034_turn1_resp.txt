@@ -1,0 +1,17 @@
+=== FILE: rate_dispatcher.py ===
+"""API request rate budget dispatcher."""
+from errors import ServiceError
+from rate_record import RateAccount
+
+def allocate_request_quota(account: RateAccount, requested_cost: int) -> None:
+    """Check and consume client rate quota.
+    
+    If client exceeds available token budget, MUST raise ServiceError(code='ERR_RATE_LIMIT_EXCEEDED', message='Rate limit exceeded').
+    """
+    if not account.consume(requested_cost):
+        raise ServiceError(code='ERR_RATE_LIMIT_EXCEEDED', message='Rate limit exceeded')
+
+def handle_dispatched_call(account: RateAccount, cost: int) -> str:
+    allocate_request_quota(account, cost)
+    return "PROCESSED"
+=== END ===

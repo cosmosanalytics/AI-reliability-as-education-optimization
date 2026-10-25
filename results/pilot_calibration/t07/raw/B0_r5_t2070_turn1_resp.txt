@@ -1,0 +1,88 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values."""
+    if not values:
+        raise ValueError("Empty values")
+    s = sorted(values)
+    n = len(s)
+
+    # Handle edge cases for p=0 and p=100 explicitly to avoid issues with (n-1) when n=1
+    if p == 0:
+        return float(s[0])
+    if p == 100:
+        return float(s[n-1])
+
+    # Calculate index using the formula (P/100) * N, which aligns with common statistical software
+    # for the definition of the rank index, especially when interpolating.
+    # This aligns with the "nearest rank" method (type=3 in R's quantile)
+    # or the method used by some other systems where the k-th percentile is
+    # the value at the (k*N/100)-th position (1-indexed).
+    # For a 0-indexed array, this means we adjust the index.
+    # The original implementation used (P/100)*(N-1) which is also valid but gives different results
+    # for non-integer indices. The incident suggests the expected value aligns with (P/100)*N.
+    # We adjust for 0-based indexing by subtracting 1 from the final 1-based index.
+    # A common interpolation method involves:
+    # rank = p * n / 100
+    # if rank is integer, percentile is value at rank-1 (0-indexed)
+    # if rank is not integer, percentile is interpolated between floor(rank)-1 and ceil(rank)-1
+    # Example: values=[10,20,30,40,50], n=5
+    # p=50: rank = 0.5 * 5 = 2.5. low_idx=1, high_idx=2. s[1]=20, s[2]=30. 20 + 0.5*(30-20) = 25.0
+    # The original implementation's idx = (p/100)*(n-1) gives 2.0 for p=50, n=5 -> s[2]=30.0
+    # The test failure implies 45.0 was calculated and 40.0 was expected.
+    # Let's consider a scenario where [10,20,30,40,50] and p=80.
+    # Original: idx = 0.8 * 4 = 3.2. low=3, high=4. s[3]=40, s[4]=50. 40 + 0.2*(50-40) = 42.0
+    # Proposed: rank = 0.8 * 5 = 4.0. low=3, high=3. s[3]=40.0. This seems to match the test expectation.
+    # The most common definition for percentile (e.g., in Excel, Google Sheets, some statistical contexts)
+    # for a P-th percentile is to find the value at the P*N/100 position, with interpolation.
+    # Let's adjust the index calculation to (p/100) * n, then handle 0-based indexing.
+
+    # Calculate the rank (1-based index)
+    rank = (p / 100.0) * n
+
+    # If rank is an integer, the percentile is the value at that exact rank (1-based).
+    # For 0-indexed list, it's rank - 1.
+    if rank.is_integer():
+        idx = int(rank) - 1
+        # Ensure idx is within bounds for 0-indexed list
+        if idx < 0: return float(s[0]) # Should only happen if p=0 which is handled
+        if idx >= n: return float(s[n-1]) # Should only happen if p=100 which is handled
+        return float(s[idx])
+    else:
+        # Interpolate between the two nearest ranks.
+        # k = floor(rank)
+        # frac = rank - k
+        # p_val = s[k-1] + frac * (s[k] - s[k-1])
+        # Using 0-based indexing:
+        low_idx = int(math.floor(rank)) - 1
+        high_idx = int(math.ceil(rank)) - 1
+        frac = rank - math.floor(rank)
+
+        # Ensure indices are within bounds
+        # If rank is very small (e.g., 0.1 for p=1, n=10), low_idx could be -1.
+        # In such a case, we take the first element.
+        if low_idx < 0:
+            low_idx = 0
+            # If high_idx is also 0 (e.g., n=1, p=1), then frac could be non-zero.
+            # But we are effectively at the first element, so no interpolation needed.
+            # This case is better handled by directly returning s[0] or s[n-1] for p=0/100
+            # or by ensuring the indices are clamped.
+            # For low_idx < 0 and high_idx = 0 (e.g., rank=0.1, n=5),
+            # frac = 0.1, s[0] + 0.1*(s[0]-s[0]) = s[0].
+            # This path is usually for rank > 0.
+            if high_idx < 0: high_idx = 0 # Should not happen if n>=1
+            return float(s[low_idx] + frac * (s[high_idx] - s[low_idx]))
+
+        # If rank is very large (e.g., 4.9 for p=99, n=5), high_idx could be n.
+        # Clamp high_idx to n-1.
+        if high_idx >= n:
+            high_idx = n - 1
+            # If low_idx is also n-1, then frac could be non-zero.
+            # But we are effectively at the last element, so no interpolation needed.
+            return float(s[low_idx] + frac * (s[high_idx] - s[low_idx]))
+
+        return float(s[low_idx] + frac * (s[high_idx] - s[low_idx]))
+=== END ===

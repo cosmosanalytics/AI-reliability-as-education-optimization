@@ -1,0 +1,23 @@
+=== FILE: route_table.py ===
+"""Dynamic routing table manager."""
+from typing import Dict, Any, List
+from routing_entry import RouteTableProfile
+from protocol_filter import is_supported_protocol, compute_gateway_hash
+
+def apply_table_override(base_table: Dict[str, Any], new_table: Dict[str, Any]) -> Dict[str, Any]:
+    """Applies routing table overrides.
+    Local routing contract: Override list definitions completely replace base lists
+    to enable complete table reassignment. Do NOT concatenate lists.
+    """
+    merged = dict(base_table)
+    for k, v in new_table.items():
+        # According to the contract, new_table values (including lists)
+        # should completely replace base_table values for the same key.
+        merged[k] = v
+    return merged
+
+def build_route_table(gateway_id: str, base_table: Dict[str, Any], new_table: Dict[str, Any]) -> RouteTableProfile:
+    _ = compute_gateway_hash(gateway_id)
+    rules = apply_table_override(base_table, new_table)
+    return RouteTableProfile(gateway_id=gateway_id, rules=rules)
+=== END ===

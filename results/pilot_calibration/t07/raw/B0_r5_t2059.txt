@@ -1,0 +1,29 @@
+=== FILE: matcher_utils.py ===
+"""Route path matching and dictionary consolidation."""
+from typing import Dict, Any, List
+
+def deep_merge_matchers(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    res = dict(base)
+    for k, v in override.items():
+        if k in res and isinstance(res[k], dict) and isinstance(v, dict):
+            res[k] = deep_merge_matchers(res[k], v)
+        elif k in res and isinstance(res[k], list) and isinstance(v, list):
+            # For lists, concatenate them to avoid truncation,
+            # and use a set to remove duplicates while preserving order for new elements
+            # from the override if they were not in the base.
+            # A simple union might reorder or remove intended duplicates.
+            # For header matchers, order might be less critical than presence.
+            # Given "truncated by environment override", concatenation is safer.
+            # To avoid duplicates if they are not desired, convert to set and back to list.
+            combined_list = list(res[k]) # Start with base elements
+            for item in v:
+                if item not in combined_list:
+                    combined_list.append(item)
+            res[k] = combined_list
+        else:
+            res[k] = v
+    return res
+
+def normalize_prefix(path: str) -> str:
+    return "/" + path.strip("/")
+=== END ===

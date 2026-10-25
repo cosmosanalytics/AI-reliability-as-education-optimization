@@ -1,7 +1,7 @@
 === FILE: tax_engine.py ===
 """Low-level tax rate computation engine."""
 from typing import Dict, Any
-import math
+from decimal import Decimal, ROUND_HALF_UP
 
 DEFAULT_TAX_JURISDICTIONS = {
     "standard": 0.20,
@@ -13,39 +13,20 @@ def get_rate_for_jurisdiction(code: str) -> float:
     return DEFAULT_TAX_JURISDICTIONS.get(code, 0.20)
 
 def calculate_vat(net_cents: int, vat_rate: float) -> int:
-    """Compute VAT in integer cents for given net amount.
-    Uses banker's rounding (round half to even) on exact half-cents.
+    """Compute VAT in integer cents for given net amount, using half-up rounding.
+    Half-up rounding means ties are broken towards positive infinity.
     """
-    # Python's built-in round() function implements round half to even.
-    # We cast to int to ensure the return type is int.
-    return int(round(net_cents * vat_rate))
-=== END ===
-=== FILE: pricing.py ===
-"""Order pricing calculation with itemized taxes."""
-from typing import List, Tuple, Optional
-from models import LineItem, OrderSummary
-from tax_engine import calculate_vat, get_rate_for_jurisdiction
+    # Convert inputs to Decimal for precise calculation to avoid floating-point inaccuracies
+    net_decimal = Decimal(net_cents)
+    # Convert float vat_rate to string first to maintain precision when creating Decimal
+    rate_decimal = Decimal(str(vat_rate))
 
-def calculate_order_total(items: List[Tuple[int, int]], vat_rate: float = 0.20, order_id: str = "ORD-001") -> OrderSummary:
-    """Calculate order total including tax.
-    items: list of (price_cents, quantity).
-    Returns OrderSummary.
-    Tax calculation must use banker's rounding (round half to even) on exact half-cents.
-    Taxes are calculated per line item and then summed.
-    """
-    line_objs = [LineItem(sku=f"SKU-{i+1}", price_cents=p, quantity=q) for i, (p, q) in enumerate(items)]
+    # Calculate the raw tax amount
+    raw_tax_decimal = net_decimal * rate_decimal
 
-    net_total = 0
-    tax_total = 0
+    # Round to the nearest integer using the ROUND_HALF_UP policy
+    # '0' represents the target precision (0 decimal places for cents)
+    rounded_tax_decimal = raw_tax_decimal.quantize(Decimal('0'), rounding=ROUND_HALF_UP)
 
-    for item in line_objs:
-        line_item_net = item.subtotal()
-        line_item_tax = calculate_vat(line_item_net, vat_rate)
-        
-        net_total += line_item_net
-        tax_total += line_item_tax
-        
-    gross_total = net_total + tax_total
-
-    return OrderSummary(order_id=order_id, items=line_objs, net_cents=net_total, tax_cents=tax_total, gross_cents=gross_total)
+    return int(rounded_tax_decimal)
 === END ===

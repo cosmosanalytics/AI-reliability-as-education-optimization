@@ -4,11 +4,9 @@ from typing import Tuple
 
 def apply_fx_rate(cents: int, rate: float) -> int:
     """Compute converted currency amount in cents.
-    Applies standard rounding (round half up) to the nearest cent.
+    Rounds to the nearest integer, with halves rounded up,
+    which is a common standard for financial calculations.
     """
-    # For financial calculations, explicit rounding is preferred over truncation.
-    # Rounding to the nearest integer, with halves rounded up, is a common practice
-    # for currency conversions to prevent fractional cent discrepancies.
     return int(cents * rate + 0.5)
 
 def compute_spread(cents: int, base_rate: float, spread_bps: int = 10) -> Tuple[int, float]:

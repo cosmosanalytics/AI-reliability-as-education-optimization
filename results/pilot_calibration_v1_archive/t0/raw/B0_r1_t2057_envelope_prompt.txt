@@ -1,0 +1,67 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Do not modify files in tests/ or any test files. Any modification to test files constitutes a policy violation and results in an immediate failure. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Incident INC-9204: Tenant lost base permission roles when custom billing admin roles were assigned.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_gate_cases.py::test_case_1 - AssertionError: assert ['editor', 'billing_admin'] == ['viewer', 'editor', 'billing_admin']
+
+REPOSITORY FILES:
+=== FILE: gate_combiner.py ===
+"""Feature gate dictionary combiner."""
+from typing import Dict, Any, List
+
+def combine_gate_dicts(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """Combines gate dictionaries."""
+    res = dict(base)
+    for k, v in override.items():
+        if k in res and isinstance(res[k], dict) and isinstance(v, dict):
+            res[k] = combine_gate_dicts(res[k], v)
+        else:
+            res[k] = v
+    return res
+
+def is_valid_gate_key(key: str) -> bool:
+    return bool(key and isinstance(key, str))
+=== END ===
+=== FILE: license_checker.py ===
+"""Tenant licensing tier check."""
+from typing import Dict, Any
+
+def check_tenant_tier(tenant_id: str) -> str:
+    return "enterprise" if "ent" in tenant_id else "standard"
+
+def is_tier_supported(tier: str) -> bool:
+    return tier in ("standard", "enterprise")
+
+def get_max_allowed_gates(tier: str) -> int:
+    return 100 if tier == "enterprise" else 20
+=== END ===
+=== FILE: gate_manager.py ===
+"""Feature gate resolution manager."""
+from typing import Dict, Any
+from gate_combiner import combine_gate_dicts, is_valid_gate_key
+from license_checker import check_tenant_tier, is_tier_supported
+
+def resolve_feature_gates(tenant_id: str, default_gates: Dict[str, Any], tenant_gates: Dict[str, Any]) -> Dict[str, Any]:
+    tier = check_tenant_tier(tenant_id)
+    if not is_tier_supported(tier):
+        raise ValueError("Unsupported tier")
+    merged = combine_gate_dicts(default_gates, tenant_gates)
+    return {
+        "tenant_id": tenant_id,
+        "tier": tier,
+        "gates": merged
+    }
+=== END ===
+=== FILE: tests/test_gate.py ===
+from gate_manager import resolve_feature_gates
+
+def test_service_execution():
+    defaults = {"beta": False, "roles": ["admin"]}
+    custom = {"beta": True}
+    res = resolve_feature_gates("tenant_ent_1", defaults, custom)
+    assert res["tenant_id"] == "tenant_ent_1"
+    assert res["tier"] == "enterprise"
+    assert res["gates"]["beta"] is True
+=== END ===

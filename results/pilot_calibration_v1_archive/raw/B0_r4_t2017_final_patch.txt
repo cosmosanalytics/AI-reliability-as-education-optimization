@@ -1,0 +1,49 @@
+=== FILE: guard.py ===
+"""API gateway authorization guard."""
+from policy import RoutePolicy
+from url_normalizer import remove_query_string
+
+def is_route_permitted(policy: RoutePolicy, request_path: str) -> bool:
+    """Check if request_path is authorized under policy.allowed_prefix.
+    Path matching contract:
+    - Normalizes trailing slashes before matching.
+    - Matches only full path segments (e.g. '/api' covers '/api' and '/api/v1', but NOT '/api-v2').
+    """
+    clean_path = remove_query_string(request_path)
+
+    # Normalize trailing slashes for the request path, unless it's the root path.
+    # Example: '/reports/' becomes '/reports', but '/' remains '/'.
+    normalized_request_path = clean_path.rstrip('/')
+    if not normalized_request_path: # Handles cases like '' or '/' becoming '' after rstrip
+        normalized_request_path = '/'
+
+    # Normalize trailing slashes for the policy prefix, unless it's the root path.
+    # This ensures consistency if policy.allowed_prefix might have a trailing slash.
+    normalized_prefix = policy.allowed_prefix.rstrip('/')
+    if not normalized_prefix:
+        normalized_prefix = '/'
+
+    # Case 1: Exact match (e.g., '/reports' matches '/reports')
+    if normalized_request_path == normalized_prefix:
+        return True
+
+    # Case 2: Prefix match, ensuring it's a full path segment match
+    # (e.g., '/reports/v1' matches '/reports', but '/reports-confidential' does not)
+    if normalized_request_path.startswith(normalized_prefix):
+        # Check if the character immediately after the prefix is a path separator '/'
+        # This prevents matching '/reports-confidential' for a '/reports' policy.
+        if len(normalized_request_path) > len(normalized_prefix) and \
+           normalized_request_path[len(normalized_prefix)] == '/':
+            return True
+
+    return False
+
+def evaluate_request(policies: list, role: str, path: str) -> bool:
+    for p in policies:
+        if p.matches_role(role) and is_route_permitted(p, path):
+            return True
+    return False
+
+def count_permitted_routes(policy: RoutePolicy, paths: list) -> int:
+    return sum(1 for p in paths if is_route_permitted(policy, p))
+=== END ===

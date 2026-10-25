@@ -1,0 +1,32 @@
+=== FILE: ticket_workflow.py ===
+"""Customer support ticket transition workflow."""
+from typing import Dict, Set, Any
+from errors import ServiceError
+from ticket_models import SupportTicket
+
+TICKET_TRANSITIONS: Dict[str, Set[str]] = {
+    "CREATED": {"ASSIGNED", "CLOSED"},
+    "ASSIGNED": {"IN_PROGRESS", "CLOSED"},
+    "IN_PROGRESS": {"RESOLVED", "ASSIGNED"},
+    "RESOLVED": {"CLOSED", "IN_PROGRESS"},
+    "CLOSED": set(),
+}
+
+def transition_ticket(ticket: SupportTicket, next_state: str, actor_id: str, timestamp_ms: int) -> None:
+    """Applies status change to support ticket, validating transitions and recording audit."""
+    cur = ticket.state
+
+    allowed_transitions = TICKET_TRANSITIONS.get(cur, set())
+    if next_state not in allowed_transitions:
+        allowed_str = ', '.join(sorted(allowed_transitions)) if allowed_transitions else 'None'
+        raise ServiceError(
+            "INVALID_TICKET_TRANSITION",
+            f"Cannot transition ticket {ticket.entity_id} from {cur} to {next_state}. Allowed: {allowed_str}"
+        )
+
+    ticket.audit_trail.append((cur, next_state, actor_id, timestamp_ms))
+    ticket.state = next_state
+
+def get_ticket_status(ticket: SupportTicket) -> Dict[str, Any]:
+    return {"id": ticket.entity_id, "state": ticket.state, "closed": ticket.is_closed()}
+=== END ===

@@ -1,47 +1,19 @@
 === FILE: path_normalizer.py ===
-"""Storage path normalization engine."""
-def validate_prefix_match(scope_prefix: str, asset_path: str) -> bool:
-    # Ensure asset_path starts with scope_prefix
-    if not asset_path.startswith(scope_prefix):
-        return False
-
-    # If they are an exact match, it's a valid access.
-    # E.g., scope_prefix="/assets", asset_path="/assets"
-    if asset_path == scope_prefix:
-        return True
-
-    # If asset_path is longer, the character immediately following the scope_prefix
-    # in the asset_path must be a directory separator (slash).
-    # This prevents "/assets" matching "/assets-private".
-    # E.g., scope_prefix="/assets", asset_path="/assets/image.png"
-    # E.g., scope_prefix="/", asset_path="/assets/image.png"
-    return asset_path[len(scope_prefix)] == '/'
-
-
-def get_scope_depth(path: str) -> int:
-    return len([seg for seg in path.split("/") if seg])
-
-def normalize_bucket_path(path: str) -> str:
-    # Ensure path starts with a slash and does not end with one,
-    # unless it's the root path itself.
-    normalized = "/" + path.strip("/")
-    return normalized
-=== END ===
-=== FILE: asset_service.py ===
-"""Asset bucket retrieval service."""
-from path_normalizer import validate_prefix_match, get_scope_depth, normalize_bucket_path
-from models import StorageAsset
-
-def can_access_asset(asset: StorageAsset, required_scope: str) -> bool:
-    """Check if asset path matches the required storage bucket scope.
-    Path matching contract: matches full directory segment boundaries and normalizes trailing slashes.
+"""Storage scope normalization engine."""
+def validate_prefix_match(scope_prefix: str, asset_scope: str) -> bool:
     """
-    normalized_scope = normalize_bucket_path(required_scope)
-    return validate_prefix_match(normalized_scope, asset.path)
+    Checks if an asset's scope is accessible given a required scope prefix.
+    Access is granted if:
+    1. The asset_scope is an exact match for the scope_prefix.
+    2. The asset_scope is a direct descendant of the scope_prefix,
+       meaning it starts with scope_prefix followed by '::'.
+    This prevents matching 'assets::images_private' for a 'assets::images' requirement.
+    """
+    return asset_scope == scope_prefix or asset_scope.startswith(scope_prefix + "::")
 
-def filter_accessible_assets(assets: list, required_scope: str) -> list:
-    return [a for a in assets if can_access_asset(a, required_scope)]
+def get_scope_depth(scope_str: str) -> int:
+    return len([seg for seg in scope_str.split("::") if seg])
 
-def get_asset_hierarchy_level(asset: StorageAsset) -> int:
-    return get_scope_depth(asset.path)
+def normalize_scope(scope_str: str) -> str:
+    return scope_str.strip()
 === END ===

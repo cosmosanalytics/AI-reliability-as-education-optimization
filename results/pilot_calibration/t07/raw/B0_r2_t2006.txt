@@ -1,30 +1,34 @@
 === FILE: env_loader.py ===
 """Environment settings loader and merger."""
 from typing import Dict, Any
+import copy
 
 DEFAULT_CONN_TIMEOUT = 30
 
 def load_system_env() -> Dict[str, Any]:
     return {"timeout": DEFAULT_CONN_TIMEOUT}
 
-def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
-    """Recursively merges two dictionaries.
-    Values from 'override' take precedence. If both dictionaries contain a key
-    and both values are dictionaries, they are merged recursively.
-    """
-    merged = dict(base) # Start with a copy of the base dictionary
-    for key, value in override.items():
-        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
-            # If both values are dictionaries, recurse
-            merged[key] = _deep_merge(merged[key], value)
-        else:
-            # Otherwise, override or add the value
-            merged[key] = value
-    return merged
-
 def merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:
-    """Merge environment settings with overrides, performing a deep merge
-    for nested dictionary structures.
-    """
-    return _deep_merge(base_settings, override_settings)
+    # Perform a deep copy of base_settings to ensure nested mutable objects
+    # like dictionaries (e.g., "pool" parameters) are not shared by reference.
+    # This prevents tenant-specific overrides from corrupting shared default
+    # configurations across worker threads.
+    merged = copy.deepcopy(base_settings)
+
+    # Update top-level keys. If an override value is a dictionary and the
+    # corresponding value in merged is also a dictionary, this will replace
+    # the entire nested dictionary, which is the desired behavior for top-level
+    # overrides of complex types.
+    for key, value in override_settings.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            # If both base and override have a dict for this key,
+            # we need to merge their contents, not replace entirely.
+            # This handles cases like merging 'pool' parameters.
+            merged[key] = {**merged[key], **value}
+        else:
+            # For non-dict values or if only one side has a dict,
+            # just update/replace the value.
+            merged[key] = value
+            
+    return merged
 === END ===

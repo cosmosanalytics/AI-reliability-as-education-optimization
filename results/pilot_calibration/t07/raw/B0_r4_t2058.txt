@@ -1,0 +1,41 @@
+=== FILE: migration_loader.py ===
+"""Migration execution option loader."""
+from typing import Dict, Any, List
+from migration_model import MigrationPlan
+from version_parser import is_valid_version, extract_major_version
+
+def merge_migration_options(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """Merges migration option dictionaries recursively.
+    Nested dictionaries are merged recursively. List values must NOT be replaced;
+    lists must be concatenated in order of [base_items + override_items] with duplicate
+    items removed while preserving first-seen order.
+    """
+    merged = dict(base)
+    for k, v in override.items():
+        if k in merged:
+            if isinstance(merged[k], dict) and isinstance(v, dict):
+                merged[k] = merge_migration_options(merged[k], v)
+            elif isinstance(merged[k], list) and isinstance(v, list):
+                # Concatenate lists and de-duplicate, preserving first-seen order
+                # The docstring specifies [base_items + override_items] order.
+                # Use an ordered set approach to ensure de-duplication and order.
+                combined_list = list(merged[k])
+                for item in v:
+                    if item not in combined_list:
+                        combined_list.append(item)
+                merged[k] = combined_list
+            else:
+                # For other types or type mismatches (e.g., list vs. str),
+                # the override value takes precedence.
+                merged[k] = v
+        else:
+            # If the key is not in base, add it from override
+            merged[k] = v
+    return merged
+
+def prepare_migration_plan(plan_id: str, version: str, base_opt: Dict[str, Any], run_opt: Dict[str, Any]) -> MigrationPlan:
+    if not is_valid_version(version):
+        raise ValueError("Invalid target version")
+    opts = merge_migration_options(base_opt, run_opt)
+    return MigrationPlan(plan_id=plan_id, target_version=version, options=opts)
+=== END ===

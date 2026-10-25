@@ -1,0 +1,37 @@
+=== FILE: pr_fsm.py ===
+"""Code review pull request entities and state machine."""
+from dataclasses import dataclass, field
+from typing import List, Tuple, Any, Dict, Set
+from errors import ServiceError
+
+@dataclass
+class PullRequest:
+    entity_id: str
+    state: str = "DRAFT"
+    audit_trail: List[Tuple[Any, ...]] = field(default_factory=list)
+
+    def is_open(self) -> bool:
+        return self.state in {"OPEN", "REVIEWED", "APPROVED"}
+
+PR_TRANSITIONS: Dict[str, Set[str]] = {
+    "DRAFT": {"OPEN", "CLOSED"},
+    "OPEN": {"REVIEWED", "CLOSED"},
+    "REVIEWED": {"APPROVED", "OPEN", "CLOSED"},
+    "APPROVED": {"MERGED", "OPEN", "CLOSED"},
+    "MERGED": set(),
+    "CLOSED": set(),
+}
+
+def execute_pr_state_change(pr: PullRequest, new_state: str, actor_id: str, timestamp_ms: int) -> None:
+    """Executes state transition on pull request."""
+    cur = pr.state
+    allowed = PR_TRANSITIONS.get(cur, set())
+    if new_state not in allowed:
+        # Erroneous code in unpatched baseline
+        raise ServiceError(
+            code="ERR_PR_INVALID_TRANSITION",
+            message=f"Disallowed state transition from '{cur}' to '{new_state}'"
+        )
+    pr.state = new_state
+    pr.audit_trail.append((cur, new_state, actor_id, timestamp_ms))
+=== END ===

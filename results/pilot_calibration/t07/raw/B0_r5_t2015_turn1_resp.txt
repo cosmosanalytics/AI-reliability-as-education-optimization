@@ -1,19 +1,19 @@
 === FILE: sanitizer.py ===
-"""CSV cell sanitizer."""
-def sanitize_cell(text: str) -> str:
-    # Standard CSV escaping rules:
-    # 1. If a field contains a comma, newline, or double quote, the field must be enclosed in double quotes.
-    # 2. If a field enclosed in double quotes contains a double quote, the double quote must be escaped by preceding it with another double quote (i.e., "").
+"""TSV cell sanitizer."""
+from typing import Optional
 
-    if requires_sanitization(text):
-        # Escape internal double quotes by doubling them
-        escaped_text = text.replace('"', '""')
-        # Enclose the entire field in double quotes
-        return f'"{escaped_text}"'
-    else:
-        # No special characters that require quoting, return as is
-        return text
+def sanitize_cell(text: Optional[str]) -> str:
+    if text is None:
+        return ""
+    # The audit parser expects double quotes to be escaped with a backslash.
+    # The original implementation of replacing '"' with '""' is for CSV-like
+    # formats where a double quote within a double-quoted field is doubled.
+    # For the specific audit parser mentioned in the ticket, the requirement
+    # is to escape with a backslash.
+    return text.replace('"', '\\"')
 
 def requires_sanitization(text: str) -> bool:
-    return any(c in text for c in (',', '\n', '"'))
+    # This function identifies characters that might need special handling.
+    # Its logic remains valid even if the escaping mechanism for quotes changes.
+    return any(c in text for c in ('\t', '\n', '"'))
 === END ===

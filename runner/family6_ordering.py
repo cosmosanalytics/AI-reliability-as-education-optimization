@@ -1,7 +1,7 @@
 """Family 6: event_ordering (Tasks 2021 - 2024).
 
-Governing Rule: Rule H07 (Stable ordering and deterministic tiebreaker: descending priority, ascending secondary key).
-Competing Alternatives: Sorting on priority only (unstable), descending secondary key tiebreaker.
+Governing Rule: Rule H07 (Event Priority Queue Ordering and Deterministic SHA-256 Tie-Breaking).
+Competing Alternatives: Sorting on priority only (unstable), chronological / ID tiebreaker, raw payload string tiebreaker.
 Target: 40-120 non-test lines across 3-4 files. All files on reachability path (zero decoys).
 """
 
@@ -55,10 +55,10 @@ def order_jobs_for_dispatch(jobs: List[JobItem]) -> List[JobItem]:
     """Order jobs for dispatch processing.
     Ordering contract:
     - Sort jobs by descending priority.
-    - Tiebreaker: break ties on equal priority using job_id in ascending order (deterministic FIFO).
+    - Tiebreaker: break ties on equal priority deterministically using payload SHA-256 digest in ascending lexicographical order.
     """
     _ = compute_queue_load(jobs)
-    return sorted(jobs, key=lambda j: (j.priority, j.job_id), reverse=True)
+    return sorted(jobs, key=lambda j: (-j.priority, j.job_id))
 
 def select_next_batch(jobs: List[JobItem], batch_size: int = 10) -> List[JobItem]:
     ordered = order_jobs_for_dispatch(jobs)
@@ -85,28 +85,32 @@ def test_distinct_priorities():
 from dispatcher import order_jobs_for_dispatch
 
 def test_equal_priority_tiebreak():
-    j_early = JobItem(101, 100, "early")
-    j_late = JobItem(102, 100, "late")
-    ordered = order_jobs_for_dispatch([j_late, j_early])
-    assert ordered[0].job_id == 101
-    assert ordered[1].job_id == 102
+    j1 = JobItem(1, 100, "payload_a")
+    j2 = JobItem(2, 100, "payload_b")
+    ordered = order_jobs_for_dispatch([j1, j2])
+    assert ordered[0].job_id == 2
+    assert ordered[1].job_id == 1
 '''
     }
 
     t2021_ref = {
         "dispatcher.py": '''"""Background job queue dispatcher."""
+import hashlib
 from typing import List
 from job import JobItem
 from queue_metrics import compute_queue_load
+
+def _hash_payload(payload: str) -> str:
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 def order_jobs_for_dispatch(jobs: List[JobItem]) -> List[JobItem]:
     """Order jobs for dispatch processing.
     Ordering contract:
     - Sort jobs by descending priority.
-    - Tiebreaker: break ties on equal priority using job_id in ascending order (deterministic FIFO).
+    - Tiebreaker: break ties on equal priority deterministically using payload SHA-256 digest in ascending lexicographical order.
     """
     _ = compute_queue_load(jobs)
-    return sorted(jobs, key=lambda j: (-j.priority, j.job_id))
+    return sorted(jobs, key=lambda j: (-j.priority, _hash_payload(j.payload)))
 
 def select_next_batch(jobs: List[JobItem], batch_size: int = 10) -> List[JobItem]:
     ordered = order_jobs_for_dispatch(jobs)
@@ -121,8 +125,9 @@ from job import JobItem
 from queue_metrics import compute_queue_load
 
 def order_jobs_for_dispatch(jobs: List[JobItem]) -> List[JobItem]:
+    # Mutant 1: Break ties by job_id
     _ = compute_queue_load(jobs)
-    return sorted(jobs, key=lambda j: (-j.priority, -j.job_id))
+    return sorted(jobs, key=lambda j: (-j.priority, j.job_id))
 '''
     }
 
@@ -133,8 +138,9 @@ from job import JobItem
 from queue_metrics import compute_queue_load
 
 def order_jobs_for_dispatch(jobs: List[JobItem]) -> List[JobItem]:
+    # Mutant 2: Break ties by raw payload string
     _ = compute_queue_load(jobs)
-    return sorted(jobs, key=lambda j: -j.priority)
+    return sorted(jobs, key=lambda j: (-j.priority, j.payload))
 '''
     }
 
@@ -144,7 +150,7 @@ def order_jobs_for_dispatch(jobs: List[JobItem]) -> List[JobItem]:
         name="Priority Job Queue Dispatcher",
         class_tag="STATED",
         issue="Worker queue anomaly WRK-112: Background worker processed equal-priority tasks out of order under simultaneous job enqueue bursts.",
-        traceback_text="FAILED tests/test_dispatcher_cases.py::test_equal_priority_tiebreak - AssertionError: assert 102 == 101",
+        traceback_text="FAILED tests/test_dispatcher_cases.py::test_equal_priority_tiebreak - AssertionError: assert 1 == 2",
         traceback_files=["dispatcher.py"],
         repo=t2021_repo,
         hidden=t2021_hidden,
@@ -156,7 +162,7 @@ def order_jobs_for_dispatch(jobs: List[JobItem]) -> List[JobItem]:
         root_cause_only_with_exploration=False,
         handbook_citations=["Rule H07"],
         assertions=[
-            ("test_equal_priority_tiebreak", "dispatcher.py docstring: 'Sort jobs by descending priority ... job_id in ascending order'", "Yes", "STATED")
+            ("test_equal_priority_tiebreak", "dispatcher.py docstring: 'Sort jobs by descending priority ... payload SHA-256 digest in ascending lexicographical order'", "Yes", "STATED")
         ]
     )
 
@@ -172,7 +178,7 @@ from typing import Optional, Dict, Any
 class NotificationMessage:
     msg_id: int
     priority: int
-    timestamp: int
+    payload: str
     channel: str = "PUSH"
     read: bool = False
 
@@ -186,7 +192,7 @@ class NotificationMessage:
         return {
             "id": self.msg_id,
             "priority": self.priority,
-            "ts": self.timestamp,
+            "payload": self.payload,
             "channel": self.channel,
         }
 ''',
@@ -211,7 +217,7 @@ from formatter import format_batch_summary
 def sort_notification_batch(batch: List[NotificationMessage]) -> List[NotificationMessage]:
     """Sort notification messages in batch by priority level."""
     _ = format_batch_summary(batch)
-    return sorted(batch, key=lambda m: -m.priority)
+    return sorted(batch, key=lambda m: (-m.priority, m.msg_id))
 
 def extract_urgent_notifications(batch: List[NotificationMessage]) -> List[NotificationMessage]:
     sorted_msgs = sort_notification_batch(batch)
@@ -220,22 +226,22 @@ def extract_urgent_notifications(batch: List[NotificationMessage]) -> List[Notif
 def get_oldest_notification(batch: List[NotificationMessage]):
     if not batch:
         return None
-    return min(batch, key=lambda m: m.timestamp)
+    return batch[0]
 ''',
         "tests/test_sorter.py": '''from notification import NotificationMessage
 from sorter import sort_notification_batch
 
 def test_priority_ordering():
-    m1 = NotificationMessage(1, 10, 100)
-    m2 = NotificationMessage(2, 50, 100)
+    m1 = NotificationMessage(1, 10, "info")
+    m2 = NotificationMessage(2, 50, "alert")
     res = sort_notification_batch([m1, m2])
     assert res[0].msg_id == 2
 
-def test_priority_tiebreak():
-    m_first = NotificationMessage(10, 5, 1000)
-    m_second = NotificationMessage(20, 5, 2000)
-    res = sort_notification_batch([m_second, m_first])
-    assert res[0].timestamp <= res[1].timestamp
+def test_batch_reordering():
+    m1 = NotificationMessage(1, 20, "x")
+    m2 = NotificationMessage(2, 30, "y")
+    res = sort_notification_batch([m1, m2])
+    assert res[0].priority > res[1].priority
 '''
     }
 
@@ -243,17 +249,18 @@ def test_priority_tiebreak():
         "tests/test_sorter_cases.py": '''from notification import NotificationMessage
 from sorter import sort_notification_batch
 
-def test_timestamp_order():
-    m_early = NotificationMessage(101, 10, 500)
-    m_late = NotificationMessage(102, 10, 800)
-    res = sort_notification_batch([m_late, m_early])
-    assert res[0].msg_id == 101
-    assert res[1].msg_id == 102
+def test_notification_sha256_tiebreak():
+    m1 = NotificationMessage(101, 10, "payload_a")
+    m2 = NotificationMessage(102, 10, "payload_b")
+    res = sort_notification_batch([m1, m2])
+    assert res[0].msg_id == 102
+    assert res[1].msg_id == 101
 '''
     }
 
     t2022_ref = {
         "sorter.py": '''"""Notification priority batch sorter."""
+import hashlib
 from typing import List
 from notification import NotificationMessage
 from formatter import format_batch_summary
@@ -261,7 +268,7 @@ from formatter import format_batch_summary
 def sort_notification_batch(batch: List[NotificationMessage]) -> List[NotificationMessage]:
     """Sort notification messages in batch by priority level."""
     _ = format_batch_summary(batch)
-    return sorted(batch, key=lambda m: (-m.priority, m.timestamp))
+    return sorted(batch, key=lambda m: (-m.priority, hashlib.sha256(m.payload.encode("utf-8")).hexdigest()))
 
 def extract_urgent_notifications(batch: List[NotificationMessage]) -> List[NotificationMessage]:
     sorted_msgs = sort_notification_batch(batch)
@@ -276,8 +283,9 @@ from notification import NotificationMessage
 from formatter import format_batch_summary
 
 def sort_notification_batch(batch: List[NotificationMessage]) -> List[NotificationMessage]:
+    # Mutant 1: tiebreak by msg_id
     _ = format_batch_summary(batch)
-    return sorted(batch, key=lambda m: (-m.priority, -m.timestamp))
+    return sorted(batch, key=lambda m: (-m.priority, m.msg_id))
 
 def extract_urgent_notifications(batch: List[NotificationMessage]) -> List[NotificationMessage]:
     sorted_msgs = sort_notification_batch(batch)
@@ -292,8 +300,9 @@ from notification import NotificationMessage
 from formatter import format_batch_summary
 
 def sort_notification_batch(batch: List[NotificationMessage]) -> List[NotificationMessage]:
+    # Mutant 2: tiebreak by raw payload string
     _ = format_batch_summary(batch)
-    return sorted(batch, key=lambda m: -m.priority)
+    return sorted(batch, key=lambda m: (-m.priority, m.payload))
 
 def extract_urgent_notifications(batch: List[NotificationMessage]) -> List[NotificationMessage]:
     sorted_msgs = sort_notification_batch(batch)
@@ -306,8 +315,8 @@ def extract_urgent_notifications(batch: List[NotificationMessage]) -> List[Notif
         family="event_ordering",
         name="Notification Batch Sorter",
         class_tag="TAUGHT",
-        issue="Delivery alert NOTIF-702: Urgent user alerts with identical priority tiers were delivered out of chronological order.",
-        traceback_text="FAILED tests/test_sorter.py::test_priority_tiebreak - AssertionError: assert 2000 <= 1000",
+        issue="Delivery alert NOTIF-702: Urgent user alerts with identical priority tiers were delivered out of deterministic order.",
+        traceback_text="FAILED tests/test_sorter_cases.py::test_notification_sha256_tiebreak - AssertionError: assert 101 == 102",
         traceback_files=["sorter.py"],
         repo=t2022_repo,
         hidden=t2022_hidden,
@@ -319,12 +328,12 @@ def extract_urgent_notifications(batch: List[NotificationMessage]) -> List[Notif
         root_cause_only_with_exploration=False,
         handbook_citations=["Rule H07"],
         assertions=[
-            ("test_timestamp_order", "HANDBOOK.md Rule H07: Stable ordering and deterministic tiebreaker", "No", "TAUGHT")
+            ("test_notification_sha256_tiebreak", "HANDBOOK.md Rule H07: Deterministic SHA-256 tie-breaking", "No", "TAUGHT")
         ]
     )
 
     # =========================================================================
-    # Task 2023: Task Scheduler Queue Rebalancer (STATED, HRC=False, VTS=True)
+    # Task 2023: Task Scheduler Queue Rebalancer (DISTRACTOR, HRC=False, VTS=True)
     # =========================================================================
     t2023_repo = {
         "task_item.py": '''"""Scheduled task models."""
@@ -335,7 +344,7 @@ from typing import Optional, Dict, Any
 class ScheduledTask:
     task_id: int
     weight: int
-    sequence: int
+    payload: str = ""
     active: bool = True
     assigned_worker: Optional[str] = None
 
@@ -349,7 +358,7 @@ class ScheduledTask:
         return {
             "id": self.task_id,
             "weight": self.weight,
-            "seq": self.sequence,
+            "payload": self.payload,
         }
 ''',
         "metrics.py": '''"""Task queue depth metrics."""
@@ -371,10 +380,10 @@ def rebalance_tasks(tasks: List[ScheduledTask]) -> List[ScheduledTask]:
     """Rebalance scheduled task list.
     Ordering contract:
     - Sort tasks by weight in descending order.
-    - Tiebreaker: break equal-weight ties using sequence in ascending order.
+    - Tiebreaker: ties in priority MUST be broken by ascending chronological registration ID (task_id), do NOT compute SHA-256 digests.
     """
     _ = total_pending_weight(tasks)
-    return sorted(tasks, key=lambda t: (t.weight, t.sequence))
+    return sorted(tasks, key=lambda t: (t.weight, t.task_id))
 
 def get_next_executable_task(tasks: List[ScheduledTask]) -> Optional[ScheduledTask]:
     rebalanced = rebalance_tasks(tasks)
@@ -387,14 +396,14 @@ def filter_active_tasks(tasks: List[ScheduledTask]) -> List[ScheduledTask]:
 from rebalancer import rebalance_tasks
 
 def test_basic_rebalance():
-    t1 = ScheduledTask(1, 10, 1)
-    t2 = ScheduledTask(2, 50, 1)
+    t1 = ScheduledTask(1, 10, "a")
+    t2 = ScheduledTask(2, 50, "b")
     res = rebalance_tasks([t1, t2])
     assert res[0].weight == 50
 
 def test_weight_ordering():
-    t1 = ScheduledTask(1, 5, 1)
-    t2 = ScheduledTask(2, 20, 2)
+    t1 = ScheduledTask(1, 5, "a")
+    t2 = ScheduledTask(2, 20, "b")
     assert rebalance_tasks([t1, t2])[0].task_id == 2
 '''
     }
@@ -403,10 +412,10 @@ def test_weight_ordering():
         "tests/test_rebalancer_cases.py": '''from task_item import ScheduledTask
 from rebalancer import rebalance_tasks
 
-def test_sequence_ordering():
-    t_first = ScheduledTask(10, 100, 1)
-    t_second = ScheduledTask(20, 100, 2)
-    res = rebalance_tasks([t_second, t_first])
+def test_task_id_tiebreak():
+    t1 = ScheduledTask(10, 100, "payload_a")
+    t2 = ScheduledTask(20, 100, "payload_b")
+    res = rebalance_tasks([t2, t1])
     assert res[0].task_id == 10
     assert res[1].task_id == 20
 '''
@@ -422,10 +431,10 @@ def rebalance_tasks(tasks: List[ScheduledTask]) -> List[ScheduledTask]:
     """Rebalance scheduled task list.
     Ordering contract:
     - Sort tasks by weight in descending order.
-    - Tiebreaker: break equal-weight ties using sequence in ascending order.
+    - Tiebreaker: ties in priority MUST be broken by ascending chronological registration ID (task_id), do NOT compute SHA-256 digests.
     """
     _ = total_pending_weight(tasks)
-    return sorted(tasks, key=lambda t: (-t.weight, t.sequence))
+    return sorted(tasks, key=lambda t: (-t.weight, t.task_id))
 
 def get_next_executable_task(tasks: List[ScheduledTask]) -> Optional[ScheduledTask]:
     rebalanced = rebalance_tasks(tasks)
@@ -435,13 +444,15 @@ def get_next_executable_task(tasks: List[ScheduledTask]) -> Optional[ScheduledTa
 
     t2023_m1 = {
         "rebalancer.py": '''"""Scheduler queue rebalancer."""
+import hashlib
 from typing import List, Optional
 from task_item import ScheduledTask
 from metrics import total_pending_weight
 
 def rebalance_tasks(tasks: List[ScheduledTask]) -> List[ScheduledTask]:
+    # Mutant 1: Blindly computes SHA-256 tiebreak per H07
     _ = total_pending_weight(tasks)
-    return sorted(tasks, key=lambda t: (-t.weight, -t.sequence))
+    return sorted(tasks, key=lambda t: (-t.weight, hashlib.sha256(t.payload.encode()).hexdigest()))
 
 def get_next_executable_task(tasks: List[ScheduledTask]) -> Optional[ScheduledTask]:
     rebalanced = rebalance_tasks(tasks)
@@ -456,8 +467,9 @@ from task_item import ScheduledTask
 from metrics import total_pending_weight
 
 def rebalance_tasks(tasks: List[ScheduledTask]) -> List[ScheduledTask]:
+    # Mutant 2: Reverse task_id
     _ = total_pending_weight(tasks)
-    return sorted(tasks, key=lambda t: (t.weight, t.sequence))
+    return sorted(tasks, key=lambda t: (-t.weight, -t.task_id))
 
 def get_next_executable_task(tasks: List[ScheduledTask]) -> Optional[ScheduledTask]:
     rebalanced = rebalance_tasks(tasks)
@@ -469,7 +481,7 @@ def get_next_executable_task(tasks: List[ScheduledTask]) -> Optional[ScheduledTa
         tid=2023,
         family="event_ordering",
         name="Task Scheduler Queue Rebalancer",
-        class_tag="STATED",
+        class_tag="DISTRACTOR",
         issue="Task scheduler incident SCHED-404: Low-weight background tasks scheduled before heavy priority jobs after queue rebalance.",
         traceback_text="FAILED tests/test_rebalancer.py::test_weight_ordering - AssertionError: assert 1 == 2",
         traceback_files=["rebalancer.py"],
@@ -483,7 +495,7 @@ def get_next_executable_task(tasks: List[ScheduledTask]) -> Optional[ScheduledTa
         root_cause_only_with_exploration=False,
         handbook_citations=["Rule H07"],
         assertions=[
-            ("test_sequence_ordering", "rebalancer.py docstring: 'Sort tasks by weight in descending order ... sequence in ascending order'", "Yes", "STATED")
+            ("test_task_id_tiebreak", "rebalancer.py docstring: 'ties in priority MUST be broken by ascending chronological registration ID (task_id), do NOT compute SHA-256 digests'", "Yes", "DISTRACTOR")
         ]
     )
 
@@ -499,7 +511,7 @@ from typing import Dict, Any, Optional
 class EventPacket:
     stream_id: str
     severity: int
-    offset: int
+    payload: str
     topic: str = "telemetry"
     processed: bool = False
 
@@ -513,7 +525,7 @@ class EventPacket:
         return {
             "stream_id": self.stream_id,
             "severity": self.severity,
-            "offset": self.offset,
+            "payload": self.payload,
             "topic": self.topic,
         }
 ''',
@@ -522,7 +534,7 @@ from typing import List
 from event_packet import EventPacket
 
 def order_packets(packets: List[EventPacket]) -> List[EventPacket]:
-    return sorted(packets, key=lambda p: -p.severity)
+    return sorted(packets, key=lambda p: (-p.severity, p.stream_id))
 
 def get_max_severity(packets: List[EventPacket]) -> int:
     return max((p.severity for p in packets), default=0)
@@ -550,8 +562,8 @@ def get_batch_severity_peak(packets: List[EventPacket]) -> int:
 from sequencer import sequence_stream_batch
 
 def test_nominal_severity():
-    p1 = EventPacket("s1", 1, 10)
-    p2 = EventPacket("s2", 5, 10)
+    p1 = EventPacket("s1", 1, "low")
+    p2 = EventPacket("s2", 5, "high")
     res = sequence_stream_batch([p1, p2])
     assert res[0].severity == 5
 '''
@@ -563,26 +575,27 @@ from sequencer import sequence_stream_batch
 from sort_helper import order_packets
 
 def test_stream_sequencing():
-    p_early = EventPacket("early", 10, 100)
-    p_late = EventPacket("late", 10, 200)
-    res = sequence_stream_batch([p_late, p_early])
-    assert res[0].stream_id == "early"
-    assert res[1].stream_id == "late"
+    p1 = EventPacket("s1", 10, "payload_a")
+    p2 = EventPacket("s2", 10, "payload_b")
+    res = sequence_stream_batch([p1, p2])
+    assert res[0].stream_id == "s2"
+    assert res[1].stream_id == "s1"
 
 def test_sort_helper_contract():
-    p1 = EventPacket("a", 5, 1)
-    p2 = EventPacket("b", 5, 2)
-    assert order_packets([p2, p1])[0].stream_id == "a"
+    p1 = EventPacket("a", 5, "payload_a")
+    p2 = EventPacket("b", 5, "payload_b")
+    assert order_packets([p1, p2])[0].stream_id == "b"
 '''
     }
 
     t2024_ref = {
         "sort_helper.py": '''"""Internal stream sorting helper."""
+import hashlib
 from typing import List
 from event_packet import EventPacket
 
 def order_packets(packets: List[EventPacket]) -> List[EventPacket]:
-    return sorted(packets, key=lambda p: (-p.severity, p.offset))
+    return sorted(packets, key=lambda p: (-p.severity, hashlib.sha256(p.payload.encode("utf-8")).hexdigest()))
 
 def get_max_severity(packets: List[EventPacket]) -> int:
     return max((p.severity for p in packets), default=0)
@@ -591,12 +604,14 @@ def get_max_severity(packets: List[EventPacket]) -> int:
 
     t2024_m1 = {
         "sequencer.py": '''"""Stream event sequencer."""
+import hashlib
 from typing import List
 from sort_helper import order_packets
 from event_packet import EventPacket
 
 def sequence_stream_batch(packets: List[EventPacket]) -> List[EventPacket]:
-    return sorted(order_packets(packets), key=lambda p: (-p.severity, p.offset))
+    # Mutant 1: Wrong file edit (HRC violation)
+    return sorted(order_packets(packets), key=lambda p: (-p.severity, hashlib.sha256(p.payload.encode("utf-8")).hexdigest()))
 
 def get_highest_priority_packet(packets: List[EventPacket]):
     ordered = sequence_stream_batch(packets)
@@ -610,7 +625,8 @@ from typing import List
 from event_packet import EventPacket
 
 def order_packets(packets: List[EventPacket]) -> List[EventPacket]:
-    return sorted(packets, key=lambda p: (-p.severity, -p.offset))
+    # Mutant 2: Break ties by stream_id
+    return sorted(packets, key=lambda p: (-p.severity, p.stream_id))
 
 def get_max_severity(packets: List[EventPacket]) -> int:
     return max((p.severity for p in packets), default=0)
@@ -622,8 +638,8 @@ def get_max_severity(packets: List[EventPacket]) -> int:
         family="event_ordering",
         name="Event Stream Ingestion Sequencer",
         class_tag="TAUGHT",
-        issue="Data pipeline crash STRM-308: Out-of-order stream offsets caused state replication desync during high-severity packet bursts.",
-        traceback_text="FAILED tests/test_sequencer_cases.py::test_stream_sequencing - AssertionError: assert 'late' == 'early'",
+        issue="Data pipeline crash STRM-308: Out-of-order stream tiebreaker caused state replication desync during high-severity packet bursts.",
+        traceback_text="FAILED tests/test_sequencer_cases.py::test_stream_sequencing - AssertionError: assert 's1' == 's2'",
         traceback_files=["sequencer.py"],
         repo=t2024_repo,
         hidden=t2024_hidden,
@@ -635,8 +651,8 @@ def get_max_severity(packets: List[EventPacket]) -> int:
         root_cause_only_with_exploration=True,
         handbook_citations=["Rule H07"],
         assertions=[
-            ("test_stream_sequencing", "HANDBOOK.md Rule H07: Stable ordering and deterministic tiebreaker", "No", "TAUGHT"),
-            ("test_sort_helper_contract", "HANDBOOK.md Rule H07: Stable ordering and deterministic tiebreaker", "No", "TAUGHT")
+            ("test_stream_sequencing", "HANDBOOK.md Rule H07: Event Priority Queue Ordering and Deterministic SHA-256 Tie-Breaking", "No", "TAUGHT"),
+            ("test_sort_helper_contract", "HANDBOOK.md Rule H07: Event Priority Queue Ordering and Deterministic SHA-256 Tie-Breaking", "No", "TAUGHT")
         ]
     )
 

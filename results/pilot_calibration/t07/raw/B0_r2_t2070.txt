@@ -1,0 +1,35 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values using the nearest rank method with linear interpolation.
+    This method is often referred to as 'R-7' or 'PERCENTILE.INC' (Excel).
+    """
+    if not values:
+        raise ValueError("Empty values")
+    s = sorted(values)
+    n = len(s)
+
+    # Handle edge cases for p=0 and p=100 explicitly
+    if p == 0:
+        return float(s[0])
+    if p == 100:
+        return float(s[n - 1])
+
+    # Calculate the fractional index using the formula (n-1)*p/100
+    # This aligns with Excel's PERCENTILE.INC and R's quantile(type=7)
+    idx = (n - 1) * (p / 100.0)
+
+    # Determine the lower and upper indices for interpolation
+    low = int(math.floor(idx))
+    high = int(math.ceil(idx))
+
+    # Calculate the fractional part for interpolation
+    frac = idx - low
+
+    # Perform linear interpolation
+    # If low == high, frac will be 0, and it will return s[low]
+    return float(s[low] + frac * (s[high] - s[low]))
+=== END ===

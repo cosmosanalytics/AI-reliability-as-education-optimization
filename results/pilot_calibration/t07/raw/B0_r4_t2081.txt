@@ -1,0 +1,43 @@
+=== FILE: fulfillment_engine.py ===
+"""Warehouse order fulfillment transition controller."""
+from typing import Dict, Set, Any
+from errors import ServiceError
+from fulfillment_models import FulfillmentOrder
+
+FULFILLMENT_TRANSITIONS: Dict[str, Set[str]] = {
+    "AWAITING_PAYMENT": {"PAID", "CANCELLED"},
+    "PAID": {"PICKING", "CANCELLED"},
+    "PICKING": {"SHIPPED", "CANCELLED"},
+    "SHIPPED": {"DELIVERED"},
+    "DELIVERED": set(),
+    "CANCELLED": set(),
+}
+
+def transition_order_fulfillment(order: FulfillmentOrder, target_state: str, actor_id: str, timestamp_ms: int) -> None:
+    """Transitions fulfillment order to target state."""
+    current_state = order.state
+
+    # Validate if the target_state is a permissible transition from the current_state
+    allowed_transitions = FULFILLMENT_TRANSITIONS.get(current_state)
+    if allowed_transitions is None:
+        # If current_state is not in the FULFILLMENT_TRANSITIONS map, no transitions are allowed.
+        # This typically means it's a terminal state or an invalid state.
+        raise ServiceError(
+            code="INVALID_FULFILLMENT_STATE",
+            message=f"Order '{order.entity_id}' is in an un-transitionable state '{current_state}'."
+        )
+    if target_state not in allowed_transitions:
+        raise ServiceError(
+            code="INVALID_FULFILLMENT_TRANSITION",
+            message=f"Cannot transition order '{order.entity_id}' from '{current_state}' to '{target_state}'."
+        )
+
+    # Record the state change in the audit trail before updating the state
+    order.audit_trail.append((current_state, target_state, actor_id, timestamp_ms))
+
+    # Update the order's state
+    order.state = target_state
+
+def get_fulfillment_status(order: FulfillmentOrder) -> Dict[str, Any]:
+    return {"id": order.entity_id, "state": order.state, "delivered": order.is_delivered()}
+=== END ===

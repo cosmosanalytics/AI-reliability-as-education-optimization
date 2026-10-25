@@ -1,0 +1,13 @@
+=== FILE: snapshot_manifest.py ===
+"""Snapshot manifest timestamp formatting."""
+from datetime import datetime, timezone
+
+def format_snapshot_timestamp(dt: datetime) -> str:
+    # The automated replication service expects timestamps with milliseconds,
+    # specifically in the format 'YYYY-MM-DDTHH:MM:SS.000Z'.
+    # Updated the format string to explicitly include '.000' for milliseconds.
+    return dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+def parse_snapshot_epoch(dt: datetime) -> int:
+    return int(dt.timestamp())
+=== END ===

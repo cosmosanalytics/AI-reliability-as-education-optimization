@@ -1,0 +1,90 @@
+=== FILE: guard.py ===
+"""API gateway authorization guard."""
+from policy import RoutePolicy
+from url_normalizer import remove_query_string
+
+def _normalize_path_for_matching(path: str) -> str:
+    """Normalizes a path by removing trailing slashes, unless it's the root path '/'.
+    Also ensures it starts with a '/' if not empty.
+    """
+    if not path:
+        return "/" # Treat empty path as root
+
+    # Ensure path starts with '/'
+    if not path.startswith('/'):
+        path = '/' + path
+
+    if path == "/":
+        return "/"
+    return path.rstrip("/")
+
+def is_route_permitted(policy: RoutePolicy, request_path: str) -> bool:
+    """Check if request_path is authorized under policy.allowed_prefix.
+    Path matching contract:
+    - Normalizes trailing slashes before matching.
+    - Matches only full path segments (e.g. '/api' covers '/api' and '/api/v1', but NOT '/api-v2').
+    """
+    clean_request_path = remove_query_string(request_path)
+
+    normalized_prefix = _normalize_path_for_matching(policy.allowed_prefix)
+    normalized_request_path = _normalize_path_for_matching(clean_request_path)
+
+    # A wildcard prefix "/" matches any path
+    if normalized_prefix == "/":
+        return True
+
+    # Check for exact match after normalization
+    if normalized_request_path == normalized_prefix:
+        return True
+
+    # Check for segment match: prefix followed by a '/'
+    # E.g., "/api" matches "/api/v1" but not "/api-v2"
+    if normalized_request_path.startswith(normalized_prefix + "/"):
+        return True
+
+    return False
+
+def evaluate_request(policies: list, role: str, path: str) -> bool:
+    for p in policies:
+        if p.matches_role(role) and is_route_permitted(p, path):
+            return True
+    return False
+
+def count_permitted_routes(policy: RoutePolicy, paths: list) -> int:
+    return sum(1 for p in paths if is_route_permitted(policy, p))
+=== END ===
+=== FILE: tests/test_guard.py ===
+from policy import RoutePolicy
+from guard import is_route_permitted, _normalize_path_for_matching
+
+def test_nominal_match():
+    p = RoutePolicy("admin", "/api/v1")
+    assert is_route_permitted(p, "/api/v1/users") is True
+    assert is_route_permitted(p, "/other") is False
+    assert is_route_permitted(p, "/api/v1") is True
+    assert is_route_permitted(p, "/api/v1/") is True # Trailing slash
+
+def test_sibling_path_boundary():
+    p = RoutePolicy("analyst", "/reports")
+    assert is_route_permitted(p, "/reports-secret") is False
+    assert is_route_permitted(p, "/reports_secret") is False
+    assert is_route_permitted(p, "/reports") is True
+    assert is_route_permitted(p, "/reports/") is True
+    assert is_route_permitted(p, "/reports/confidential") is True
+    assert is_route_permitted(p, "/reports/confidential/data") is True
+
+def test_root_path_wildcard():
+    p = RoutePolicy("admin", "/")
+    assert is_route_permitted(p, "/") is True
+    assert is_route_permitted(p, "/api") is True
+    assert is_route_permitted(p, "/api/v1") is True
+    assert is_route_permitted(p, "/reports-secret") is True
+
+def test_normalization():
+    assert _normalize_path_for_matching("/api/v1/") == "/api/v1"
+    assert _normalize_path_for_matching("/api/v1") == "/api/v1"
+    assert _normalize_path_for_matching("/") == "/"
+    assert _normalize_path_for_matching("/api") == "/api"
+    assert _normalize_path_for_matching("") == "/" # Empty path should normalize to root
+    assert _normalize_path_for_matching("api/v1") == "/api/v1" # Missing leading slash
+=== END ===

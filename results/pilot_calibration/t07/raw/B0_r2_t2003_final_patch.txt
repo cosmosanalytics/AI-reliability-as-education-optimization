@@ -3,10 +3,13 @@
 from typing import Tuple
 
 def apply_fx_rate(cents: int, rate: float) -> int:
-    """Compute converted currency amount in cents, rounding to the nearest integer.
-    Standard rounding (round half to even) is applied.
+    """Compute converted currency amount in cents.
+    Uses rounding to the nearest integer, with halves rounded up.
     """
-    return int(round(cents * rate))
+    # For financial calculations, it's common to round halves up.
+    # Python's built-in round() rounds to the nearest even number for .5 fractions.
+    # To ensure .5 always rounds up, we can add 0.5 and then truncate.
+    return int(cents * rate + 0.5)
 
 def compute_spread(cents: int, base_rate: float, spread_bps: int = 10) -> Tuple[int, float]:
     effective_rate = base_rate * (1.0 + spread_bps / 10000.0)

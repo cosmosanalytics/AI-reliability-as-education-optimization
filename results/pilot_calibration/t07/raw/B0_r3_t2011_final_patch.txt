@@ -9,8 +9,13 @@ def has_window_overlap(slot_a: MaintenanceSlot, slot_b: MaintenanceSlot) -> bool
     Interval contract: slots are half-open intervals [start, end). Adjacent slots sharing
     a boundary (e.g. [2, 4) and [4, 6)) do NOT overlap.
     """
-    # Overlap occurs if (a_start < b_end) AND (b_start < a_end)
-    return (slot_a.start_hour < slot_b.end_hour and slot_b.start_hour < slot_a.end_hour)
+    # Two intervals [a_start, a_end) and [b_start, b_end) overlap if and only if
+    # a_start < b_end AND b_start < a_end.
+    # The original condition (not (a.end < b.start or b.end < a.start)) incorrectly
+    # considered adjacent intervals as overlapping because it used '<' instead of '<='
+    # for the non-overlapping check.
+    # The corrected logic directly implements the overlap condition.
+    return slot_a.start_hour < slot_b.end_hour and slot_b.start_hour < slot_a.end_hour
 
 def can_schedule_slot(existing_slots: List[MaintenanceSlot], candidate: MaintenanceSlot) -> bool:
     if not validate_all_approved(existing_slots):

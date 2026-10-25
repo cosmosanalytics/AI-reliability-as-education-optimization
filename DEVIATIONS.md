@@ -281,3 +281,35 @@ This is an append-only, timestamped log recording all operational decisions, har
   - Token counts verified via `cl100k_base`: Handbook v2 = 1291 tokens, Placebo v2 = 1283 tokens (**difference = 8 tokens, 0.62%**, well within $\le 3.0\%$).
 - **Preflight Verification:** 146 / 146 tests green.
 - **Stop Rule Enforced:** Zero factor calls made. Awaiting Round 16 review.
+
+### [2026-10-25T08:50:00Z] Round 16 & Round 17 Suite Expansion & Pilot Calibration (I1, I2, J1–J6)
+- **Consistency Matrix Generated & Audited (I1, I2):**
+  - Generated `benchmarks/CONSISTENCY_MATRIX.md` auditing all 16 rules (H01–H16) against all benchmark tasks.
+  - Resolved all conflicts: Tasks 2001, 2002, 2003 aligned to H02 (`ROUND_HALF_UP`); Task 2016 aligned to H10 (TSV backslash escaping); Task 2010 aligned to H05; Task 2020 aligned to H06 (`::` access scopes).
+  - Exact audit result: 0 unintended conflicts, 0 ambiguous rule citations.
+- **G2 Suite Expansion Authored & Verified (J1–J6):**
+  - Expanded benchmark suite from 28 tasks to 84 tasks across 14 bug families:
+    - Added Family 8 (`service_errors`, Tasks 2029–2036, Rule H04).
+    - Added Family 9 (`wire_envelope`, Tasks 2037–2044, Rule H08).
+    - Added Family 10 (`timestamp_iso`, Tasks 2045–2052, Rule H09).
+    - Added Family 11 (`config_lists`, Tasks 2053–2060, Rule H12).
+    - Added Family 12 (`idempotency_keys`, Tasks 2061–2068, Rule H13).
+    - Added Family 13 (`metric_percentiles`, Tasks 2069–2076, Rule H14).
+    - Added Family 14 (`state_transitions`, Tasks 2077–2084, Rule H15; 100% held-out Pure Transfer Family 2).
+  - Every task hermetically verified with grader (unpatched fails, gold passes 100%, mutant 1 fails, mutant 2 fails).
+  - Invariant checks: 0 hint comments, 0 design words in tests or tracebacks, 100% import reachability, 0 decoy files, 40–120 non-test lines.
+  - Stratified 42 Tune / 42 Held-Out partition (`benchmarks/splits_e5.json`).
+  - Preflight verification: 427 / 427 unit tests passing green (`tests/test_suite_e5_preflight.py`).
+- **Fresh Baseline-Only Pilot Calibration Executed (504 Attempts):**
+  - Executed condition $B_0$ only ($s=0, p=0, u=0, r=0, k=0$) under the final standardized anti-tamper envelope across all 84 tasks.
+  - Profiles evaluated: T=0.0 (84 attempts, 59.5% pass) + T=0.7 (420 attempts across 5 runs, 57.4% pass).
+  - Class pass rates at T=0.7: `STATED` 79.0%, `TAUGHT` 42.3%, `DISTRACTOR` 80.0%, `TRANSFER` 33.3%.
+  - Pre-registered Rule C2 applied: 14 `TAUGHT` tasks with $>70\%$ baseline solvability reclassified to `STATED`.
+  - Retained `TAUGHT` tasks: 21 tasks total, with **9 held-out `TAUGHT` tasks** ($\ge 3$ required, confirmatory test adequately powered).
+  - Difficulty audit: **23 tasks** fall in the calibrated intermediate band ($15\% \le \bar{Y}_{B0} \le 85\%$), passing the pre-registered requirement of $\ge 8$ tasks.
+  - Execution integrity: 0 truncations, 0 API errors, 0 retries in B0, total cost $0.3113 USD.
+  - Generated consolidated `results/pilot_calibration/rows.json` and `PILOT_CALIBRATION_REPORT.md`.
+- **Pre-Registration Freeze Package:**
+  - Generated `FREEZE.json` manifest with exact SHA-256 digests for all benchmark artifacts.
+  - Updated `PRE_REGISTRATION.md` with final frozen task counts ($N=84, J=42$) and exact MDE values (11.73 pp nominal, 13.93 pp clustered at $s_D=0.30$).
+- **Strict Stop Rule Enforced:** Zero factor runs ($s, p, u, r, k$) executed. Awaiting Round 17 review and formal approval.

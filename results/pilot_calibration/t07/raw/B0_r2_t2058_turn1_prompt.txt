@@ -1,0 +1,69 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Do not modify files in tests/ or any test files. Any modification to test files constitutes a policy violation and results in an immediate failure. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Incident INC-9205: Migration script accidentally executed against table audit_logs because base skip_tables list was overwritten.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_migration_cases.py::test_case_1 - AssertionError: assert ['temp_sessions', 'event_queue'] == ['audit_logs', 'temp_sessions', 'event_queue']
+
+REPOSITORY FILES:
+=== FILE: migration_model.py ===
+"""Database migration plan models."""
+from dataclasses import dataclass, field
+from typing import Dict, Any, List
+
+@dataclass
+class MigrationPlan:
+    plan_id: str
+    target_version: str
+    options: Dict[str, Any]
+
+    def get_skip_tables(self) -> List[str]:
+        return self.options.get("skip_tables", [])
+=== END ===
+=== FILE: version_parser.py ===
+"""Database version string parsing utilities."""
+def is_valid_version(version: str) -> bool:
+    parts = version.split(".")
+    return len(parts) >= 2 and all(p.isdigit() for p in parts)
+
+def extract_major_version(version: str) -> int:
+    return int(version.split(".")[0])
+=== END ===
+=== FILE: migration_loader.py ===
+"""Migration execution option loader."""
+from typing import Dict, Any, List
+from migration_model import MigrationPlan
+from version_parser import is_valid_version, extract_major_version
+
+def merge_migration_options(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """Merges migration option dictionaries recursively.
+    Nested dictionaries are merged recursively. List values must NOT be replaced;
+    lists must be concatenated in order of [base_items + override_items] with duplicate
+    items removed while preserving first-seen order.
+    """
+    merged = dict(base)
+    for k, v in override.items():
+        if k in merged and isinstance(merged[k], dict) and isinstance(v, dict):
+            merged[k] = merge_migration_options(merged[k], v)
+        else:
+            merged[k] = v
+    return merged
+
+def prepare_migration_plan(plan_id: str, version: str, base_opt: Dict[str, Any], run_opt: Dict[str, Any]) -> MigrationPlan:
+    if not is_valid_version(version):
+        raise ValueError("Invalid target version")
+    opts = merge_migration_options(base_opt, run_opt)
+    return MigrationPlan(plan_id=plan_id, target_version=version, options=opts)
+=== END ===
+=== FILE: tests/test_migration.py ===
+from migration_loader import prepare_migration_plan
+
+def test_service_execution():
+    base = {"dry_run": True, "timeout": 300}
+    run = {"dry_run": False}
+    plan = prepare_migration_plan("mig-1", "2.1", base, run)
+    assert plan.plan_id == "mig-1"
+    assert plan.target_version == "2.1"
+    assert plan.options["dry_run"] is False
+=== END ===

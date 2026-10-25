@@ -1,6 +1,8 @@
 === FILE: period_calc.py ===
 """Low-level timestamp window evaluator."""
 def check_in_window(start_ts: int, end_ts: int, probe_ts: int) -> bool:
+    # A subscription window is defined as [start_ts, end_ts), meaning start_ts is inclusive
+    # and end_ts is exclusive. The entitlement lapses at the moment end_ts is reached.
     return start_ts <= probe_ts < end_ts
 
 def get_window_duration(start_ts: int, end_ts: int) -> int:

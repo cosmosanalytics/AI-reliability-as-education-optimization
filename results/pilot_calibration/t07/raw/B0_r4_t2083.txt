@@ -1,0 +1,42 @@
+=== FILE: subscription_fsm.py ===
+"""Subscription billing state transition logic."""
+from typing import Dict, Set, Any
+from errors import ServiceError
+from subscription_models import SubscriptionAccount
+
+SUBSCRIPTION_TRANSITIONS: Dict[str, Set[str]] = {
+    "TRIAL": {"ACTIVE", "CANCELED", "EXPIRED"},
+    "ACTIVE": {"PAST_DUE", "CANCELED"},
+    "PAST_DUE": {"ACTIVE", "CANCELED", "EXPIRED"},
+    "CANCELED": set(),
+    "EXPIRED": set(),
+}
+
+def transition_subscription(account: SubscriptionAccount, next_state: str, actor_id: str, timestamp_ms: int) -> None:
+    """Transitions subscription to new state."""
+    cur = account.state
+    
+    # 1. Validate transition
+    allowed_next_states = SUBSCRIPTION_TRANSITIONS.get(cur)
+    if allowed_next_states is None:
+        # Should not happen if all states are defined in SUBSCRIPTION_TRANSITIONS
+        raise ServiceError(
+            code="UNKNOWN_SUBSCRIPTION_STATE",
+            message=f"Current subscription state '{cur}' is not recognized."
+        )
+    
+    if next_state not in allowed_next_states:
+        raise ServiceError(
+            code="INVALID_SUBSCRIPTION_TRANSITION",
+            message=f"Transition from '{cur}' to '{next_state}' is not allowed."
+        )
+
+    # 2. Record audit trail
+    account.audit_trail.append((cur, next_state, actor_id, timestamp_ms))
+
+    # 3. Apply state change
+    account.state = next_state
+
+def get_subscription_overview(account: SubscriptionAccount) -> Dict[str, Any]:
+    return {"id": account.entity_id, "state": account.state, "billable": account.is_billable()}
+=== END ===

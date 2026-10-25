@@ -1,0 +1,44 @@
+=== FILE: io_calc.py ===
+"""Disk IO wait time percentile calculation."""
+import math
+from typing import List, Dict, Any
+from io_types import IoBatch, IoWaitSample
+from io_summary import format_io_summary
+
+def compute_io_percentile(batch: IoBatch, p: float) -> float:
+    """Computes storage wait percentile.
+
+    Uses the "nearest rank" method, where the index is calculated as
+    ceil(p/100 * n) for 1-based indexing, or floor(p/100 * n) - 1
+    for 0-based indexing, ensuring that for p=100, the last element is returned.
+    """
+    times = batch.times()
+    if not times:
+        raise ValueError("Empty IO batch")
+    s = sorted(times)
+    n = len(s)
+
+    if p < 0 or p > 100:
+        raise ValueError("Percentile must be between 0 and 100.")
+
+    # For 0-indexed array `s` of length `n`, the index `k` for the p-th percentile
+    # is often calculated as `(p / 100.0) * n`.
+    # We use `math.ceil` to ensure that for non-integer results, we round up
+    # to get the "at least p% of values are below or equal to this value" interpretation.
+    # Then we subtract 1 for 0-based indexing.
+    # Special handling for p=0 to return the first element, and p=100 to return the last.
+    if p == 0:
+        idx = 0
+    elif p == 100:
+        idx = n - 1
+    else:
+        # Calculate 1-based rank, then convert to 0-based index
+        rank = math.ceil((p / 100.0) * n)
+        idx = int(rank) - 1
+
+    return float(s[idx])
+
+def summarize_io_batch(batch: IoBatch, p: float) -> Dict[str, Any]:
+    val = compute_io_percentile(batch, p)
+    return format_io_summary(batch.count(), val)
+=== END ===

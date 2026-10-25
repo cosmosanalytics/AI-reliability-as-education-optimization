@@ -1,0 +1,45 @@
+=== FILE: guard.py ===
+"""API gateway authorization guard."""
+from policy import RoutePolicy
+from url_normalizer import remove_query_string
+
+def is_route_permitted(policy: RoutePolicy, request_path: str) -> bool:
+    """Check if request_path is authorized under policy.allowed_prefix.
+    Path matching contract:
+    - Normalizes trailing slashes before matching.
+    - Matches only full path segments (e.g. '/api' covers '/api' and '/api/v1', but NOT '/api-v2').
+    """
+    clean_path = remove_query_string(request_path)
+
+    if policy.is_wildcard():
+        return True # A wildcard '/' policy covers all paths
+
+    if not clean_path.startswith(policy.allowed_prefix):
+        return False
+
+    # At this point, clean_path starts with policy.allowed_prefix.
+    # We need to ensure it's a full segment match, not a partial string match like '/reports-secret' for '/reports'.
+    prefix_len = len(policy.allowed_prefix)
+
+    # Case 1: Exact match (e.g., policy="/reports", path="/reports")
+    if len(clean_path) == prefix_len:
+        return True
+
+    # Case 2: Sub-path match (e.g., policy="/reports", path="/reports/confidential")
+    # The character immediately after the prefix must be a '/' to qualify as a sub-path.
+    if clean_path[prefix_len] == '/':
+        return True
+
+    # Case 3: Sibling path match (e.g., policy="/reports", path="/reports-secret")
+    # This should not be permitted as it's not a full path segment match.
+    return False
+
+def evaluate_request(policies: list, role: str, path: str) -> bool:
+    for p in policies:
+        if p.matches_role(role) and is_route_permitted(p, path):
+            return True
+    return False
+
+def count_permitted_routes(policy: RoutePolicy, paths: list) -> int:
+    return sum(1 for p in paths if is_route_permitted(policy, p))
+=== END ===

@@ -4,18 +4,12 @@ from typing import Tuple
 
 def apply_fx_rate(cents: int, rate: float) -> int:
     """Compute converted currency amount in cents.
-    Applies "round half up" logic for positive numbers to ensure correct
-    handling of fractional cents in financial calculations.
+    Rounds to the nearest cent using round half up strategy for positive values.
     """
-    calculated_value = cents * rate
-    # Implement "round half up" for positive numbers, and "round half away from zero" for negative numbers.
-    # For positive numbers: int(x + 0.5) rounds 2.4 to 2, 2.5 to 3.
-    # For negative numbers: int(x - 0.5) rounds -2.4 to -2, -2.5 to -3.
-    # This is equivalent to decimal.Decimal.quantize(decimal.Decimal('1'), rounding=decimal.ROUND_HALF_UP)
-    if calculated_value >= 0:
-        return int(calculated_value + 0.5)
-    else:
-        return int(calculated_value - 0.5)
+    # For financial calculations, it's common to round half up.
+    # This ensures that 0.5 cents are rounded up to the next whole cent.
+    # This approach works correctly for non-negative currency amounts.
+    return int(cents * rate + 0.5)
 
 def compute_spread(cents: int, base_rate: float, spread_bps: int = 10) -> Tuple[int, float]:
     effective_rate = base_rate * (1.0 + spread_bps / 10000.0)

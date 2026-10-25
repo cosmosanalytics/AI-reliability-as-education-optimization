@@ -1,0 +1,37 @@
+=== FILE: escrow_engine.py ===
+"""Escrow transaction schemas and transition validator."""
+from dataclasses import dataclass, field
+from typing import List, Tuple, Any, Dict, Set
+from errors import ServiceError
+
+@dataclass
+class EscrowAccount:
+    entity_id: str
+    amount_cents: int
+    state: str = "INITIAL"
+    audit_trail: List[Tuple[Any, ...]] = field(default_factory=list)
+
+    def is_finalized(self) -> bool:
+        return self.state in {"RELEASED", "REFUNDED"}
+
+ESCROW_TRANSITIONS: Dict[str, Set[str]] = {
+    "INITIAL": {"HELD"},
+    "HELD": {"RELEASED", "REFUNDED", "DISPUTED"},
+    "DISPUTED": {"RELEASED", "REFUNDED"},
+    "RELEASED": set(),
+    "REFUNDED": set(),
+}
+
+def execute_escrow_transition(escrow: EscrowAccount, target_state: str, actor_id: str, timestamp_ms: int) -> None:
+    """Validates and executes escrow state change."""
+    cur = escrow.state
+    allowed = ESCROW_TRANSITIONS.get(cur, set())
+    if target_state not in allowed:
+        # Erroneous error code and missing audit tuple in unpatched code
+        error_code = "ERR_ESCROW_RELEASE_DENIED" if target_state == "RELEASED" else "ERR_ESCROW_TRANSITION_INVALID"
+        error_message = f"Transition from '{cur}' to '{target_state}' is not allowed."
+        escrow.audit_trail.append((timestamp_ms, actor_id, cur, target_state, "FAILED", error_code))
+        raise ServiceError(code=error_code, message=error_message)
+    escrow.audit_trail.append((timestamp_ms, actor_id, cur, target_state, "SUCCESS"))
+    escrow.state = target_state
+=== END ===

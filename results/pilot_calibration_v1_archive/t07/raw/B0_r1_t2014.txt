@@ -1,0 +1,25 @@
+=== FILE: serializer.py ===
+"""Order item CSV row serializer."""
+import csv
+import io
+from typing import List
+from item import OrderItem
+from catalog_validator import validate_catalog
+
+def serialize_item_row(item: OrderItem) -> str:
+    """Serialize OrderItem into a CSV formatted line."""
+    output = io.StringIO()
+    # Use csv.writer to correctly handle quoting and escaping
+    # QUOTE_MINIMAL only quotes fields when they contain special characters (delimiter, quotechar, or line terminator).
+    writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)
+    writer.writerow([item.item_id, item.description])
+    return output.getvalue().strip() # .strip() removes the trailing newline added by writerow
+
+def serialize_catalog(items: List[OrderItem]) -> str:
+    if not validate_catalog(items):
+        raise ValueError("Invalid catalog items")
+    return "\n".join(serialize_item_row(i) for i in items)
+
+def count_serialized_items(catalog_str: str) -> int:
+    return len([line for line in catalog_str.splitlines() if line.strip()])
+=== END ===

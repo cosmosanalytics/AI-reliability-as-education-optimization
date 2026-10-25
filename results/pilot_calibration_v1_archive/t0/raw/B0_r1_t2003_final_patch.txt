@@ -1,0 +1,14 @@
+=== FILE: fx_engine.py ===
+"""Low-level exchange rate computation."""
+from typing import Tuple
+
+def apply_fx_rate(cents: int, rate: float) -> int:
+    """Compute converted currency amount in cents, rounded to the nearest cent.
+    Uses round half up for currency conversion to avoid fractional cents.
+    """
+    return int(cents * rate + 0.5)
+
+def compute_spread(cents: int, base_rate: float, spread_bps: int = 10) -> Tuple[int, float]:
+    effective_rate = base_rate * (1.0 + spread_bps / 10000.0)
+    return apply_fx_rate(cents, effective_rate), effective_rate
+=== END ===

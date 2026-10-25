@@ -1,0 +1,32 @@
+=== FILE: dns_resolver.py ===
+"""DNS cache resolver client."""
+import time
+from typing import Dict, Optional, Callable
+from dns_record import DnsEntry
+from dns_utils import normalize_domain_name
+
+class DnsCache:
+    def __init__(self, clock: Optional[Callable[[], float]] = None):
+        self._clock = clock or time.time
+        self._entries: Dict[str, DnsEntry] = {}
+
+    def put_record(self, domain: str, ip: str, ttl: float) -> None:
+        clean_domain = normalize_domain_name(domain)
+        now = self._clock()
+        self._entries[clean_domain] = DnsEntry(clean_domain, ip, now + ttl)
+
+    def lookup(self, domain: str) -> Optional[str]:
+        clean_domain = normalize_domain_name(domain)
+        entry = self._entries.get(clean_domain)
+        if not entry:
+            return None
+        now = self._clock()
+        # A record is considered expired if the current time is at or after its expiration time.
+        if now >= entry.expires_at:
+            del self._entries[clean_domain]
+            return None
+        return entry.ip_addr
+
+    def count(self) -> int:
+        return len(self._entries)
+=== END ===

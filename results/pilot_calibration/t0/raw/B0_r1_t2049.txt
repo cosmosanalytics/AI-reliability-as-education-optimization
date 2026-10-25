@@ -1,0 +1,15 @@
+=== FILE: snapshot_manifest.py ===
+"""Snapshot manifest timestamp formatting."""
+from datetime import datetime, timezone
+
+def format_snapshot_timestamp(dt: datetime) -> str:
+    # Format to YYYY-MM-DDTHH:MM:SS.sssZ, where sss are milliseconds.
+    # dt.microsecond gives microseconds (0-999999).
+    # We need milliseconds, so dt.microsecond // 1000.
+    # Ensure it's always 3 digits, e.g., 0 -> 000, 12 -> 012.
+    milliseconds = dt.microsecond // 1000
+    return dt.strftime("%Y-%m-%dT%H:%M:%S") + f".{milliseconds:03d}Z"
+
+def parse_snapshot_epoch(dt: datetime) -> int:
+    return int(dt.timestamp())
+=== END ===

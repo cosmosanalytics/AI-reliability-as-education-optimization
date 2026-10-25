@@ -1,0 +1,66 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Access control report ACC-404: Expired user account retained active entitlement access for one second after subscription window lapsed.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_subscription_cases.py::test_window_expiration - AssertionError: assert True is False
+
+REPOSITORY FILES:
+=== FILE: rules.py ===
+"""Subscription entitlement schemas."""
+from dataclasses import dataclass
+from typing import Dict, Any, List
+
+@dataclass
+class Entitlement:
+    user_id: int
+    plan: str
+    tier: int = 1
+    features: List[str] = None
+
+    def __post_init__(self):
+        if self.features is None:
+            self.features = ["basic_access"]
+
+    def is_premium(self) -> bool:
+        return self.tier > 1
+
+    def has_feature(self, feat: str) -> bool:
+        return feat in self.features
+=== END ===
+=== FILE: subscription.py ===
+"""Subscription authorization service."""
+from rules import Entitlement
+from period_calc import check_in_window
+
+def is_entitled_at(user_id: int, plan: str, start_epoch: int, end_epoch: int, current_epoch: int) -> bool:
+    """Evaluate whether user plan entitlement is active at current_epoch timestamp."""
+    return check_in_window(start_epoch, end_epoch, current_epoch)
+
+def get_entitlement_status(user_id: int, plan: str, start_epoch: int, end_epoch: int, current_epoch: int) -> dict:
+    active = is_entitled_at(user_id, plan, start_epoch, end_epoch, current_epoch)
+    return {"user_id": user_id, "plan": plan, "active": active}
+
+def describe_window(start_epoch: int, end_epoch: int) -> str:
+    return f"Window(from={start_epoch}, to={end_epoch})"
+=== END ===
+=== FILE: period_calc.py ===
+"""Low-level timestamp window evaluator."""
+def check_in_window(start_ts: int, end_ts: int, probe_ts: int) -> bool:
+    return start_ts <= probe_ts <= end_ts
+
+def get_window_duration(start_ts: int, end_ts: int) -> int:
+    return max(0, end_ts - start_ts)
+
+def is_valid_epoch_range(start_ts: int, end_ts: int) -> bool:
+    return end_ts >= start_ts >= 0
+=== END ===
+=== FILE: tests/test_subscription.py ===
+from subscription import is_entitled_at, get_entitlement_status
+
+def test_nominal_active():
+    assert is_entitled_at(101, "pro", 1000, 2000, 1500) is True
+    assert is_entitled_at(101, "pro", 1000, 2000, 500) is False
+    assert is_entitled_at(101, "pro", 1000, 2000, 1000) is True
+=== END ===

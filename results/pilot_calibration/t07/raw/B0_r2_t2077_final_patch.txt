@@ -1,0 +1,43 @@
+=== FILE: pipeline_manager.py ===
+"""Deployment pipeline lifecycle state manager."""
+from typing import Set, Dict, Any
+from errors import ServiceError
+from pipeline_models import PipelineEntity
+
+ALLOWED_TRANSITIONS: Dict[str, Set[str]] = {
+    "PENDING": {"BUILDING", "CANCELLED"},
+    "BUILDING": {"TESTING", "FAILED", "CANCELLED"},
+    "TESTING": {"DEPLOYED", "FAILED", "CANCELLED"},
+    "DEPLOYED": set(),
+    "FAILED": set(),
+    "CANCELLED": set(),
+}
+
+def transition_pipeline(pipeline: PipelineEntity, new_state: str, actor_id: str, timestamp_ms: int) -> None:
+    """Transitions pipeline to target state and records audit event."""
+    old_state = pipeline.state
+
+    # 1. Validate allowed transitions
+    if old_state not in ALLOWED_TRANSITIONS:
+        raise ServiceError(
+            code="PIPELINE_UNKNOWN_STATE",
+            message=f"Pipeline is in an unknown state '{old_state}'."
+        )
+
+    allowed_next_states = ALLOWED_TRANSITIONS[old_state]
+    if new_state not in allowed_next_states:
+        raise ServiceError(
+            code="PIPELINE_ILLEGAL_TRANSITION",
+            message=f"Illegal transition from '{old_state}' to '{new_state}'."
+        )
+
+    # 2. Record audit event
+    audit_record = (old_state, new_state, actor_id, timestamp_ms)
+    pipeline.audit_trail.append(audit_record)
+
+    # 3. Update state
+    pipeline.state = new_state
+
+def get_pipeline_status(pipeline: PipelineEntity) -> Dict[str, Any]:
+    return {"id": pipeline.entity_id, "state": pipeline.state, "terminal": pipeline.is_terminal()}
+=== END ===

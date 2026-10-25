@@ -1,30 +1,65 @@
 === FILE: csv_writer.py ===
-"""CSV serialization utilities."""
-from typing import List
+"""TSV serialization utilities."""
+from typing import List, Optional
 from schema import CustomerProfile
-from io_helpers import validate_csv_header
+from io_helpers import validate_tsv_header
 
-def escape_csv_field(val: str) -> str:
-    """Escape CSV field per RFC 4180:
-    If field contains comma, newline, or double quote, wrap in double quotes and escape internal quotes by doubling ("").
+def escape_tsv_field(val: Optional[str]) -> str:
+    r"""Escape field for internal TSV audit log pipeline:
+    Records are tab-separated (\t), internal double quotes are escaped with backslash (\"),
+    newline characters are escaped as \n, and None/null values are serialized as \N.
+    Do NOT use RFC 4180 double-quoting.
     """
-    if any(c in val for c in [",", "\n", '"']):
-        escaped = val.replace('"', '""')
-        return f'"{escaped}"'
-    return val
+    if val is None:
+        return "\\N"
 
-def export_profiles_csv(profiles: List[CustomerProfile]) -> str:
-    header = "cust_id,name,notes"
-    if not validate_csv_header(header, ["cust_id", "name", "notes"]):
+    # Escape backslashes first to avoid escaping newly introduced backslashes
+    # from other escape sequences (e.g., from \" or \n).
+    # The docstring doesn't explicitly mention escaping backslashes,
+    # but it's a common practice when introducing backslash escape sequences
+    # to avoid ambiguity. However, the problem statement focuses on quotes and nulls
+    # and explicitly mentions "\n" for newlines and "\"" for quotes,
+    # implying these are the only special backslash sequences.
+    # Given the strict "Do NOT use RFC 4180", we should strictly follow
+    # the described escapes: quotes and newlines.
+
+    # Apply escapes for double quotes and newlines as specified.
+    # Order matters: replace newline char first, then double quote.
+    # If we replace " with \" first, and then \n with \n,
+    # a literal '\' in original string might become '\\' and then
+    # if it was part of a sequence like '\"', it would become '\\"'.
+    # Let's ensure the replacements are applied to the *original* characters.
+
+    # First, replace actual newline characters with the literal escape sequence \n
+    # Second, replace actual double quotes with the literal escape sequence \"
+    
+    escaped_val = val.replace('\n', '\\n')
+    escaped_val = escaped_val.replace('"', '\\"')
+
+    # The docstring implies that only specific characters need escaping.
+    # It explicitly states "Do NOT use RFC 4180 double-quoting", which means
+    # we should not wrap the field in double quotes or double internal quotes.
+    # The current logic of checking for `any(c in val for c in [",", "\\n", '"'])`
+    # and then applying RFC 4180 style was incorrect.
+    # The comma check was also inappropriate for TSV unless explicitly specified for escaping.
+    # Based on the docstring, only " and \n need specific escaping.
+
+    return escaped_val
+
+def export_profiles_tsv(profiles: List[CustomerProfile]) -> str:
+    header = "cust_id\tname\tnotes" # Header should use actual tabs, not escaped ones
+    if not validate_tsv_header(header, ["cust_id", "name", "notes"]):
         raise ValueError("Invalid header")
     lines = [header]
     for p in profiles:
-        f_name = escape_csv_field(p.name)
-        f_notes = escape_csv_field(p.notes)
-        lines.append(f"{p.cust_id},{f_name},{f_notes}")
+        f_name = escape_tsv_field(p.name)
+        f_notes = escape_tsv_field(p.notes)
+        # Use actual tabs and newlines for constructing the final string,
+        # as escape_tsv_field already handles internal field escaping.
+        lines.append(f"{p.cust_id}\t{f_name}\t{f_notes}")
     return "\n".join(lines)
 
-def count_records(csv_payload: str) -> int:
-    lines = [l for l in csv_payload.splitlines() if l.strip()]
+def count_records(payload: str) -> int:
+    lines = [l for l in payload.splitlines() if l.strip()]
     return max(0, len(lines) - 1)
 === END ===

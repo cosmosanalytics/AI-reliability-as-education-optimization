@@ -1,0 +1,80 @@
+=== FILE: cache_percentile.py ===
+"""Cache lookup quantile engine."""
+import math
+from typing import List
+
+def get_quantile(latencies: List[float], q: float) -> float:
+    """Calculates latency quantile for cache cluster.
+    Uses the "linear interpolation between closest ranks" method,
+    where the index is calculated as q/100 * (n).
+    This aligns with common percentile definitions in monitoring systems.
+    """
+    if not latencies:
+        raise ValueError("No latency records")
+    s = sorted(latencies)
+    n = len(s)
+
+    # Handle edge cases for 0th and 100th percentile
+    if q == 0.0:
+        return float(s[0])
+    if q == 100.0:
+        return float(s[n - 1])
+
+    # Calculate index using q/100 * n
+    # This formula (q/100 * n) is common in monitoring and aligns with the expected behavior
+    # where the 50th percentile of [10, 20, 30, 40] is 25.0, not 30.0.
+    # The (n-1) variant would yield 30.0 for the 50th percentile of [10, 20, 30, 40, 50].
+    # The issue traceback (45.0 vs 40.0) suggests that the previous (n-1) method
+    # was causing an upward bias or selecting a higher value than expected.
+    idx_float = (q / 100.0) * n
+
+    # The index is 1-based for percentile definitions, so convert to 0-based.
+    # If idx_float is 2.0 (for 50th percentile of 4 elements), it means between index 1 and 2 (0-based)
+    # The lower_index is floor(idx_float) - 1 for 0-based, or int(idx_float) - 1.
+    # The higher_index is ceil(idx_float) - 1 for 0-based, or int(idx_float) if idx_float is not integer.
+
+    # Example: [10, 20, 30, 40], n=4
+    # 25th percentile (q=25): idx_float = 0.25 * 4 = 1.0
+    #   lower_idx = 0, upper_idx = 0 (after adjustment) -> s[0] = 10.0
+    # 50th percentile (q=50): idx_float = 0.5 * 4 = 2.0
+    #   lower_idx = 1, upper_idx = 1 -> s[1] = 20.0
+    # 75th percentile (q=75): idx_float = 0.75 * 4 = 3.0
+    #   lower_idx = 2, upper_idx = 2 -> s[2] = 30.0
+    # 100th percentile (q=100): idx_float = 1.0 * 4 = 4.0
+    #   lower_idx = 3, upper_idx = 3 -> s[3] = 40.0
+
+    # The issue with the above is if the index is exactly an integer,
+    # it implies the value is at that position (if 1-indexed).
+    # For a 0-indexed array, the value at rank k (1-indexed) is at index k-1.
+    # So, if idx_float = 1.0, it means rank 1, so s[0].
+    # If idx_float = 2.0, it means rank 2, so s[1].
+
+    # A robust way for 0-indexed arrays:
+    # Let p be the percentile (q/100).
+    # The rank R = p * n.
+    # If R is an integer, the value is s[R-1].
+    # If R is not an integer, let R_floor = floor(R) and R_ceil = ceil(R).
+    # The value is interpolated between s[R_floor-1] and s[R_ceil-1].
+
+    rank = (q / 100.0) * n
+    
+    # If rank is an integer (e.g., 1.0, 2.0, etc.), the percentile is at s[rank - 1]
+    if rank == math.floor(rank):
+        # Ensure index is within bounds (rank 1 to n)
+        return float(s[int(rank) - 1])
+
+    # If rank is not an integer, interpolate
+    lower_idx = int(math.floor(rank)) - 1
+    upper_idx = int(math.ceil(rank)) - 1
+    
+    # Ensure indices are within bounds
+    # lower_idx should be at least 0
+    # upper_idx should be at most n-1
+    lower_idx = max(0, lower_idx)
+    upper_idx = min(n - 1, upper_idx)
+
+    # Calculate fraction for interpolation
+    frac = rank - math.floor(rank)
+    
+    return float(s[lower_idx] + frac * (s[upper_idx] - s[lower_idx]))
+=== END ===

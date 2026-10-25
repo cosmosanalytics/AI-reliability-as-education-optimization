@@ -12,6 +12,11 @@ def get_rate_for_jurisdiction(code: str) -> float:
     return DEFAULT_TAX_JURISDICTIONS.get(code, 0.20)
 
 def calculate_vat(net_cents: int, vat_rate: float) -> int:
-    """Compute VAT in integer cents for given net amount using banker's rounding."""
-    return int(round(net_cents * vat_rate))
+    """Compute VAT in integer cents for given net amount, using half-up rounding.
+
+    Half-up rounding (ties broken towards positive infinity) is applied.
+    For positive numbers, this can be achieved by adding 0.5 and truncating.
+    """
+    raw_tax_amount = net_cents * vat_rate
+    return int(raw_tax_amount + 0.5)
 === END ===

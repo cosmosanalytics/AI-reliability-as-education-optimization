@@ -1,0 +1,38 @@
+=== FILE: loss_math.py ===
+"""Loss distribution percentile calculator."""
+import math
+from typing import List
+
+def calculate_loss_percentile(losses: List[float], p: float) -> float:
+    """Calculates training loss percentile using continuous linear interpolation (numpy-style)."""
+    if not losses:
+        raise ValueError("No loss values")
+    if not (0 <= p <= 100):
+        raise ValueError("Percentile must be between 0 and 100")
+
+    s = sorted(losses)
+    n = len(s)
+
+    if n == 1:
+        return float(s[0])
+
+    # Convert percentile to a rank in [0, n-1]
+    # This is equivalent to numpy's interpolation='linear' method
+    # where the index is calculated as (p / 100.0) * (n - 1)
+    index = (p / 100.0) * (n - 1)
+
+    # Floor and ceiling indices
+    idx_floor = math.floor(index)
+    idx_ceil = math.ceil(index)
+
+    if idx_floor == idx_ceil:
+        # If the index is an integer, return the value at that index
+        return float(s[int(index)])
+    else:
+        # Otherwise, linearly interpolate between the two closest values
+        v_floor = s[int(idx_floor)]
+        v_ceil = s[int(idx_ceil)]
+        # The fractional part of the index determines the interpolation weight
+        interpolation_weight = index - idx_floor
+        return v_floor + (v_ceil - v_floor) * interpolation_weight
+=== END ===

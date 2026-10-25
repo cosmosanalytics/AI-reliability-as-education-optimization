@@ -1,29 +1,24 @@
 === FILE: path_normalizer.py ===
-"""Storage path normalization engine."""
-def validate_prefix_match(scope_prefix: str, asset_path: str) -> bool:
-    """
-    Checks if an asset path falls within a given scope prefix, respecting
-    full directory segment boundaries.
-
-    For example:
-    - scope /assets, asset /assets/image.png -> True
-    - scope /assets, asset /assets -> True
-    - scope /assets, asset /assets-private/doc.pdf -> False
-    """
-    normalized_scope = normalize_bucket_path(scope_prefix)
-    normalized_asset_path = normalize_bucket_path(asset_path)
-
-    # An exact match means the asset IS the scope itself
-    if normalized_asset_path == normalized_scope:
+"""Storage scope normalization engine."""
+def validate_prefix_match(scope_prefix: str, asset_scope: str) -> bool:
+    if not asset_scope.startswith(scope_prefix):
+        return False
+    
+    # If the asset scope is exactly the prefix, it's a match.
+    if asset_scope == scope_prefix:
         return True
+    
+    # If the asset scope is longer, the character immediately following the prefix
+    # must be the scope segment separator "::" to ensure hierarchical matching.
+    # For example, "assets::images" should match "assets::images::logo" but not "assets::images_private".
+    if asset_scope[len(scope_prefix):].startswith("::"):
+        return True
+        
+    return False
 
-    # Otherwise, the asset path must start with the scope path followed by a directory separator
-    # to ensure full segment matching (e.g., /assets/ vs /assets-private)
-    return normalized_asset_path.startswith(normalized_scope + "/")
+def get_scope_depth(scope_str: str) -> int:
+    return len([seg for seg in scope_str.split("::") if seg])
 
-def get_scope_depth(path: str) -> int:
-    return len([seg for seg in path.split("/") if seg])
-
-def normalize_bucket_path(path: str) -> str:
-    return "/" + path.strip("/")
+def normalize_scope(scope_str: str) -> str:
+    return scope_str.strip()
 === END ===

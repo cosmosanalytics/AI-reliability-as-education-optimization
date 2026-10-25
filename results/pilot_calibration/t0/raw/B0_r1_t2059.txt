@@ -1,0 +1,20 @@
+=== FILE: matcher_utils.py ===
+"""Route path matching and dictionary consolidation."""
+from typing import Dict, Any, List
+
+def deep_merge_matchers(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    res = dict(base)
+    for k, v in override.items():
+        if k in res and isinstance(res[k], dict) and isinstance(v, dict):
+            res[k] = deep_merge_matchers(res[k], v)
+        elif k in res and isinstance(res[k], list) and isinstance(v, list):
+            # For lists, extend the base list with elements from the override list.
+            # This prevents truncation and allows environment overrides to add to existing lists.
+            res[k] = res[k] + v
+        else:
+            res[k] = v
+    return res
+
+def normalize_prefix(path: str) -> str:
+    return "/" + path.strip("/")
+=== END ===

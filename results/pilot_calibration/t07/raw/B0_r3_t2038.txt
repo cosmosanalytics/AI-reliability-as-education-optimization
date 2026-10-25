@@ -1,0 +1,30 @@
+=== FILE: billing_emitter.py ===
+"""Billing transaction message emitter."""
+from key_normalizer import normalize_dict_keys, extract_normalized_keys
+from wire_envelope import build_envelope, is_valid_envelope, extract_payload
+from typing import Dict, Any
+
+def emit_billing_record(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    """Emit billing transaction message for downstream consumers."""
+    # Normalize keys of the billing data before it is potentially enveloped.
+    return normalize_dict_keys(data)
+
+def broadcast_billing_event(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    # Prepare the billing record by normalizing its keys.
+    record = emit_billing_record(data, epoch_ms)
+    
+    # Wrap the prepared record in a wire envelope for message bus transmission.
+    # The service name is "billing_service" for this emitter.
+    enveloped_message = build_envelope(
+        service_name="billing_service",
+        epoch_ms=epoch_ms,
+        payload=record
+    )
+    
+    # The original checks (`is_valid_envelope`, `extract_normalized_keys`)
+    # were likely placeholders. The primary goal of this function is to
+    # produce and return the enveloped message for broadcasting.
+    # We can optionally validate the envelope here, but the core task is
+    # to return the correctly formatted message.
+    return enveloped_message
+=== END ===

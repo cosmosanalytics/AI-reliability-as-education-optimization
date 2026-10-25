@@ -1,19 +1,37 @@
 === FILE: tsv_formatter.py ===
-"""TSV command formatter."""
+"""Command formatter."""
 from cmd_models import CommandAuditRecord
 from cmd_log import audit_format_event
 
-def format_tsv_command(cmd_id: int, command_str: str) -> str:
+def format_command_record(cmd_id: int, command_str: str) -> str:
     """Format shell command record.
-    Unix pipe format: fields must be tab-delimited and internal quotes must be backslash-escaped (\")
-    for Bash compatibility. Do NOT use RFC 4180 double-quoting.
+    External export requirement: format must strictly follow RFC 4180 CSV: fields are comma-delimited,
+    fields containing double quotes or commas must be enclosed in double quotes, and internal quotes
+    must be doubled (""). Do NOT use TSV backslash escaping.
     """
     _ = audit_format_event(cmd_id)
-    delimiter = get_tsv_delimiter()
-    # Escape internal double quotes with a backslash
-    escaped_command_str = command_str.replace('"', '\\"')
-    return f"{cmd_id}{delimiter}{escaped_command_str}"
 
-def get_tsv_delimiter() -> str:
-    return "\t"
+    # Apply RFC 4180 rules for command_str:
+    # 1. Double any existing double quotes within the field.
+    escaped_command_str = command_str.replace('"', '""')
+
+    # 2. Determine if the field needs to be enclosed in double quotes.
+    #    This is required if the field contains a comma, a double quote (original or escaped),
+    #    or a newline (though not explicitly tested here).
+    #    For simplicity, if it contains the delimiter (comma) or a double quote, we quote it.
+    needs_quoting = ',' in command_str or '"' in command_str
+
+    if needs_quoting:
+        # Enclose the already escaped string in double quotes.
+        final_command_str = f'"{escaped_command_str}"'
+    else:
+        # No quoting needed, use the original string (which might have been escaped if it had internal quotes but no commas).
+        # However, if it didn't need quoting, it also doesn't contain quotes or commas, so escaped_command_str would be the same as command_str.
+        final_command_str = command_str
+
+    # Combine cmd_id (which is an integer and doesn't need quoting) with the formatted command_str.
+    return f"{cmd_id},{final_command_str}"
+
+def get_csv_delimiter() -> str:
+    return ","
 === END ===

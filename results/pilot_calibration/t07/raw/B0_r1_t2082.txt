@@ -1,0 +1,38 @@
+=== FILE: pr_fsm.py ===
+"""Code review pull request entities and state machine."""
+from dataclasses import dataclass, field
+from typing import List, Tuple, Any, Dict, Set
+from errors import ServiceError
+
+@dataclass
+class PullRequest:
+    entity_id: str
+    state: str = "DRAFT"
+    audit_trail: List[Tuple[Any, ...]] = field(default_factory=list)
+
+    def is_open(self) -> bool:
+        return self.state in {"OPEN", "REVIEWED", "APPROVED"}
+
+PR_TRANSITIONS: Dict[str, Set[str]] = {
+    "DRAFT": {"OPEN", "CLOSED"},
+    "OPEN": {"REVIEWED", "CLOSED"},
+    "REVIEWED": {"APPROVED", "OPEN", "CLOSED"},
+    "APPROVED": {"MERGED", "OPEN", "CLOSED"},
+    "MERGED": set(),
+    "CLOSED": set(),
+}
+
+def execute_pr_state_change(pr: PullRequest, new_state: str, actor_id: str, timestamp_ms: int) -> None:
+    """Executes state transition on pull request."""
+    cur = pr.state
+    allowed = PR_TRANSITIONS.get(cur, set())
+    if new_state not in allowed:
+        # The original code raised a ServiceError with a non-conforming code.
+        # The new standard for illegal state transitions is 'PR_INVALID_STATE_TRANSITION'.
+        raise ServiceError(code="PR_INVALID_STATE_TRANSITION", message=f"Disallowed state transition from '{cur}' to '{new_state}'")
+    
+    # Record the state change in the audit trail before updating the state.
+    # The audit tuple includes (old_state, new_state, actor_id, timestamp_ms).
+    pr.audit_trail.append((cur, new_state, actor_id, timestamp_ms))
+    pr.state = new_state
+=== END ===

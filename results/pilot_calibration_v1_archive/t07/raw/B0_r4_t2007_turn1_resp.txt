@@ -1,0 +1,25 @@
+=== FILE: step_builder.py ===
+"""Low-level step configuration compiler."""
+from typing import Dict, Any
+import copy
+
+def compile_step_config(name: str, base_opts: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:
+    # Create a deep copy of base_opts to ensure nested dictionaries are not shared by reference.
+    res = copy.deepcopy(base_opts)
+    res["name"] = name
+    
+    # Merge overrides. For nested dictionaries, this should also be a deep merge.
+    # We iterate through overrides and apply them. If an override value is a dict
+    # and the corresponding base value is also a dict, we recursively merge them.
+    for key, value in overrides.items():
+        if isinstance(value, dict) and isinstance(res.get(key), dict):
+            res[key].update(value) # Update the existing dict in res
+        else:
+            res[key] = value # Replace value for non-dict types or new keys
+    return res
+
+def format_step_manifest(spec: Dict[str, Any]) -> str:
+    name = spec.get("name", "unnamed")
+    engine = spec.get("engine", "default")
+    return f"StageManifest(name={name}, engine={engine})"
+=== END ===

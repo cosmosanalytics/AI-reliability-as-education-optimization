@@ -1,0 +1,29 @@
+=== FILE: activity_dispatcher.py ===
+"""User activity notification dispatcher."""
+from key_normalizer import normalize_dict_keys, extract_normalized_keys
+from wire_envelope import build_envelope, is_valid_envelope, extract_payload
+from typing import Dict, Any
+
+# Define the service name for the wire envelope.
+# This service is responsible for dispatching user activity.
+SERVICE_NAME = "user_activity"
+
+def dispatch_user_activity(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    """Dispatch user activity record to notification bus.
+    This function now wraps the user activity data in a wire envelope.
+    """
+    # The original implementation returned the raw data.
+    # To resolve the schema ingestion validation failure, the data must be
+    # wrapped in a wire envelope as defined by wire_envelope.py.
+    return build_envelope(SERVICE_NAME, epoch_ms, data)
+
+def broadcast_activity_update(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    msg = dispatch_user_activity(data, epoch_ms)
+    # After dispatch_user_activity is called, 'msg' should now be a valid wire envelope.
+    # The following assertion ensures that the dispatched message conforms to the envelope specification.
+    assert is_valid_envelope(msg), "Dispatched message is not a valid wire envelope."
+    # This line extracts normalized keys from the original payload data, which might be used
+    # for internal processing or logging before the message is sent.
+    _ = extract_normalized_keys(data)
+    return msg
+=== END ===

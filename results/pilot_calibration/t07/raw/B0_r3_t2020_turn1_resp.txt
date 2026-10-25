@@ -1,26 +1,17 @@
 === FILE: prefix_validator.py ===
 """Topic path subscription matcher."""
 def is_topic_subscribed(subscribed_pattern: str, event_topic: str) -> bool:
-    """
-    Checks if an event topic is covered by a subscription pattern.
-
-    A topic is subscribed if:
-    1. It's an exact match for the subscribed pattern.
-    2. It's a sub-topic of the subscribed pattern (e.g., 'orders/created' for 'orders').
-       This means the event topic must start with the subscribed pattern followed by a '/'.
-    """
     if event_topic == subscribed_pattern:
         return True
-    if event_topic.startswith(subscribed_pattern):
-        # Ensure that the character immediately following the subscribed pattern
-        # in the event topic is a '/' to prevent matching 'orders_admin' for 'orders'.
-        if len(event_topic) > len(subscribed_pattern) and event_topic[len(subscribed_pattern)] == '/':
-            return True
+    # If the topic starts with the pattern, but is not an exact match,
+    # it must be followed by the topic separator "::" to be considered a sub-topic.
+    if event_topic.startswith(subscribed_pattern + "::"):
+        return True
     return False
 
 def clean_topic_segment(topic: str) -> str:
     return topic.strip().lower()
 
 def is_wildcard_subscription(pattern: str) -> bool:
-    return pattern.strip() in ("*", "#", "/")
+    return pattern.strip() in ("*", "**")
 === END ===

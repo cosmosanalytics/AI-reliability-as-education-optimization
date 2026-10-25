@@ -1,0 +1,32 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Operations incident OPS-202: Maintenance scheduling system rejected valid contiguous deployment windows as conflicting collisions.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_maintenance.py::test_adjacent_slots - AssertionError: assert True is False
+
+REPOSITORY FILES:
+=== FILE: maintenance.py ===
+"""Cluster maintenance scheduler."""
+from typing import List
+from slots import MaintenanceSlot
+from audit import validate_all_approved
+
+def has_window_overlap(slot_a: MaintenanceSlot, slot_b: MaintenanceSlot) -> bool:
+    """Detect if two maintenance slots overlap.
+    Interval contract: slots are half-open intervals [start, end). Adjacent slots sharing
+    a boundary (e.g. [2, 4) and [4, 6)) do NOT overlap.
+    """
+    return not (slot_a.end_hour < slot_b.start_hour or slot_b.end_hour < slot_a.start_hour)
+
+def can_schedule_slot(existing_slots: List[MaintenanceSlot], candidate: MaintenanceSlot) -> bool:
+    if not validate_all_approved(existing_slots):
+        raise ValueError("Existing slots contain unapproved reservations")
+    return not any(has_window_overlap(s, candidate) for s in existing_slots)
+
+def get_slot_bounds(slots: List[MaintenanceSlot]) -> tuple:
+    if not slots:
+        return (0, 0)
+    return (min(s.start_hour for s in slots), max(s.end_hour for s in slots))
+=== END ===

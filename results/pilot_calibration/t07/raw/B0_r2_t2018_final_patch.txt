@@ -1,38 +1,31 @@
 === FILE: rbac.py ===
-"""Document access RBAC filter."""
-from path_resolver import clean_path, split_path_segments
-
-# Import format_access_attempt for logging (already there)
+"""Document scope RBAC filter."""
+from path_resolver import clean_scope, split_scope_segments
 from audit_logger import format_access_attempt
 
-def check_document_access(allowed_folder: str, requested_doc_path: str) -> bool:
-    """Verify if document path is permitted within the designated folder scope.
-    Access is granted if the requested_doc_path is exactly the allowed_folder
-    or is a direct descendant within the allowed_folder's hierarchy.
-    """
-    clean_allowed_folder = clean_path(allowed_folder)
-    clean_requested_doc_path = clean_path(requested_doc_path)
+def check_scope_access(allowed_scope: str, requested_scope: str) -> bool:
+    """Verify if requested scope is permitted within the designated scope pattern."""
+    cleaned_allowed = clean_scope(allowed_scope)
+    cleaned_requested = clean_scope(requested_scope)
 
-    # Convert paths to segments for precise hierarchical comparison
-    allowed_segments = split_path_segments(clean_allowed_folder)
-    requested_segments = split_path_segments(clean_requested_doc_path)
+    allowed_segments = split_scope_segments(cleaned_allowed)
+    requested_segments = split_scope_segments(cleaned_requested)
 
-    # A document is accessible if its path segments start with the allowed folder's segments
-    # and the number of segments in the requested path is greater than or equal to
-    # the number of segments in the allowed folder path.
-    # This prevents `/docs` from matching `/docsextra`.
-    # It also handles the root folder correctly.
+    # An empty allowed scope should not grant access to anything.
+    # An empty requested scope cannot be accessed.
+    # The allowed scope must be a prefix of the requested scope at segment boundaries.
     allowed = (
+        len(allowed_segments) > 0 and  # Allowed scope must have at least one segment
         len(requested_segments) >= len(allowed_segments) and
         requested_segments[:len(allowed_segments)] == allowed_segments
     )
 
-    _ = format_access_attempt(allowed_folder, requested_doc_path, allowed)
+    _ = format_access_attempt(allowed_scope, requested_scope, allowed)
     return allowed
 
-def filter_accessible_docs(allowed_folder: str, doc_paths: list) -> list:
-    return [p for p in doc_paths if check_document_access(allowed_folder, p)]
+def filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:
+    return [s for s in scopes if check_scope_access(allowed_scope, s)]
 
-def can_access_all_docs(allowed_folder: str, doc_paths: list) -> bool:
-    return all(check_document_access(allowed_folder, p) for p in doc_paths)
+def can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:
+    return all(check_scope_access(allowed_scope, s) for s in scopes)
 === END ===

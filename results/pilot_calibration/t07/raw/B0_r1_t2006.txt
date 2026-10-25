@@ -1,6 +1,7 @@
 === FILE: env_loader.py ===
 """Environment settings loader and merger."""
 from typing import Dict, Any
+import copy
 
 DEFAULT_CONN_TIMEOUT = 30
 
@@ -9,18 +10,14 @@ def load_system_env() -> Dict[str, Any]:
 
 def merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Recursively merges override_settings into base_settings.
-    Dictionaries are merged, while other types are overwritten.
-    This ensures that nested default values are preserved unless explicitly overridden.
+    Merges override_settings into base_settings. Performs a deep merge for dictionaries
+    to ensure nested dictionary defaults are not mutated by overrides.
     """
-    merged = dict(base_settings) # Start with a shallow copy of base_settings
-
-    for key, override_value in override_settings.items():
-        if key in merged and isinstance(merged[key], dict) and isinstance(override_value, dict):
-            # If both values are dictionaries, recursively merge them
-            merged[key] = merge_env_settings(merged[key], override_value)
+    merged = copy.deepcopy(base_settings)
+    for key, value in override_settings.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            merged[key] = merge_env_settings(merged[key], value)
         else:
-            # Otherwise, override the base setting with the new value
-            merged[key] = override_value
+            merged[key] = value
     return merged
 === END ===

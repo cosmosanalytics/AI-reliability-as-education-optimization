@@ -1,0 +1,19 @@
+=== FILE: webhook_gateway.py ===
+"""External webhook delivery gateway."""
+from errors import ServiceError
+from webhook_registry import WebhookTarget
+from typing import Dict, Any
+
+def route_webhook_delivery(payload: Dict[str, Any]) -> str:
+    """Route external webhook delivery.
+    
+    For external webhook gateway, MUST raise built-in KeyError, do NOT raise ServiceError.
+    """
+    # The contract requires raising KeyError if 'event_type' is missing.
+    # Accessing payload["event_type"] directly will raise KeyError if the key is absent.
+    target = WebhookTarget(target_id=payload["event_type"], endpoint_url="https://hooks.internal/recv")
+    return target.endpoint_url
+
+def dispatch_webhook(payload: Dict[str, Any]) -> str:
+    return route_webhook_delivery(payload)
+=== END ===

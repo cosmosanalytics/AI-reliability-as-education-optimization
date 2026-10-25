@@ -1,0 +1,19 @@
+=== FILE: pricing.py ===
+"""Order pricing calculation with itemized taxes."""
+from typing import List, Tuple, Optional
+from models import LineItem, OrderSummary
+from tax_engine import calculate_vat, get_rate_for_jurisdiction
+
+def calculate_order_total(items: List[Tuple[int, int]], vat_rate: float = 0.20, order_id: str = "ORD-001") -> OrderSummary:
+    """Calculate order total including tax.
+    items: list of (price_cents, quantity).
+    Returns OrderSummary.
+    Tax calculation must use banker's rounding (round half to even) on exact half-cents.
+    """
+    line_objs = [LineItem(sku=f"SKU-{i+1}", price_cents=p, quantity=q) for i, (p, q) in enumerate(items)]
+    net = sum(item.subtotal() for item in line_objs)
+    # Apply banker's rounding (round half to even) as specified in the docstring.
+    # Python's built-in round() function implements this behavior for floats.
+    tax = int(round(net * vat_rate))
+    return OrderSummary(order_id=order_id, items=line_objs, net_cents=net, tax_cents=tax, gross_cents=net + tax)
+=== END ===

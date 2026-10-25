@@ -1,19 +1,27 @@
 === FILE: tsv_formatter.py ===
-"""TSV command formatter."""
+"""Command formatter."""
+import csv
+import io
 from cmd_models import CommandAuditRecord
 from cmd_log import audit_format_event
 
-def format_tsv_command(cmd_id: int, command_str: str) -> str:
+def format_command_record(cmd_id: int, command_str: str) -> str:
     """Format shell command record.
-    Unix pipe format: fields must be tab-delimited and internal quotes must be backslash-escaped (\")
-    for Bash compatibility. Do NOT use RFC 4180 double-quoting.
+    External export requirement: format must strictly follow RFC 4180 CSV: fields are comma-delimited,
+    fields containing double quotes or commas must be enclosed in double quotes, and internal quotes
+    must be doubled (""). Do NOT use TSV backslash escaping.
     """
     _ = audit_format_event(cmd_id)
-    delimiter = get_tsv_delimiter()
-    # Escape double quotes within the command string
-    escaped_command_str = command_str.replace('"', '\\"')
-    return f"{cmd_id}{delimiter}{escaped_command_str}"
 
-def get_tsv_delimiter() -> str:
-    return "\t"
+    # Use csv module for correct RFC 4180 formatting
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=get_csv_delimiter(), quotechar='"', quoting=csv.QUOTE_MINIMAL)
+    writer.writerow([str(cmd_id), command_str])
+    
+    # csv.writer adds a newline at the end, which is typically not desired for a single record string output.
+    # Remove the trailing newline character.
+    return output.getvalue().strip()
+
+def get_csv_delimiter() -> str:
+    return ","
 === END ===

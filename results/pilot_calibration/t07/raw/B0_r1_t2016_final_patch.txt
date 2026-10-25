@@ -1,19 +1,38 @@
 === FILE: tsv_formatter.py ===
-"""TSV command formatter."""
+"""Command formatter."""
 from cmd_models import CommandAuditRecord
 from cmd_log import audit_format_event
 
-def format_tsv_command(cmd_id: int, command_str: str) -> str:
+def _format_csv_field(field_value: str) -> str:
+    """Formats a single string field according to RFC 4180 CSV rules."""
+    # Check if the field needs quoting: contains comma, double quote, or newline
+    # Assuming command_str is typically single-line, but handling quotes and commas is key.
+    needs_quoting = ',' in field_value or '"' in field_value
+
+    # Escape internal double quotes by doubling them
+    escaped_value = field_value.replace('"', '""')
+
+    if needs_quoting:
+        # Enclose the field in double quotes if it needed quoting
+        return f'"{escaped_value}"'
+    else:
+        # Otherwise, return the (potentially escaped) value as is
+        return escaped_value
+
+def format_command_record(cmd_id: int, command_str: str) -> str:
     """Format shell command record.
-    Unix pipe format: fields must be tab-delimited and internal quotes must be backslash-escaped (\")
-    for Bash compatibility. Do NOT use RFC 4180 double-quoting.
+    External export requirement: format must strictly follow RFC 4180 CSV: fields are comma-delimited,
+    fields containing double quotes or commas must be enclosed in double quotes, and internal quotes
+    must be doubled (""). Do NOT use TSV backslash escaping.
     """
     _ = audit_format_event(cmd_id)
-    # Escape internal double quotes with a backslash
-    escaped_command_str = command_str.replace('"', '\\"')
-    # Use tab as the delimiter as specified in the docstring and ticket requirements
-    return f"{cmd_id}\t{escaped_command_str}"
+    
+    # cmd_id is an integer, so it does not require CSV escaping or quoting.
+    # command_str needs to be formatted according to RFC 4180.
+    formatted_command_str = _format_csv_field(command_str)
+    
+    return f"{cmd_id},{formatted_command_str}"
 
-def get_tsv_delimiter() -> str:
-    return "\t"
+def get_csv_delimiter() -> str:
+    return ","
 === END ===

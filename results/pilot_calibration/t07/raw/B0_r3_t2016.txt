@@ -1,19 +1,36 @@
+=== FILE: cmd_log.py ===
+"""Shell command log generator."""
+from cmd_models import CommandAuditRecord
+from tsv_formatter import format_command_record # Import the RFC 4180 CSV formatter
+
+def audit_format_event(cmd_id: int) -> bool:
+    return cmd_id > 0
+
+def format_audit_record(rec: CommandAuditRecord) -> str:
+    # Delegate to the standard RFC 4180 CSV formatter
+    return format_command_record(rec.cmd_id, rec.command_str)
+=== END ===
 === FILE: tsv_formatter.py ===
-"""TSV command formatter."""
+"""Command formatter."""
 from cmd_models import CommandAuditRecord
 from cmd_log import audit_format_event
+import csv
+import io
 
-def format_tsv_command(cmd_id: int, command_str: str) -> str:
+def format_command_record(cmd_id: int, command_str: str) -> str:
     """Format shell command record.
-    Unix pipe format: fields must be tab-delimited and internal quotes must be backslash-escaped (\")
-    for Bash compatibility. Do NOT use RFC 4180 double-quoting.
+    External export requirement: format must strictly follow RFC 4180 CSV: fields are comma-delimited,
+    fields containing double quotes or commas must be enclosed in double quotes, and internal quotes
+    must be doubled (""). Do NOT use TSV backslash escaping.
     """
-    _ = audit_format_event(cmd_id)
-    # Escape double quotes in the command string with a backslash
-    escaped_command_str = command_str.replace('"', '\\"')
-    # Use tab delimiter as specified in the docstring and get_tsv_delimiter
-    return f"{cmd_id}\t{escaped_command_str}"
+    _ = audit_format_event(cmd_id) # Keep existing logic for audit_format_event call
 
-def get_tsv_delimiter() -> str:
-    return "\t"
+    output = io.StringIO()
+    # Use csv.writer for robust RFC 4180 compliance
+    writer = csv.writer(output, delimiter=get_csv_delimiter(), quotechar='"', quoting=csv.QUOTE_MINIMAL)
+    writer.writerow([str(cmd_id), command_str])
+    return output.getvalue().strip() # .strip() removes the trailing newline character
+
+def get_csv_delimiter() -> str:
+    return ","
 === END ===

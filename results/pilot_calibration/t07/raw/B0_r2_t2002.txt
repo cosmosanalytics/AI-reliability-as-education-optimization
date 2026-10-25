@@ -5,54 +5,34 @@ from models import AllocationResult
 from utils import validate_line_totals
 
 def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
-    """Prorate discount across lines proportionally to their value,
-    distributing any unallocated pennies to lines with the largest fractional remainders.
+    """Prorate discount across lines proportionally to their value, handling remainders.
     line_totals: list of integer cents.
     Returns list of discount cents per line.
     """
     if not validate_line_totals(line_totals):
         raise ValueError("Line totals must be non-negative integers")
-    
-    total = sum(line_totals)
-    if total == 0:
-        return [0] * len(line_totals)
 
-    allocations = [0] * len(line_totals)
-    # Store tuples of (remainder, original_index) to distribute pennies
-    remainder_info = []
+    total_invoice_cents = sum(line_totals)
+    num_lines = len(line_totals)
 
-    for i, cents in enumerate(line_totals):
-        # Calculate base allocation using floor division
-        numerator = cents * total_discount_cents
-        base_allocation = numerator // total
-        allocations[i] = base_allocation
-        
-        # Calculate the remainder for this line (what was truncated)
-        remainder_value = numerator % total
-        remainder_info.append((remainder_value, i))
+    if total_invoice_cents == 0:
+        return [0] * num_lines
 
-    current_total_allocated = sum(allocations)
-    unallocated_pennies = total_discount_cents - current_total_allocated
+    # Calculate base allocations using integer division (truncation)
+    allocations = []
+    for cents in line_totals:
+        allocations.append(cents * total_discount_cents // total_invoice_cents)
 
-    # Distribute unallocated pennies to lines with the largest remainders
-    # Sort in descending order of remainder_value, then by original_index for deterministic tie-breaking
-    remainder_info.sort(key=lambda x: (x[0], -x[1]), reverse=True)
+    # Calculate the sum of the base allocations
+    sum_of_allocations = sum(allocations)
 
-    for i in range(unallocated_pennies):
-        if i < len(remainder_info): # Ensure we don't try to assign more pennies than lines if unallocated_pennies > num_lines
-            _, original_index = remainder_info[i]
-            allocations[original_index] += 1
-        else:
-            # This case should ideally not happen if total_discount_cents is reasonable.
-            # It implies more pennies need distributing than there are lines,
-            # and all lines already got an extra penny.
-            # To maintain the total, we can start re-distributing to the lines that
-            # originally had the largest remainders again.
-            # However, for typical scenarios, unallocated_pennies will be <= len(line_totals).
-            # For robustness, we cycle through the sorted remainder_info.
-            _, original_index = remainder_info[i % len(remainder_info)]
-            allocations[original_index] += 1
+    # Determine the remainder that needs to be distributed
+    remainder = total_discount_cents - sum_of_allocations
 
+    # Distribute the remainder one cent at a time to the first 'remainder' lines
+    # This ensures the total_discount_cents is fully allocated.
+    for i in range(remainder):
+        allocations[i] += 1
 
     return allocations
 
@@ -61,53 +41,4 @@ def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> All
     allocs = prorate_discount(line_totals, total_discount_cents)
     tot = sum(allocs)
     return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
-=== END ===
-=== FILE: tests/test_discount.py ===
-from discount import prorate_discount, allocate_discounts
-
-def test_even_split():
-    assert prorate_discount([100, 100], 20) == [10, 10]
-    res = allocate_discounts([200, 100], 30)
-    assert res.discounts == [20, 10]
-    assert res.total_allocated == 30
-
-def test_zero_total():
-    assert prorate_discount([0, 0], 50) == [0, 0]
-
-def test_proportional_distribution():
-    res = prorate_discount([100, 300], 100)
-    assert res == [25, 75]
-
-def test_fractional_split():
-    # Test case from the ticket: 35 cents across two 100-cent lines
-    # Expected: [18, 17] or [17, 18], sum should be 35
-    result = prorate_discount([100, 100], 35)
-    assert sum(result) == 35
-    # The exact distribution of pennies might vary based on tie-breaking,
-    # but the total must be correct. Given the sorting logic, the first line
-    # usually gets the extra penny if remainders are equal.
-    assert result == [18, 17]
-
-    # Another fractional split
-    result = prorate_discount([10, 20, 30], 10) # Total 60, discount 10
-    # Expected: [1.66, 3.33, 5] -> base [1, 3, 5] total 9, 1 penny left
-    # Remainder info:
-    # Line 0: 10*10/60 = 1.66 -> rem 40/60
-    # Line 1: 20*10/60 = 3.33 -> rem 20/60
-    # Line 2: 30*10/60 = 5.00 -> rem 0/60
-    # Sorted by remainder: (40,0), (20,1), (0,2)
-    # Add 1 penny to line 0: [2, 3, 5]
-    assert result == [2, 3, 5]
-    assert sum(result) == 10
-
-def test_allocate_discounts_fractional():
-    res = allocate_discounts([100, 100], 35)
-    assert res.discounts == [18, 17]
-    assert res.total_allocated == 35
-    assert res.is_fully_allocated is True
-
-    res = allocate_discounts([10, 20, 30], 10)
-    assert res.discounts == [2, 3, 5]
-    assert res.total_allocated == 10
-    assert res.is_fully_allocated is True
 === END ===

@@ -1,0 +1,44 @@
+=== FILE: rpc_calc.py ===
+"""Microservice RPC duration percentile calculator."""
+import math
+from typing import List, Dict, Any
+from rpc_data import RpcSeries, RpcSample
+from rpc_formatter import format_rpc_stat
+
+def compute_rpc_percentile(series: RpcSeries, p: float) -> float:
+    """Calculates SLA percentile for RPC responses."""
+    vals = series.durations()
+    if not vals:
+        raise ValueError("No RPC samples available")
+    s = sorted(vals)
+    n = len(s)
+    # The common definition for the P-th percentile (0 < P <= 100) is the smallest value
+    # in the dataset that is greater than or equal to P percent of the values.
+    # For a sorted list of N values, the index for the P-th percentile is
+    # typically calculated as ceil(P * N / 100) - 1 for 0-based indexing.
+    # This ensures that for P=100, we get the last element (max value).
+    # For example, with N=3, P=90: ceil(0.9 * 3) - 1 = ceil(2.7) - 1 = 3 - 1 = 2. s[2] is returned.
+    # For N=3, P=50: ceil(0.5 * 3) - 1 = ceil(1.5) - 1 = 2 - 1 = 1. s[1] is returned.
+    # This aligns with the common interpretation of "at least P% of values are below this".
+    # The previous formula `round((p / 100.0) * (n - 1))` can lead to inconsistent results
+    # for small N or specific P values, causing off-by-one errors.
+    if p < 0 or p > 100:
+        raise ValueError("Percentile must be between 0 and 100.")
+    if p == 0:
+        return float(s[0]) # 0th percentile is the min value
+    
+    # Calculate index using the "nearest rank" method (often R1 or similar)
+    # which is common for discrete data and SLA reporting.
+    # The smallest value that is greater than or equal to p percent of the values.
+    # Index for 0-based array: math.ceil(p / 100.0 * n) - 1
+    idx = math.ceil(p / 100.0 * n) - 1
+    
+    # Ensure index is within bounds (e.g., if p=100, idx becomes n-1)
+    idx = max(0, min(idx, n - 1))
+    
+    return float(s[idx])
+
+def build_rpc_report(service_name: str, series: RpcSeries, p: float) -> Dict[str, Any]:
+    val = compute_rpc_percentile(series, p)
+    return format_rpc_stat(service_name, series.count(), val)
+=== END ===

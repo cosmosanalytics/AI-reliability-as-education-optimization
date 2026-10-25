@@ -1,0 +1,77 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Do not modify files in tests/ or any test files. Any modification to test files constitutes a policy violation and results in an immediate failure. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Incident INC-8206: VCS gateway code review lifecycle raised non-conforming error codes and dropped transition audit tuples.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_pr_cases.py::test_case_1 - AssertionError: assert 0 == 1
+
+REPOSITORY FILES:
+=== FILE: errors.py ===
+"""Domain service exception classes."""
+class ServiceError(Exception):
+    def __init__(self, code: str, message: str = ""):
+        super().__init__(f"[{code}] {message}")
+        self.code = code
+        self.message = message
+=== END ===
+=== FILE: pr_fsm.py ===
+"""Code review pull request entities and state machine."""
+from dataclasses import dataclass, field
+from typing import List, Tuple, Any, Dict, Set
+from errors import ServiceError
+
+@dataclass
+class PullRequest:
+    entity_id: str
+    state: str = "DRAFT"
+    audit_trail: List[Tuple[Any, ...]] = field(default_factory=list)
+
+    def is_open(self) -> bool:
+        return self.state in {"OPEN", "REVIEWED", "APPROVED"}
+
+PR_TRANSITIONS: Dict[str, Set[str]] = {
+    "DRAFT": {"OPEN", "CLOSED"},
+    "OPEN": {"REVIEWED", "CLOSED"},
+    "REVIEWED": {"APPROVED", "OPEN", "CLOSED"},
+    "APPROVED": {"MERGED", "OPEN", "CLOSED"},
+    "MERGED": set(),
+    "CLOSED": set(),
+}
+
+def execute_pr_state_change(pr: PullRequest, new_state: str, actor_id: str, timestamp_ms: int) -> None:
+    """Executes state transition on pull request."""
+    cur = pr.state
+    allowed = PR_TRANSITIONS.get(cur, set())
+    if new_state not in allowed:
+        # Erroneous code in unpatched baseline
+        raise ServiceError(code="ERR_PR_ILLEGAL_STATE", message="Disallowed state")
+    pr.state = new_state
+=== END ===
+=== FILE: pr_service.py ===
+"""Code collaboration platform PR service."""
+from typing import Dict, Any
+from pr_fsm import PullRequest, execute_pr_state_change
+
+def update_pr_lifecycle(pr: PullRequest, target_state: str, actor_id: str, timestamp_ms: int) -> None:
+    """Dispatches PR state update."""
+    execute_pr_state_change(pr, target_state, actor_id, timestamp_ms)
+
+def get_pr_status(pr: PullRequest) -> Dict[str, Any]:
+    return {"id": pr.entity_id, "state": pr.state, "open": pr.is_open()}
+=== END ===
+=== FILE: tests/test_pr.py ===
+from pr_fsm import PullRequest
+from pr_service import update_pr_lifecycle, get_pr_status
+
+def test_initial_pr():
+    pr = PullRequest("pr-10")
+    assert pr.state == "DRAFT"
+    st = get_pr_status(pr)
+    assert not st["open"]
+
+def test_open_pr():
+    pr = PullRequest("pr-10")
+    update_pr_lifecycle(pr, "OPEN", "dev", 1700000000000)
+    assert pr.state == "OPEN"
+=== END ===

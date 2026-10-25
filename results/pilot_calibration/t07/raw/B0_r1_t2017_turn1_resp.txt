@@ -1,45 +1,61 @@
 === FILE: guard.py ===
 """API gateway authorization guard."""
 from policy import RoutePolicy
-from url_normalizer import remove_query_string
+from url_normalizer import clean_scope
 
-def is_route_permitted(policy: RoutePolicy, request_path: str) -> bool:
-    """Check if request_path is authorized under policy.allowed_prefix.
-    Path matching contract:
-    - Normalizes trailing slashes before matching.
-    - Matches only full path segments (e.g. '/api' covers '/api' and '/api/v1', but NOT '/api-v2').
+def is_scope_permitted(policy: RoutePolicy, request_scope: str) -> bool:
+    """Check if request_scope is authorized under policy.allowed_pattern.
+    Access control scopes must use the double-colon hierarchy tenant::department::service::action.
+    Sibling paths must be checked against '::' segment boundaries.
+    The single asterisk wildcard '*' matches exactly one segment; the double asterisk '**' matches arbitrary multi-segment prefixes.
     """
-    clean_path = remove_query_string(request_path)
+    clean_req = clean_scope(request_scope)
+    allowed_pattern = policy.allowed_pattern
 
-    if policy.is_wildcard():
-        return True # A wildcard '/' policy covers all paths
+    if allowed_pattern == clean_req:
+        return True
 
-    if not clean_path.startswith(policy.allowed_prefix):
+    # If the policy pattern contains no wildcards, and it's not an exact match, it's not permitted.
+    if '*' not in allowed_pattern and '**' not in allowed_pattern:
         return False
 
-    # At this point, clean_path starts with policy.allowed_prefix.
-    # We need to ensure it's a full segment match, not a partial string match like '/reports-secret' for '/reports'.
-    prefix_len = len(policy.allowed_prefix)
+    policy_parts = allowed_pattern.split('::')
+    request_parts = clean_req.split('::')
 
-    # Case 1: Exact match (e.g., policy="/reports", path="/reports")
-    if len(clean_path) == prefix_len:
-        return True
+    policy_idx = 0
+    request_idx = 0
 
-    # Case 2: Sub-path match (e.g., policy="/reports", path="/reports/confidential")
-    # The character immediately after the prefix must be a '/' to qualify as a sub-path.
-    if clean_path[prefix_len] == '/':
-        return True
+    while policy_idx < len(policy_parts) and request_idx < len(request_parts):
+        policy_part = policy_parts[policy_idx]
+        request_part = request_parts[request_idx]
 
-    # Case 3: Sibling path match (e.g., policy="/reports", path="/reports-secret")
-    # This should not be permitted as it's not a full path segment match.
-    return False
-
-def evaluate_request(policies: list, role: str, path: str) -> bool:
-    for p in policies:
-        if p.matches_role(role) and is_route_permitted(p, path):
+        if policy_part == '**':
+            # If '**' is the last part of the policy, it matches all remaining request parts.
             return True
-    return False
+        elif policy_part == '*':
+            # '*' matches exactly one segment.
+            policy_idx += 1
+            request_idx += 1
+        elif policy_part == request_part:
+            # Exact segment match.
+            policy_idx += 1
+            request_idx += 1
+        else:
+            # Mismatch, and not a wildcard that can resolve it.
+            return False
 
-def count_permitted_routes(policy: RoutePolicy, paths: list) -> int:
-    return sum(1 for p in paths if is_route_permitted(policy, p))
+    # After iterating, check if both pattern and request have been fully consumed.
+    # If policy_idx == len(policy_parts), all policy parts were matched.
+    # If request_idx == len(request_parts), all request parts were matched.
+    # This ensures "a::b" does not match "a::b::c" unless policy ends with wildcard.
+
+    # Special case: A policy like "a::b" should not match "a::b::c".
+    # If policy ends without a wildcard, then request_parts must also end at the same point.
+    if policy_idx == len(policy_parts) and request_idx == len(request_parts):
+        return True
+    
+    # If policy ends with '**', it should already have returned True above.
+    # If policy ends with '*', it should have consumed one segment, and if request also ended, it's a match.
+    # All other cases where policy is exhausted but request is not, or vice versa, are false.
+    return False
 === END ===

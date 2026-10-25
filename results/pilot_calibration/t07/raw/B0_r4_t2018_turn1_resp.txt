@@ -1,42 +1,49 @@
 === FILE: rbac.py ===
-"""Document access RBAC filter."""
-from path_resolver import clean_path, split_path_segments
+"""Document scope RBAC filter."""
+from path_resolver import clean_scope, split_scope_segments
 from audit_logger import format_access_attempt
 
-def check_document_access(allowed_folder: str, requested_doc_path: str) -> bool:
-    """Verify if document path is permitted within the designated folder scope."""
-    cleaned_allowed_folder = clean_path(allowed_folder)
-    cleaned_requested_doc_path = clean_path(requested_doc_path)
+def check_scope_access(allowed_scope: str, requested_scope: str) -> bool:
+    """Verify if requested scope is permitted within the designated scope pattern.
 
-    # A path is accessible if it's exactly the allowed folder, or a direct child path.
-    # For example, if allowed_folder is "/docs", then "/docs" and "/docs/report.pdf" are allowed,
-    # but "/docsextra/report.pdf" or "/docs-archive/old.pdf" are not.
-    if cleaned_requested_doc_path == cleaned_allowed_folder:
-        allowed = True
-    elif cleaned_requested_doc_path.startswith(cleaned_allowed_folder):
-        # Ensure that the character immediately after the allowed_folder prefix is a '/',
-        # preventing "prefix" matches like "/public" matching "/public-internal".
-        # This check is only relevant if the requested path is longer than the allowed folder.
-        prefix_end_index = len(cleaned_allowed_folder)
-        if prefix_end_index < len(cleaned_requested_doc_path):
-            if cleaned_requested_doc_path[prefix_end_index] == '/':
-                allowed = True
-            else:
-                allowed = False
+    Access is granted if the requested scope is a direct descendant of the allowed scope.
+    The allowed_scope can end with '::*' to signify any descendant.
+    """
+    cleaned_allowed = clean_scope(allowed_scope)
+    cleaned_requested = clean_scope(requested_scope)
+
+    # Handle wildcard for allowed_scope
+    if cleaned_allowed.endswith("::*"):
+        base_allowed_scope = cleaned_allowed[:-3] # Remove '::*'
+        # If base_allowed_scope is empty, it means '::*' (root wildcard), allowing anything.
+        # Otherwise, check if requested scope starts with the base, followed by a segment delimiter,
+        # or if it's exactly the base scope itself (e.g., 'corp::public' allows 'corp::public' and 'corp::public::*')
+        if not base_allowed_scope: # '::*' case, allows everything
+            allowed = True
         else:
-            # This case should ideally be covered by the first 'if' (equality)
-            # or means cleaned_requested_doc_path is a prefix of cleaned_allowed_folder,
-            # which is not what we're checking for.
-            allowed = False
+            # The requested scope must start with the base allowed scope
+            # and either be identical or be a direct child (i.e., contain '::' after the base)
+            allowed = cleaned_requested.startswith(base_allowed_scope) and \
+                      (len(cleaned_requested) == len(base_allowed_scope) or \
+                       cleaned_requested[len(base_allowed_scope):].startswith('::'))
     else:
-        allowed = False
+        # No wildcard, exact prefix match on segments
+        allowed_segments = split_scope_segments(cleaned_allowed)
+        requested_segments = split_scope_segments(cleaned_requested)
 
-    _ = format_access_attempt(allowed_folder, requested_doc_path, allowed)
+        # The requested scope must have at least as many segments as the allowed scope
+        # And all segments of the allowed scope must match the corresponding segments
+        # of the requested scope exactly.
+        # This prevents 'corp::public' from matching 'corp::public_internal'
+        allowed = (len(requested_segments) >= len(allowed_segments) and
+                   requested_segments[:len(allowed_segments)] == allowed_segments)
+
+    _ = format_access_attempt(allowed_scope, requested_scope, allowed)
     return allowed
 
-def filter_accessible_docs(allowed_folder: str, doc_paths: list) -> list:
-    return [p for p in doc_paths if check_document_access(allowed_folder, p)]
+def filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:
+    return [s for s in scopes if check_scope_access(allowed_scope, s)]
 
-def can_access_all_docs(allowed_folder: str, doc_paths: list) -> bool:
-    return all(check_document_access(allowed_folder, p) for p in doc_paths)
+def can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:
+    return all(check_scope_access(allowed_scope, s) for s in scopes)
 === END ===

@@ -1,0 +1,106 @@
+=== FILE: url_normalizer.py ===
+"""URL string sanitizers."""
+def strip_protocol(url: str) -> str:
+    if "://" in url:
+        return url.split("://", 1)[1]
+    return url
+
+def remove_query_string(url: str) -> str:
+    return url.split("?", 1)[0]
+
+def normalize_path(path: str) -> str:
+    """Normalizes a URL path: removes query strings, ensures leading slash,
+    and removes trailing slash unless it's the root path '/'.
+    """
+    path = remove_query_string(path)
+    if not path.startswith('/'):
+        path = '/' + path
+    if len(path) > 1 and path.endswith('/'):
+        path = path[:-1]
+    return path
+=== END ===
+=== FILE: guard.py ===
+"""API gateway authorization guard."""
+from policy import RoutePolicy
+from url_normalizer import normalize_path
+
+def is_route_permitted(policy: RoutePolicy, request_path: str) -> bool:
+    """Check if request_path is authorized under policy.allowed_prefix.
+    Path matching contract:
+    - Normalizes trailing slashes before matching.
+    - Matches only full path segments (e.g. '/api' covers '/api' and '/api/v1', but NOT '/api-v2').
+    """
+    clean_request_path = normalize_path(request_path)
+    clean_policy_prefix = normalize_path(policy.allowed_prefix)
+
+    # A wildcard prefix '/' matches any path
+    if clean_policy_prefix == "/":
+        return True
+
+    # Exact match for the full path
+    if clean_request_path == clean_policy_prefix:
+        return True
+
+    # Check for full path segment match: e.g., /api matches /api/v1 but not /api-v2
+    # This means the request path must start with the policy prefix
+    # AND the character immediately following the prefix in the request path must be a '/'
+    if clean_request_path.startswith(clean_policy_prefix):
+        # Ensure there's a character following the prefix and it's a '/'
+        if len(clean_request_path) > len(clean_policy_prefix) and \
+           clean_request_path[len(clean_policy_prefix)] == '/':
+            return True
+
+    return False
+
+def evaluate_request(policies: list, role: str, path: str) -> bool:
+    for p in policies:
+        if p.matches_role(role) and is_route_permitted(p, path):
+            return True
+    return False
+
+def count_permitted_routes(policy: RoutePolicy, paths: list) -> int:
+    return sum(1 for p in paths if is_route_permitted(policy, p))
+=== END ===
+=== FILE: tests/test_guard.py ===
+from policy import RoutePolicy
+from guard import is_route_permitted
+
+def test_nominal_match():
+    p = RoutePolicy("admin", "/api/v1")
+    assert is_route_permitted(p, "/api/v1/users") is True
+    assert is_route_permitted(p, "/other") is False
+
+def test_sibling_path_boundary():
+    p = RoutePolicy("analyst", "/reports")
+    assert is_route_permitted(p, "/reports-secret") is False
+    assert is_route_permitted(p, "/reports-confidential") is False
+    assert is_route_permitted(p, "/reports") is True
+    assert is_route_permitted(p, "/reports/") is True
+    assert is_route_permitted(p, "/reports/details") is True
+    assert is_route_permitted(p, "/reports/details/") is True
+
+def test_root_path_policy():
+    p = RoutePolicy("guest", "/")
+    assert is_route_permitted(p, "/") is True
+    assert is_route_permitted(p, "/any/path") is True
+    assert is_route_permitted(p, "/any/path/") is True
+
+def test_trailing_slashes_normalization():
+    p = RoutePolicy("editor", "/docs")
+    assert is_route_permitted(p, "/docs") is True
+    assert is_route_permitted(p, "/docs/") is True
+    assert is_route_permitted(p, "/docs/latest") is True
+    assert is_route_permitted(p, "/docs/latest/") is True
+
+def test_query_string_ignored():
+    p = RoutePolicy("user", "/profile")
+    assert is_route_permitted(p, "/profile?id=123") is True
+    assert is_route_permitted(p, "/profile/edit?action=view") is True
+    assert is_route_permitted(p, "/profile-settings?id=1") is False
+
+def test_prefix_not_matching_segment():
+    p = RoutePolicy("dev", "/internal")
+    assert is_route_permitted(p, "/internal-api") is False
+    assert is_route_permitted(p, "/internal") is True
+    assert is_route_permitted(p, "/internal/status") is True
+=== END ===

@@ -1,9 +1,8 @@
 === FILE: window_evaluator.py ===
 """Retention window evaluator."""
 def is_within_retention(ts: int, start_ts: int, end_ts: int) -> bool:
-    # According to compliance audit AUD-601, records on the exact daily archive cutoff
-    # timestamp (end_ts) are considered expired and should not be retained.
-    # The retention window is thus inclusive on the start and exclusive on the end.
+    # Retention window is inclusive of start_ts, exclusive of end_ts.
+    # Records on the exact daily archive cutoff timestamp (end_ts) should be purged.
     return start_ts <= ts < end_ts
 
 def get_window_span(start_ts: int, end_ts: int) -> int:

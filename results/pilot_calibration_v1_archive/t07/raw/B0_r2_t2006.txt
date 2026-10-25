@@ -1,0 +1,30 @@
+=== FILE: env_loader.py ===
+"""Environment settings loader and merger."""
+from typing import Dict, Any
+
+DEFAULT_CONN_TIMEOUT = 30
+
+def load_system_env() -> Dict[str, Any]:
+    return {"timeout": DEFAULT_CONN_TIMEOUT}
+
+def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """Recursively merges two dictionaries.
+    Values from 'override' take precedence. If both dictionaries contain a key
+    and both values are dictionaries, they are merged recursively.
+    """
+    merged = dict(base) # Start with a copy of the base dictionary
+    for key, value in override.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            # If both values are dictionaries, recurse
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            # Otherwise, override or add the value
+            merged[key] = value
+    return merged
+
+def merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge environment settings with overrides, performing a deep merge
+    for nested dictionary structures.
+    """
+    return _deep_merge(base_settings, override_settings)
+=== END ===

@@ -1,10 +1,9 @@
 === FILE: clock_source.py ===
 """Lease validity checker."""
 def is_lease_valid(valid_until: float, current_time: float) -> bool:
-    # A lease is valid up to, but not including, the valid_until timestamp.
-    # This prevents split-brain issues where a lease might be considered valid
-    # at the exact expiration second, allowing two nodes to simultaneously
-    # believe they hold the lock.
+    # A lease is valid strictly *before* its valid_until timestamp.
+    # At the exact valid_until timestamp, the lease is considered expired
+    # to prevent split-brain scenarios at the boundary.
     return current_time < valid_until
 
 def remaining_lease_time(valid_until: float, current_time: float) -> float:

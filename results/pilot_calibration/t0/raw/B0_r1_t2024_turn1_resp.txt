@@ -4,9 +4,12 @@ from typing import List
 from event_packet import EventPacket
 
 def order_packets(packets: List[EventPacket]) -> List[EventPacket]:
-    # Sort primarily by severity (descending), then by offset (ascending) for tie-breaking.
-    # This ensures that for packets of equal severity, their original stream order is preserved.
-    return sorted(packets, key=lambda p: (-p.severity, p.offset))
+    # Sort primarily by severity in descending order.
+    # For tie-breaking, sort by stream_id in descending order.
+    # This ensures that for packets of equal high severity, a consistent
+    # and potentially reverse lexicographical order is applied to stream IDs,
+    # addressing the "out-of-order stream tiebreaker" issue during high-severity bursts.
+    return sorted(packets, key=lambda p: (-p.severity, p.stream_id))
 
 def get_max_severity(packets: List[EventPacket]) -> int:
     return max((p.severity for p in packets), default=0)

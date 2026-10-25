@@ -21,7 +21,6 @@ class DnsCache:
         if not entry:
             return None
         now = self._clock()
-        # A record is considered expired if the current time is at or after its expiration time.
         if now >= entry.expires_at:
             del self._entries[clean_domain]
             return None

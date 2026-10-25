@@ -1,0 +1,74 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Do not modify files in tests/ or any test files. Any modification to test files constitutes a policy violation and results in an immediate failure. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Incident INC-8205: Warehouse management system permitted cancelling orders after shipment without audit log.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_fulfillment_cases.py::test_case_1 - AssertionError: assert 0 == 1
+
+REPOSITORY FILES:
+=== FILE: errors.py ===
+"""Domain service exception classes."""
+class ServiceError(Exception):
+    def __init__(self, code: str, message: str = ""):
+        super().__init__(f"[{code}] {message}")
+        self.code = code
+        self.message = message
+=== END ===
+=== FILE: fulfillment_models.py ===
+"""Warehouse order fulfillment entities."""
+from dataclasses import dataclass, field
+from typing import List, Tuple, Any, Dict
+
+@dataclass
+class FulfillmentOrder:
+    entity_id: str
+    state: str = "AWAITING_PAYMENT"
+    audit_trail: List[Tuple[Any, ...]] = field(default_factory=list)
+
+    def is_delivered(self) -> bool:
+        return self.state == "DELIVERED"
+
+    def audit_count(self) -> int:
+        return len(self.audit_trail)
+=== END ===
+=== FILE: fulfillment_engine.py ===
+"""Warehouse order fulfillment transition controller."""
+from typing import Dict, Set, Any
+from errors import ServiceError
+from fulfillment_models import FulfillmentOrder
+
+FULFILLMENT_TRANSITIONS: Dict[str, Set[str]] = {
+    "AWAITING_PAYMENT": {"PAID", "CANCELLED"},
+    "PAID": {"PICKING", "CANCELLED"},
+    "PICKING": {"SHIPPED", "CANCELLED"},
+    "SHIPPED": {"DELIVERED"},
+    "DELIVERED": set(),
+    "CANCELLED": set(),
+}
+
+def transition_order_fulfillment(order: FulfillmentOrder, target_state: str, actor_id: str, timestamp_ms: int) -> None:
+    """Transitions fulfillment order to target state."""
+    cur = order.state
+    # Unpatched baseline: sets state without validation or audit tuple
+    order.state = target_state
+
+def get_fulfillment_status(order: FulfillmentOrder) -> Dict[str, Any]:
+    return {"id": order.entity_id, "state": order.state, "delivered": order.is_delivered()}
+=== END ===
+=== FILE: tests/test_fulfillment.py ===
+from fulfillment_models import FulfillmentOrder
+from fulfillment_engine import transition_order_fulfillment, get_fulfillment_status
+
+def test_initial_order():
+    o = FulfillmentOrder("ord-1")
+    assert o.state == "AWAITING_PAYMENT"
+    assert o.audit_count() == 0
+    st = get_fulfillment_status(o)
+    assert not st["delivered"]
+
+def test_pay_order():
+    o = FulfillmentOrder("ord-1")
+    transition_order_fulfillment(o, "PAID", "checkout", 1700000000000)
+    assert o.state == "PAID"
+=== END ===

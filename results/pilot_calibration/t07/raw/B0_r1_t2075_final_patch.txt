@@ -1,0 +1,47 @@
+=== FILE: io_calc.py ===
+"""Disk IO wait time percentile calculation."""
+import math
+from typing import List, Dict, Any
+from io_types import IoBatch, IoWaitSample
+from io_summary import format_io_summary
+
+def compute_io_percentile(batch: IoBatch, p: float) -> float:
+    """Computes storage wait percentile."""
+    times = batch.times()
+    if not times:
+        raise ValueError("Empty IO batch")
+    s = sorted(times)
+    n = len(s)
+    # The percentile index calculation needs to be adjusted.
+    # A common approach for selecting a value from a discrete set (like the nearest rank method)
+    # is to use (p/100) * N, then round up for 0-based indexing.
+    # For example, in a set of 5 values, the 90th percentile would be at index ceil(0.9 * 5) - 1 = 5 - 1 = 4.
+    # The current (p/100) * (N-1) method works for some cases but can be off by one for others,
+    # leading to an incorrect result (e.g., 400 instead of 500 for a 90th percentile).
+    # Using math.ceil for the rank and then adjusting to 0-based index.
+    if p < 0 or p > 100:
+        raise ValueError("Percentile p must be between 0 and 100.")
+
+    # Calculate rank (1-based index)
+    rank = (p / 100.0) * n
+    
+    # For 0th percentile, it should be the first element (index 0).
+    # For 100th percentile, it should be the last element (index n-1).
+    # Using math.ceil for rank and then converting to 0-based index:
+    # If p=0, rank=0, index=0.
+    # If p=100, rank=n, index=n-1.
+    # For other values, math.ceil(rank) gives the 1-based index,
+    # then subtract 1 for 0-based index.
+    if p == 0:
+        idx = 0
+    elif p == 100:
+        idx = n - 1
+    else:
+        idx = max(0, min(n - 1, math.ceil(rank) - 1)) # Ensure index is within bounds [0, n-1]
+
+    return float(s[idx])
+
+def summarize_io_batch(batch: IoBatch, p: float) -> Dict[str, Any]:
+    val = compute_io_percentile(batch, p)
+    return format_io_summary(batch.count(), val)
+=== END ===

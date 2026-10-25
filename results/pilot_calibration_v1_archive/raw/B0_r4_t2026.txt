@@ -1,0 +1,32 @@
+=== FILE: session_store.py ===
+"""Rate limit session storage."""
+from typing import Optional, Callable
+from session_validator import is_session_expired
+from session_data import RateLimitSession
+
+class SessionStore:
+    def __init__(self, clock: Optional[Callable[[], float]] = None):
+        self._clock = clock
+        self._sessions = {}
+
+    def register(self, ip: str, ttl: float) -> None:
+        import time
+        now = self._clock() if self._clock else time.monotonic()
+        self._sessions[ip] = RateLimitSession(ip, 1, now + ttl)
+
+    def is_active(self, ip: str) -> bool:
+        sess = self._sessions.get(ip)
+        if not sess:
+            return False
+        import time
+        now = self._clock() if self._clock else time.monotonic()
+        # The session is considered inactive if the current time is at or past the expiry time.
+        # This addresses the boundary condition where `is_session_expired` might
+        # incorrectly return False at the exact expiry timestamp.
+        if now >= sess.expires_at:
+            return False
+        return not is_session_expired(sess.expires_at, now)
+
+    def active_count(self) -> int:
+        return len(self._sessions)
+=== END ===

@@ -1,0 +1,21 @@
+=== FILE: key_factory.py ===
+"""Idempotency key construction factory for refunds."""
+import uuid
+from typing import Optional
+
+def create_refund_key(refund_id: str) -> str:
+    """Creates refund idempotency key."""
+    return f"ref_{refund_id}_{uuid.uuid4()}"
+
+def is_valid_refund_key(key: str) -> bool:
+    """Validates structure and length of refund key."""
+    if not key or not isinstance(key, str):
+        return False
+    if not key.startswith("ref_"):
+        return False
+    return len(key) > 5
+
+def format_refund_scope(refund_id: str) -> str:
+    """Returns normalized refund scope identifier."""
+    return f"scope_{refund_id.lower().strip()}"
+=== END ===

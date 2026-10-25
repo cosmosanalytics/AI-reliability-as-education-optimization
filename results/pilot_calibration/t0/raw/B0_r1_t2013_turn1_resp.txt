@@ -1,30 +1,45 @@
 === FILE: csv_writer.py ===
-"""CSV serialization utilities."""
-from typing import List
+"""TSV serialization utilities."""
+from typing import List, Optional
 from schema import CustomerProfile
-from io_helpers import validate_csv_header
+from io_helpers import validate_tsv_header
 
-def escape_csv_field(val: str) -> str:
-    """Escape CSV field per RFC 4180:
-    If field contains comma, newline, or double quote, wrap in double quotes and escape internal quotes by doubling ("").
+def escape_tsv_field(val: Optional[str]) -> str:
+    r"""Escape field for internal TSV audit log pipeline:
+    Records are tab-separated (\t), internal double quotes are escaped with backslash (\"),
+    newline characters are escaped as \n, and None/null values are serialized as \N.
+    Do NOT use RFC 4180 double-quoting.
     """
-    if any(c in val for c in [",", "\n", '"']):
-        escaped = val.replace('"', '""')
-        return f'"{escaped}"'
-    return val
+    if val is None:
+        return "\\N" # As per docstring: None/null values are serialized as \N
 
-def export_profiles_csv(profiles: List[CustomerProfile]) -> str:
-    header = "cust_id,name,notes"
-    if not validate_csv_header(header, ["cust_id", "name", "notes"]):
+    # Apply escapes in a specific order to avoid issues.
+    # First, escape the backslash character itself if it appears in the data,
+    # as it is used as an escape character for other special characters.
+    escaped_val = val.replace('\\', '\\\\')
+
+    # Then, escape other special characters as per the docstring.
+    # Internal double quotes are escaped with backslash (\").
+    escaped_val = escaped_val.replace('"', '\\"')
+    # Newline characters are escaped as \n.
+    escaped_val = escaped_val.replace('\n', '\\n')
+    # Tab characters in the field itself must also be escaped to prevent breaking TSV structure.
+    escaped_val = escaped_val.replace('\t', '\\t')
+
+    return escaped_val
+
+def export_profiles_tsv(profiles: List[CustomerProfile]) -> str:
+    header = "cust_id\tname\tnotes" # Header should use actual tab, not escaped \t
+    if not validate_tsv_header(header, ["cust_id", "name", "notes"]):
         raise ValueError("Invalid header")
     lines = [header]
     for p in profiles:
-        f_name = escape_csv_field(p.name)
-        f_notes = escape_csv_field(p.notes)
-        lines.append(f"{p.cust_id},{f_name},{f_notes}")
-    return "\n".join(lines)
+        f_name = escape_tsv_field(p.name)
+        f_notes = escape_tsv_field(p.notes)
+        lines.append(f"{p.cust_id}\t{f_name}\t{f_notes}") # Use actual tab, not escaped \t
+    return "\n".join(lines) # Use actual newline, not escaped \n
 
-def count_records(csv_payload: str) -> int:
-    lines = [l for l in csv_payload.splitlines() if l.strip()]
+def count_records(payload: str) -> int:
+    lines = [l for l in payload.splitlines() if l.strip()]
     return max(0, len(lines) - 1)
 === END ===

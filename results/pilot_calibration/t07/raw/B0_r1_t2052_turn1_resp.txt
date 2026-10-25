@@ -1,0 +1,26 @@
+=== FILE: trace_recorder.py ===
+"""Kernel performance trace recorder."""
+from datetime import datetime
+from trace_span import TraceSpan
+from cpu_affinity import validate_cpu_id, get_core_type
+
+def record_span(span_id: str, cpu_id: int, dt: datetime) -> TraceSpan:
+    """Records execution trace span for kernel telemetry.
+    Local requirement: Sub-millisecond diagnostics mandate microsecond precision:
+    %Y-%m-%dT%H:%M:%S.%fZ. Do NOT use millisecond precision.
+    """
+    if not validate_cpu_id(cpu_id):
+        raise ValueError("Invalid cpu_id")
+    core_type = get_core_type(cpu_id)
+    # The requirement is to include microsecond precision and append 'Z' for UTC.
+    ts = dt.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+    span = TraceSpan(
+        span_id=span_id,
+        cpu_id=cpu_id,
+        timestamp_str=ts,
+        tags={"core": core_type}
+    )
+    if not span.is_valid_span():
+        raise ValueError("Invalid span")
+    return span
+=== END ===

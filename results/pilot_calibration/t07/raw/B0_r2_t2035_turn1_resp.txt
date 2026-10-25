@@ -1,0 +1,27 @@
+=== FILE: throttle_guard.py ===
+"""Stream burst throttling guard."""
+from errors import ServiceError
+from quota_tracker import BurstBucket
+
+def enforce_burst_capacity(bucket: BurstBucket, incoming_tokens: int) -> bool:
+    """Enforce burst quota for streaming client.
+    
+    Raises a ServiceError when consumed tokens exceed maximum burst capacity.
+    """
+    if not bucket.record_token_burst(incoming_tokens):
+        raise ServiceError(
+            code="BURST_QUOTA_EXCEEDED",
+            message=f"Burst quota exhausted for stream {bucket.stream_id}",
+            details={"stream_id": bucket.stream_id, "attempted_tokens": incoming_tokens}
+        )
+    return True
+
+def admit_stream_tokens(bucket: BurstBucket, tokens: int) -> str:
+    try:
+        enforce_burst_capacity(bucket, tokens)
+        return "ADMITTED"
+    except ServiceError as e:
+        if e.code == "BURST_QUOTA_EXCEEDED":
+            return "DENIED"
+        raise # Re-raise any other unexpected ServiceErrors
+=== END ===

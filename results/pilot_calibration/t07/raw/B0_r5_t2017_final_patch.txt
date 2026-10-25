@@ -1,109 +1,80 @@
 === FILE: guard.py ===
 """API gateway authorization guard."""
 from policy import RoutePolicy
-from url_normalizer import remove_query_string
+from url_normalizer import clean_scope
 
-def _normalize_path_for_matching(path: str) -> str:
-    """Removes query string and normalizes trailing slashes for path matching."""
-    cleaned_path = remove_query_string(path)
-    # Remove trailing slash unless it's the root path "/"
-    if cleaned_path.endswith('/') and len(cleaned_path) > 1:
-        return cleaned_path[:-1]
-    return cleaned_path
-
-def is_route_permitted(policy: RoutePolicy, request_path: str) -> bool:
-    """Check if request_path is authorized under policy.allowed_prefix.
-    Path matching contract:
-    - Normalizes trailing slashes before matching.
-    - Matches only full path segments (e.g. '/api' covers '/api' and '/api/v1', but NOT '/api-v2').
+def is_scope_permitted(policy: RoutePolicy, request_scope: str) -> bool:
+    """Check if request_scope is authorized under policy.allowed_pattern.
+    Access control scopes must use the double-colon hierarchy tenant::department::service::action.
+    Sibling paths must be checked against '::' segment boundaries.
+    The single asterisk wildcard '*' matches exactly one segment; the double asterisk '**' matches arbitrary multi-segment prefixes.
     """
-    normalized_prefix = _normalize_path_for_matching(policy.allowed_prefix)
-    normalized_request_path = _normalize_path_for_matching(request_path)
+    clean_req = clean_scope(request_scope)
+    allowed_pattern = policy.allowed_pattern
 
-    # A wildcard prefix matches all paths
-    if normalized_prefix == "/":
+    if clean_req == allowed_pattern:
         return True
 
-    # Check if the request path starts with the policy prefix
-    if not normalized_request_path.startswith(normalized_prefix):
+    # Handle double asterisk wildcard (matches arbitrary multi-segment prefixes)
+    if allowed_pattern.endswith('::**'):
+        prefix = allowed_pattern[:-4] # Remove '::**'
+        return clean_req.startswith(prefix) and (len(prefix) == 0 or clean_req[len(prefix):].startswith('::') or clean_req == prefix)
+    elif allowed_pattern == '**':
+        return True # Matches any scope
+
+    # Split patterns into segments for more granular matching
+    allowed_segments = allowed_pattern.split('::')
+    request_segments = clean_req.split('::')
+
+    if len(request_segments) < len(allowed_segments):
         return False
 
-    # Ensure full path segment matching:
-    # The character immediately after the prefix in the request path must be
-    # either the end of the string or a '/'
-    prefix_len = len(normalized_prefix)
-    if len(normalized_request_path) == prefix_len:
-        # Exact match (e.g., policy="/api", request="/api")
-        return True
-    elif normalized_request_path[prefix_len] == '/':
-        # Matches a sub-path (e.g., policy="/api", request="/api/v1")
-        return True
-    
-    # If it starts with the prefix but the next character is not '/'
-    # (e.g., policy="/reports", request="/reports-confidential"), it's not a match.
-    return False
+    for i, allowed_segment in enumerate(allowed_segments):
+        if allowed_segment == '**':
+            # '**' at any position means it matches the rest of the request_segments
+            # if the part before '**' matches.
+            return True
+        elif allowed_segment == '*':
+            # '*' matches exactly one segment, so current request segment must exist
+            # and not be empty.
+            if i >= len(request_segments) or not request_segments[i]:
+                return False
+        elif allowed_segment != request_segments[i]:
+            return False
 
-def evaluate_request(policies: list, role: str, path: str) -> bool:
+    # If we reached here, all non-wildcard allowed segments matched.
+    # Now check if the request_scope is an exact match or a child path.
+    # If policy pattern does not end with '*', it must be an exact match or a deeper path.
+    # Example: "a::b" matches "a::b" and "a::b::c"
+    # Example: "a::b::*" matches "a::b::c" but NOT "a::b::c::d"
+    # Example: "a::b::**" matches "a::b", "a::b::c", "a::b::c::d"
+
+    # If the allowed pattern does not end with a wildcard,
+    # the request scope must either be an exact match (already handled)
+    # or be a deeper path (e.g., policy "a::b", request "a::b::c")
+    if allowed_pattern.endswith('*'):
+        # If the pattern ends with '*', it must match exactly the number of segments
+        # or it is a prefix match if the pattern ends with '**' (already handled).
+        # For a single '*', the segment count must be equal.
+        return len(request_segments) == len(allowed_segments)
+    else:
+        # If no wildcard at the end, the request can be an exact match (handled)
+        # or a child path (e.g. "a::b" allows "a::b::c")
+        # This implies request_segments must be equal or longer than allowed_segments
+        # and the prefix must match exactly.
+        # This is already covered by the loop and the len check at the beginning.
+        # The crucial part here is to disallow "a::b_suffix" if policy is "a::b".
+        # The loop already ensures "a::b" matches "a::b" and "a::b::c".
+        # If allowed_pattern is "corp::reports" and request is "corp::reports_secret",
+        # the loop will fail at the last segment comparison "reports" != "reports_secret".
+        return True
+
+def evaluate_request(policies: list, role: str, scope: str) -> bool:
     for p in policies:
-        if p.matches_role(role) and is_route_permitted(p, path):
+        if p.matches_role(role) and is_scope_permitted(p, scope):
             return True
     return False
 
-def count_permitted_routes(policy: RoutePolicy, paths: list) -> int:
-    return sum(1 for p in paths if is_route_permitted(policy, p))
-=== END ===
-=== FILE: tests/test_guard.py ===
-from policy import RoutePolicy
-from guard import is_route_permitted, _normalize_path_for_matching
-
-def test_normalize_path_for_matching():
-    assert _normalize_path_for_matching("/") == "/"
-    assert _normalize_path_for_matching("/api") == "/api"
-    assert _normalize_path_for_matching("/api/") == "/api"
-    assert _normalize_path_for_matching("/api/v1") == "/api/v1"
-    assert _normalize_path_for_matching("/api/v1/") == "/api/v1"
-    assert _normalize_path_for_matching("/api?q=1") == "/api"
-    assert _normalize_path_for_matching("/api/?q=1") == "/api"
-
-def test_nominal_match():
-    p = RoutePolicy("admin", "/api/v1")
-    assert is_route_permitted(p, "/api/v1/users") is True
-    assert is_route_permitted(p, "/api/v1") is True
-    assert is_route_permitted(p, "/api/v1/") is True
-    assert is_route_permitted(p, "/other") is False
-    assert is_route_permitted(p, "/api") is False # Should not match parent path
-
-def test_sibling_path_boundary():
-    p = RoutePolicy("analyst", "/reports")
-    assert is_route_permitted(p, "/reports-secret") is False
-    assert is_route_permitted(p, "/reports/daily") is True
-    assert is_route_permitted(p, "/reports") is True
-    assert is_route_permitted(p, "/reports/") is True
-
-def test_wildcard_policy():
-    p = RoutePolicy("admin", "/")
-    assert is_route_permitted(p, "/any/path") is True
-    assert is_route_permitted(p, "/") is True
-    assert is_route_permitted(p, "/admin/reports") is True
-
-def test_trailing_slashes_in_policy_prefix():
-    p_slash = RoutePolicy("admin", "/api/")
-    p_no_slash = RoutePolicy("admin", "/api")
-
-    assert is_route_permitted(p_slash, "/api") is True
-    assert is_route_permitted(p_slash, "/api/") is True
-    assert is_route_permitted(p_slash, "/api/v1") is True
-    assert is_route_permitted(p_slash, "/api-v2") is False
-
-    assert is_route_permitted(p_no_slash, "/api") is True
-    assert is_route_permitted(p_no_slash, "/api/") is True
-    assert is_route_permitted(p_no_slash, "/api/v1") is True
-    assert is_route_permitted(p_no_slash, "/api-v2") is False
-
-def test_query_strings():
-    p = RoutePolicy("user", "/profile")
-    assert is_route_permitted(p, "/profile?id=123") is True
-    assert is_route_permitted(p, "/profile/edit?id=123") is True
-    assert is_route_permitted(p, "/profile/?id=123") is True
-    assert is_route_permitted(p, "/profiles?id=123") is False # Sibling path
+def count_permitted_scopes(policy: RoutePolicy, scopes: list) -> int:
+    return sum(1 for s in scopes if is_scope_permitted(policy, s))
 === END ===

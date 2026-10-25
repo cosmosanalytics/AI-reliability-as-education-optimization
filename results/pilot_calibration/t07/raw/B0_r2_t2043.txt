@@ -1,0 +1,19 @@
+=== FILE: inventory_broadcaster.py ===
+"""Inventory sync event broadcaster."""
+from key_normalizer import normalize_dict_keys, extract_normalized_keys
+from wire_envelope import build_envelope, is_valid_envelope, extract_payload
+from typing import Dict, Any
+
+def broadcast_inventory_sync(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    """Broadcast inventory adjustment event across warehouse services."""
+    # Incident INV-606 indicates payloads were emitted without the v2 envelope.
+    # This function is responsible for wrapping the payload in the wire envelope.
+    service_name = "inventory_service"  # Assuming 'inventory_service' as the source service name.
+    return build_envelope(service_name, epoch_ms, data)
+
+def publish_inventory_record(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    msg = broadcast_inventory_sync(data, epoch_ms)
+    _ = is_valid_envelope(msg)
+    _ = extract_normalized_keys(data)
+    return msg
+=== END ===

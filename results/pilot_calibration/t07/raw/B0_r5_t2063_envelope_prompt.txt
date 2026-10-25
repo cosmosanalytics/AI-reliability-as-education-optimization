@@ -1,0 +1,84 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Do not modify files in tests/ or any test files. Any modification to test files constitutes a policy violation and results in an immediate failure. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Incident INC-9303: Recurring subscription charges generated duplicate debits on timeout retry due to regenerated key.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_subscription_cases.py::test_case_1 - AssertionError: assert False == True
+
+REPOSITORY FILES:
+=== FILE: charge_record.py ===
+"""Subscription charge models and receipt metadata."""
+from dataclasses import dataclass
+from typing import Dict, Any
+
+@dataclass
+class ChargeReceipt:
+    """Receipt representation for processed subscription charges."""
+    account_id: str
+    amount_cents: int
+    idempotency_header: str
+    status: str = "submitted"
+
+    def is_positive_amount(self) -> bool:
+        """Returns True if charge amount is strictly positive."""
+        return self.amount_cents > 0
+
+    def summary(self) -> Dict[str, Any]:
+        """Returns summary dictionary of charge status."""
+        return {
+            "account": self.account_id,
+            "cents": self.amount_cents,
+            "header": self.idempotency_header,
+        }
+=== END ===
+=== FILE: card_validator.py ===
+"""Payment method verification helper for recurring subscriptions."""
+from typing import Optional
+
+def validate_account_format(account_id: str) -> bool:
+    """Verifies account ID has valid prefix and structure."""
+    if not account_id or not isinstance(account_id, str):
+        return False
+    return account_id.startswith("act_") and len(account_id) > 4
+
+def get_charge_currency() -> str:
+    """Default processing currency code."""
+    return "USD"
+
+def sanitize_account_id(account_id: str) -> str:
+    """Trims whitespace and normalizes account identifier."""
+    return account_id.strip() if account_id else ""
+=== END ===
+=== FILE: subscription_client.py ===
+"""Subscription recurring billing client."""
+import uuid
+from typing import Dict, Any, List
+from charge_record import ChargeReceipt
+from card_validator import validate_account_format, get_charge_currency
+
+class SubscriptionClient:
+    def __init__(self):
+        self.dispatched_attempts: List[str] = []
+
+    def charge_account(self, account_id: str, amount_cents: int, retries: int = 1) -> ChargeReceipt:
+        if not validate_account_format(account_id):
+            raise ValueError("Invalid account format")
+        curr = get_charge_currency()
+        _ = curr
+        key = None
+        for _ in range(retries + 1):
+            key = f"tok_{uuid.uuid4()}"
+            self.dispatched_attempts.append(key)
+        return ChargeReceipt(account_id=account_id, amount_cents=amount_cents, idempotency_header=key)
+=== END ===
+=== FILE: tests/test_subscription.py ===
+from subscription_client import SubscriptionClient
+
+def test_service_execution():
+    client = SubscriptionClient()
+    rcpt = client.charge_account("act_9988", 2500, retries=0)
+    assert rcpt.account_id == "act_9988"
+    assert rcpt.amount_cents == 2500
+    assert rcpt.is_positive_amount() is True
+=== END ===

@@ -1,0 +1,44 @@
+=== FILE: escrow_engine.py ===
+"""Escrow transaction schemas and transition validator."""
+from dataclasses import dataclass, field
+from typing import List, Tuple, Any, Dict, Set
+from errors import ServiceError
+
+@dataclass
+class EscrowAccount:
+    entity_id: str
+    amount_cents: int
+    state: str = "INITIAL"
+    audit_trail: List[Tuple[Any, ...]] = field(default_factory=list)
+
+    def is_finalized(self) -> bool:
+        return self.state in {"RELEASED", "REFUNDED"}
+
+ESCROW_TRANSITIONS: Dict[str, Set[str]] = {
+    "INITIAL": {"HELD"},
+    "HELD": {"RELEASED", "REFUNDED", "DISPUTED"},
+    "DISPUTED": {"RELEASED", "REFUNDED"},
+    "RELEASED": set(),
+    "REFUNDED": set(),
+}
+
+def execute_escrow_transition(escrow: EscrowAccount, target_state: str, actor_id: str, timestamp_ms: int) -> None:
+    """Validates and executes escrow state change."""
+    cur = escrow.state
+    allowed = ESCROW_TRANSITIONS.get(cur, set())
+
+    if target_state not in allowed:
+        # Add audit entry for the failed transition attempt
+        escrow.audit_trail.append((cur, target_state, actor_id, timestamp_ms, "FAILURE"))
+
+        # Use a specific error code for invalid release attempts as per ticket INC-8202
+        if target_state == "RELEASED":
+            raise ServiceError(code="ERR_ESCROW_INVALID_RELEASE", message=f"Invalid attempt to release from state '{cur}'.")
+        else:
+            # For other invalid transitions, use a general invalid state error
+            raise ServiceError(code="ERR_ESCROW_INVALID_STATE_TRANSITION", message=f"Invalid state transition from '{cur}' to '{target_state}'.")
+
+    # If the transition is valid, add an audit entry and update the state
+    escrow.audit_trail.append((cur, target_state, actor_id, timestamp_ms, "SUCCESS"))
+    escrow.state = target_state
+=== END ===

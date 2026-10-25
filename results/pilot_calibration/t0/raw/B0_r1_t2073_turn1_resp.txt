@@ -1,0 +1,41 @@
+=== FILE: cache_percentile.py ===
+"""Cache lookup quantile engine."""
+import math
+from typing import List
+
+def get_quantile(latencies: List[float], q: float) -> float:
+    """Calculates latency quantile for cache cluster.
+    Uses the definition where the p-th percentile is the value at
+    index (p/100) * (n+1) - 1, interpolated linearly.
+    This aligns with common statistical software like Excel's PERCENTILE.INC.
+    """
+    if not latencies:
+        raise ValueError("No latency records")
+    s = sorted(latencies)
+    n = len(s)
+
+    # Adjust q to be between 0 and 1 for easier calculation
+    p = q / 100.0
+
+    # Calculate the rank (1-indexed position)
+    # This formula is equivalent to (p * (n - 1)) for 0-indexed,
+    # but for 1-indexed rank, it's p * (n + 1)
+    # Then convert to 0-indexed by subtracting 1
+    # So, 0-indexed position = p * (n + 1) - 1
+    idx = p * (n + 1) - 1
+
+    if idx < 0:
+        return float(s[0])
+    if idx >= n - 1:
+        return float(s[n - 1])
+
+    low_idx = int(math.floor(idx))
+    high_idx = int(math.ceil(idx))
+    frac = idx - low_idx
+
+    # Handle edge case where idx is an integer
+    if frac == 0.0:
+        return float(s[low_idx])
+
+    return float(s[low_idx] + frac * (s[high_idx] - s[low_idx]))
+=== END ===

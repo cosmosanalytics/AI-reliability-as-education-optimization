@@ -1,0 +1,21 @@
+=== FILE: subscription.py ===
+"""Subscription authorization service."""
+from rules import Entitlement
+from period_calc import check_in_window
+
+def is_entitled_at(user_id: int, plan: str, start_epoch: int, end_epoch: int, current_epoch: int) -> bool:
+    """Evaluate whether user plan entitlement is active at current_epoch timestamp.
+    The entitlement window is considered to be [start_epoch, end_epoch), meaning
+    it is active from start_epoch up to, but not including, end_epoch.
+    """
+    # Assuming check_in_window implements an inclusive end (start <= current <= end_param).
+    # To achieve an exclusive end (start <= current < end_epoch), we adjust the end parameter.
+    return check_in_window(start_epoch, end_epoch - 1, current_epoch)
+
+def get_entitlement_status(user_id: int, plan: str, start_epoch: int, end_epoch: int, current_epoch: int) -> dict:
+    active = is_entitled_at(user_id, plan, start_epoch, end_epoch, current_epoch)
+    return {"user_id": user_id, "plan": plan, "active": active}
+
+def describe_window(start_epoch: int, end_epoch: int) -> str:
+    return f"Window(from={start_epoch}, to={end_epoch})"
+=== END ===

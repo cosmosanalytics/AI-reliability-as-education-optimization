@@ -1,0 +1,22 @@
+=== FILE: gate_combiner.py ===
+"""Feature gate dictionary combiner."""
+from typing import Dict, Any, List
+
+def combine_gate_dicts(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """Combines gate dictionaries."""
+    res = dict(base)
+    for k, v in override.items():
+        if k in res and isinstance(res[k], dict) and isinstance(v, dict):
+            res[k] = combine_gate_dicts(res[k], v)
+        elif k in res and isinstance(res[k], list) and isinstance(v, list):
+            # If both are lists, combine them by taking the unique union
+            # Sort the combined list for deterministic output, especially in tests
+            res[k] = sorted(list(set(res[k] + v)))
+        else:
+            # For other types, or if only one is a list/dict, override
+            res[k] = v
+    return res
+
+def is_valid_gate_key(key: str) -> bool:
+    return bool(key and isinstance(key, str))
+=== END ===

@@ -1,28 +1,16 @@
 === FILE: serializer.py ===
-"""Order item CSV row serializer."""
+"""Order item TSV row serializer."""
 from typing import List
 from item import OrderItem
 from catalog_validator import validate_catalog
 
 def serialize_item_row(item: OrderItem) -> str:
-    """Serialize OrderItem into a CSV formatted line.
-    Applies standard CSV quoting rules to the description field.
-    Fields containing commas, double quotes, or newlines are enclosed in double quotes.
-    Internal double quotes are escaped by doubling them.
+    """Serialize OrderItem into a TSV formatted audit line.
+    Escapes double quotes in the description field with a backslash.
     """
-    description_field = item.description
-
-    # Check if the description field needs quoting
-    if ',' in description_field or '"' in description_field or '\n' in description_field:
-        # Escape any internal double quotes by doubling them
-        escaped_description = description_field.replace('"', '""')
-        # Enclose the entire field in double quotes
-        quoted_description = f'"{escaped_description}"'
-    else:
-        # No special characters, no quoting needed
-        quoted_description = description_field
-
-    return f"{item.item_id},{quoted_description}"
+    # Escape double quotes in the description field as specified by the ticket
+    escaped_description = item.description.replace('"', '\\"')
+    return f"{item.item_id}\t{escaped_description}"
 
 def serialize_catalog(items: List[OrderItem]) -> str:
     if not validate_catalog(items):

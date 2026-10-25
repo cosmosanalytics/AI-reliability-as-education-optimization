@@ -1,0 +1,68 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Do not modify files in tests/ or any test files. Any modification to test files constitutes a policy violation and results in an immediate failure. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Incident INC-9105: Automated replication service failed reading backup metadata timestamp.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_snapshot_cases.py::test_case_1 - AssertionError: assert '2026-10-25T06:00:00Z' == '2026-10-25T06:00:00.000Z'
+
+REPOSITORY FILES:
+=== FILE: snapshot_manifest.py ===
+"""Snapshot manifest timestamp formatting."""
+from datetime import datetime, timezone
+
+def format_snapshot_timestamp(dt: datetime) -> str:
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+def parse_snapshot_epoch(dt: datetime) -> int:
+    return int(dt.timestamp())
+=== END ===
+=== FILE: storage_allocator.py ===
+"""Storage volume allocator and metrics."""
+from typing import Dict, Any
+
+def calculate_block_count(size_mb: int) -> int:
+    return size_mb * 256
+
+def estimate_checksum_length(blocks: int) -> int:
+    return blocks // 16
+
+def get_volume_tier(size_mb: int) -> str:
+    return "high_capacity" if size_mb > 1000 else "standard"
+
+def is_valid_size(size_mb: int) -> bool:
+    return size_mb > 0
+=== END ===
+=== FILE: snapshot_manager.py ===
+"""Snapshot manifest coordinator."""
+from datetime import datetime
+from typing import Dict, Any
+from snapshot_manifest import format_snapshot_timestamp, parse_snapshot_epoch
+from storage_allocator import calculate_block_count, estimate_checksum_length, get_volume_tier
+
+def create_snapshot_manifest(snapshot_id: str, size_mb: int, dt: datetime) -> Dict[str, Any]:
+    blocks = calculate_block_count(size_mb)
+    chk_len = estimate_checksum_length(blocks)
+    tier = get_volume_tier(size_mb)
+    epoch_sec = parse_snapshot_epoch(dt)
+    ts = format_snapshot_timestamp(dt)
+    return {
+        "snapshot_id": snapshot_id,
+        "blocks": blocks,
+        "checksum_len": chk_len,
+        "tier": tier,
+        "epoch": epoch_sec,
+        "created_at": ts
+    }
+=== END ===
+=== FILE: tests/test_snapshot.py ===
+from datetime import datetime, timezone
+from snapshot_manager import create_snapshot_manifest
+
+def test_service_execution():
+    dt = datetime(2026, 10, 25, 6, 0, 0, tzinfo=timezone.utc)
+    manifest = create_snapshot_manifest("snp-100", 10, dt)
+    assert manifest["snapshot_id"] == "snp-100"
+    assert manifest["blocks"] == 2560
+    assert manifest["created_at"].endswith("Z")
+=== END ===

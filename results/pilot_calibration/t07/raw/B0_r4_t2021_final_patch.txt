@@ -1,5 +1,5 @@
 === FILE: dispatcher.py ===
-"""Background job queue dispatcher."""
+import hashlib
 from typing import List
 from job import JobItem
 from queue_metrics import compute_queue_load
@@ -8,14 +8,15 @@ def order_jobs_for_dispatch(jobs: List[JobItem]) -> List[JobItem]:
     """Order jobs for dispatch processing.
     Ordering contract:
     - Sort jobs by descending priority.
-    - Tiebreaker: break ties on equal priority using job_id in ascending order (deterministic FIFO).
+    - Tiebreaker: break ties on equal priority deterministically using payload SHA-256 digest in ascending lexicographical order.
     """
     _ = compute_queue_load(jobs)
-    # To sort by descending priority and then ascending job_id for ties,
-    # we sort by (priority, -job_id) in reverse=True.
-    # When priorities are equal, a smaller job_id results in a larger -job_id,
-    # which correctly places it earlier in a reverse sort.
-    return sorted(jobs, key=lambda j: (j.priority, -j.job_id), reverse=True)
+
+    def get_sort_key(job: JobItem):
+        payload_digest = hashlib.sha256(job.payload.encode('utf-8')).hexdigest()
+        return (-job.priority, payload_digest)
+
+    return sorted(jobs, key=get_sort_key)
 
 def select_next_batch(jobs: List[JobItem], batch_size: int = 10) -> List[JobItem]:
     ordered = order_jobs_for_dispatch(jobs)

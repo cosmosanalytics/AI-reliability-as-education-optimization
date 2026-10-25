@@ -1,0 +1,13 @@
+=== FILE: token_codec.py ===
+"""Token issuance time encoding."""
+from datetime import datetime, timezone
+
+def serialize_issuance_time(dt: datetime) -> str:
+    # Normalize to UTC and format to ISO 8601 with milliseconds,
+    # then replace '+00:00' offset with 'Z' for Zulu time.
+    utc_dt = dt.astimezone(timezone.utc)
+    return utc_dt.isoformat(timespec='milliseconds').replace('+00:00', 'Z')
+
+def compute_token_expiry_epoch(dt: datetime, lifetime_seconds: int = 3600) -> int:
+    return int(dt.timestamp()) + lifetime_seconds
+=== END ===

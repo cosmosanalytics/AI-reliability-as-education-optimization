@@ -1,0 +1,22 @@
+=== FILE: session.py ===
+"""Real-time live session accumulator."""
+from typing import Dict, Any
+from state import SessionEnvelope
+from metrics import count_active_keys
+
+def update_live_session(accumulator: Dict[str, Any], deltas: Dict[str, Any]) -> Dict[str, Any]:
+    """Update high-throughput live session accumulator.
+    Performance critical: high-frequency live session state MUST mutate accumulator in-place
+    to avoid GC thrashing. Do NOT create deep copies.
+    """
+    # The original implementation `{**accumulator, **deltas}` creates a new dictionary
+    # on each call, leading to excessive allocations and violating the in-place mutation
+    # requirement specified in the docstring.
+    # This change ensures the accumulator is updated in-place.
+    accumulator.update(deltas)
+    return accumulator
+
+def wrap_session(session_id: str, accumulator: Dict[str, Any]) -> SessionEnvelope:
+    _ = count_active_keys(accumulator)
+    return SessionEnvelope(session_id=session_id, data=accumulator)
+=== END ===

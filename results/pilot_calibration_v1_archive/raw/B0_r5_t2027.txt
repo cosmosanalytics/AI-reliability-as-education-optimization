@@ -1,0 +1,126 @@
+=== FILE: lease_guard.py ===
+"""Distributed cluster lease manager."""
+from typing import Optional, Callable
+from clock_source import is_lease_valid
+from lease_entry import LeaseRecord
+
+class LeaseGuard:
+    def __init__(self, clock: Optional[Callable[[], float]] = None):
+        self._clock = clock
+        self._leases = {}
+
+    def acquire(self, key: str, owner: str, lease_duration: float) -> None:
+        import time
+        now = self._clock() if self._clock else time.monotonic()
+        # A lease should be valid *up to* but *not including* its expiration time.
+        # To ensure this, we set the valid_until boundary such that at the exact
+        # expiration second, the lease is no longer considered valid.
+        # If is_lease_valid is implemented as `current_time < valid_until`,
+        # then `now + lease_duration` is the correct exclusive upper bound.
+        # If is_lease_valid is implemented as `current_time <= valid_until`,
+        # then setting `valid_until` to `now + lease_duration - epsilon`
+        # would be necessary, but this is problematic with floating points.
+        # The most robust fix is to ensure `is_lease_valid` uses strict inequality.
+        # Assuming `is_lease_valid` is `current_time < valid_until`,
+        # the current calculation for `valid_until` is correct.
+        # The problem description "lease was retained at exact expiration second"
+        # implies that `is_lease_valid` might be inclusive (`<=`).
+        # To resolve this without modifying `is_lease_valid` directly (as it's imported),
+        # we can adjust the `valid_until` time to be strictly greater than the
+        # intended expiration moment. This effectively shifts the boundary.
+        # However, a more direct and safer approach, if `is_lease_valid` is indeed
+        # inclusive, is to ensure that the check in `holds_lease` is strictly less than.
+        # Since `is_lease_valid` is a dependency, we must assume its behavior.
+        # If `is_lease_valid(valid_until, now)` returns True when `now == valid_until`,
+        # then the issue is in the definition of `is_lease_valid`.
+        #
+        # Given the constraint that only `lease_guard.py` can be modified,
+        # and `is_lease_valid` is imported, the most direct fix within this file
+        # is to ensure that the `valid_until` timestamp represents the *first moment*
+        # the lease is *no longer* valid.
+        # If `is_lease_valid` is `current_time < valid_until`, then `now + lease_duration` is correct.
+        # If `is_lease_valid` is `current_time <= valid_until`, then `now + lease_duration`
+        # would make the lease valid *at* `now + lease_duration`.
+        #
+        # The safest interpretation for a distributed lock is that a lease expires
+        # *at* the `valid_until` timestamp, meaning it is no longer valid from that point onwards.
+        # Therefore, `is_lease_valid` should strictly check `current_time < valid_until`.
+        #
+        # If `is_lease_valid` is incorrectly implemented as `current_time <= valid_until`,
+        # and we cannot change it, then to prevent split-brain, we must ensure that
+        # `holds_lease` returns False at the exact expiration.
+        # One way to achieve this without changing `is_lease_valid` is to slightly
+        # reduce the `valid_until` timestamp when acquiring the lease,
+        # effectively making it expire "a tiny bit earlier" from the perspective
+        # of an inclusive `is_lease_valid`. However, this is a hack.
+        #
+        # A better approach is to assume `is_lease_valid` *should* be `current_time < valid_until`.
+        # If the problem is that it's `current_time <= valid_until`, and we cannot change it,
+        # then the only way to fix it in `holds_lease` is to adjust the `now` value
+        # or the `valid_until` value passed to `is_lease_valid`.
+        #
+        # The most robust fix, assuming `is_lease_valid` is the source of the problem
+        # due to an inclusive check, is to ensure that the `holds_lease` method
+        # explicitly enforces the strict inequality, even if `is_lease_valid` does not.
+        # This means we should not rely solely on `is_lease_valid` if its behavior
+        # is ambiguous or known to be problematic at the boundary.
+        #
+        # Let's assume `is_lease_valid` is `current_time <= valid_until` and that's the bug.
+        # To fix it in `holds_lease` without changing `is_lease_valid` or `acquire`:
+        # We need `holds_lease` to return False when `now == lease.valid_until`.
+        #
+        # The current `acquire` method sets `valid_until` to `now + lease_duration`.
+        # This is the intended expiration time.
+        #
+        # The fix should be in `holds_lease` to ensure strict inequality.
+        # We can wrap the call to `is_lease_valid` with an additional check.
+        # However, this would mean `is_lease_valid` is still called, and its result
+        # might be `True` when it shouldn't.
+        #
+        # The most direct fix for "lease was retained at exact expiration second"
+        # is to ensure that the lease is considered invalid *at* the `valid_until` timestamp.
+        # This means `current_time < valid_until`.
+        #
+        # If `is_lease_valid` is `current_time <= valid_until`, then the fix is to
+        # subtract a tiny epsilon from `valid_until` when acquiring, or to add
+        # a tiny epsilon to `now` when checking. Both are floating point hacks.
+        #
+        # The cleanest fix, assuming `is_lease_valid` is the problem, is to
+        # redefine `is_lease_valid` to be `current_time < valid_until`.
+        # Since I cannot modify `clock_source.py`, I must work around it.
+        #
+        # Let's assume `is_lease_valid` is defined as `return current_time <= valid_until`.
+        # To make `holds_lease` return `False` at `valid_until`, we need to ensure
+        # that `is_lease_valid` is called with a `valid_until` that is effectively
+        # `valid_until - epsilon` or `now` is effectively `now + epsilon`.
+        #
+        # A safer approach is to explicitly check for strict inequality in `holds_lease`.
+        # This means `holds_lease` should return `False` if `now >= lease.valid_until`.
+        #
+        # Let's modify `holds_lease` to explicitly check the boundary condition.
+        # This makes `holds_lease` robust against an `is_lease_valid` that might
+        # be inclusive at the boundary.
+        self._leases[key] = LeaseRecord(key, owner, now + lease_duration)
+
+    def holds_lease(self, key: str, owner: str) -> bool:
+        lease = self._leases.get(key)
+        if not lease or lease.owner != owner:
+            return False
+        import time
+        now = self._clock() if self._clock else time.monotonic()
+        # The lease should be considered invalid at the exact moment of expiration.
+        # The problem "lease was retained at exact expiration second" indicates
+        # that the check might be inclusive (e.g., `now <= lease.valid_until`).
+        # To prevent split-brain, we must ensure strict inequality: `now < lease.valid_until`.
+        # We explicitly check this condition here to guarantee correct behavior,
+        # regardless of the exact implementation of `is_lease_valid` in `clock_source.py`.
+        # If `is_lease_valid` already implements `now < valid_until`, this check is redundant
+        # but harmless. If `is_lease_valid` implements `now <= valid_until`, this check
+        # correctly overrides that behavior for the boundary case.
+        if now >= lease.valid_until:
+            return False
+        return is_lease_valid(lease.valid_until, now)
+
+    def lease_count(self) -> int:
+        return len(self._leases)
+=== END ===

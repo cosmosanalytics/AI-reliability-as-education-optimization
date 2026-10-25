@@ -37,10 +37,10 @@ if __name__ == "__main__":
     n_t07 = 5
     total_attempts = len(tasks) * (n_t0 + n_t07)
     
-    print(f"=== PILOT CALIBRATION ROUND 2: REDEFINED B0 (Round 13 Scope) ===")
-    print(f"Tasks: {len(tasks)} (suite_e5, all 28 tasks)")
+    print(f"=== PILOT CALIBRATION: REDEFINED B0 (Expanded Suite E5) ===")
+    print(f"Tasks: {len(tasks)} (suite_e5, all {len(tasks)} tasks)")
     print(f"B0 Definition: Full repo in prompt + ticket + failing excerpt (E1)")
-    print(f"Temperature profiles: T=0.0 (1 run = 28 att) + T=0.7 (5 runs = 140 att)")
+    print(f"Temperature profiles: T=0.0 (1 run = {len(tasks)} att) + T=0.7 (5 runs = {len(tasks)*n_t07} att)")
     print(f"Total attempts: {total_attempts}")
     
     # Estimate tokens and cost
@@ -64,8 +64,8 @@ if __name__ == "__main__":
     except Exception:
         git_sha = "unknown"
 
-    # Profile 1: T=0.0 (1 run, 28 attempts)
-    print("--- [1/2] Executing T=0.0 Baseline Run (28 attempts) ---")
+    # Profile 1: T=0.0
+    print(f"--- [1/2] Executing T=0.0 Baseline Run ({len(tasks)} attempts) ---")
     out_dir_t0 = os.path.join(repo_root, "results", "pilot_calibration", "t0")
     rows_t0 = agent_runner.run_experiment(
         tasks=tasks,
@@ -82,8 +82,8 @@ if __name__ == "__main__":
     )
     print(f"T=0.0 completed: {len(rows_t0)} rows.")
 
-    # Profile 2: T=0.7 (5 runs, 140 attempts)
-    print("\n--- [2/2] Executing T=0.7 Baseline Repeated Runs (140 attempts) ---")
+    # Profile 2: T=0.7
+    print(f"\n--- [2/2] Executing T=0.7 Baseline Repeated Runs ({len(tasks)*n_t07} attempts) ---")
     out_dir_t07 = os.path.join(repo_root, "results", "pilot_calibration", "t07")
     rows_t07 = agent_runner.run_experiment(
         tasks=tasks,
@@ -100,4 +100,4 @@ if __name__ == "__main__":
     )
     print(f"T=0.7 completed: {len(rows_t07)} rows.")
     
-    print(f"\nAll Pilot Calibration runs completed: 28 (T=0.0) + 140 (T=0.7) = {len(rows_t0) + len(rows_t07)} total attempts.")
+    print(f"\nAll Pilot Calibration runs completed: {len(rows_t0)} (T=0.0) + {len(rows_t07)} (T=0.7) = {len(rows_t0) + len(rows_t07)} total attempts.")

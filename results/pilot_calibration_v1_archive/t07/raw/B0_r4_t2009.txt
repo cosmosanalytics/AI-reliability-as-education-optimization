@@ -1,0 +1,30 @@
+=== FILE: intervals.py ===
+"""Billing period interval membership checker."""
+from datetime import datetime
+from calendar_models import BillingWindow
+from formatters import format_window_label
+
+def is_timestamp_in_billing_period(window: BillingWindow, target_dt: datetime) -> bool:
+    """Check if target timestamp falls within the billing window.
+    Interval convention: half-open interval [start, end), where start is inclusive and end is exclusive.
+    """
+    return window.start_dt <= target_dt < window.end_dt
+=== END ===
+=== FILE: tests/test_intervals.py ===
+from datetime import datetime
+from calendar_models import BillingWindow
+from intervals import is_timestamp_in_billing_period
+
+def test_strictly_inside():
+    w = BillingWindow(datetime(2026, 1, 1), datetime(2026, 2, 1))
+    assert is_timestamp_in_billing_period(w, datetime(2026, 1, 15)) is True
+    assert is_timestamp_in_billing_period(w, datetime(2026, 2, 15)) is False
+
+def test_start_inclusive():
+    w = BillingWindow(datetime(2026, 1, 1), datetime(2026, 2, 1))
+    assert is_timestamp_in_billing_period(w, datetime(2026, 1, 1)) is True
+
+def test_end_exclusive():
+    w = BillingWindow(datetime(2026, 1, 1), datetime(2026, 2, 1))
+    assert is_timestamp_in_billing_period(w, datetime(2026, 2, 1)) is False
+=== END ===

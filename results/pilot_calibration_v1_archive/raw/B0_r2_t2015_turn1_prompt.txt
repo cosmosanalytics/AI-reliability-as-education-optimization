@@ -1,0 +1,27 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Monitoring report MON-409: SQL query telemetry export crashed BI import parser due to unescaped double quotes inside query metric labels.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_exporter_cases.py::test_metric_quote_escaping - AssertionError: assert 'query,SELECT * FROM \\"users\\"' == 'query,"SELECT * FROM ""users"""'
+
+REPOSITORY FILES:
+=== FILE: exporter.py ===
+"""Metric telemetry exporter."""
+from typing import List
+from sanitizer import sanitize_cell
+from metric import MetricEntry
+
+def format_metric_row(entry: MetricEntry) -> str:
+    """Format single metric row into CSV line."""
+    return f"{sanitize_cell(entry.key)},{sanitize_cell(entry.value_label)}"
+
+def export_metric_batch(metrics: List[MetricEntry]) -> str:
+    return "\n".join(format_metric_row(m) for m in metrics)
+
+def export_with_header(metrics: List[MetricEntry]) -> str:
+    header = "metric_key,value_label"
+    rows = export_metric_batch(metrics)
+    return f"{header}\n{rows}" if rows else header
+=== END ===

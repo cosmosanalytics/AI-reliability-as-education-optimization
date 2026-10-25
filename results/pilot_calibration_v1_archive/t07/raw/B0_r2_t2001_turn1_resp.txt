@@ -1,0 +1,228 @@
+=== FILE: models.py ===
+"""Data models for commerce order line items."""
+from dataclasses import dataclass, field
+from typing import List, Dict, Any, Optional
+
+@dataclass
+class LineItem:
+    sku: str
+    price_cents: int
+    quantity: int = 1
+    vat_jurisdiction_code: Optional[str] = None # Added field for variable VAT rates
+
+    def subtotal(self) -> int:
+        return self.price_cents * self.quantity
+
+@dataclass
+class DetailedLineItem: # New dataclass to hold calculated tax for each line item
+    sku: str
+    price_cents: int
+    quantity: int
+    subtotal_cents: int
+    vat_jurisdiction_code: Optional[str]
+    vat_rate: float
+    tax_cents: int
+    gross_cents: int
+
+@dataclass
+class OrderSummary:
+    order_id: str
+    items: List[DetailedLineItem] # Changed type to DetailedLineItem
+    net_cents: int
+    tax_cents: int
+    gross_cents: int
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "order_id": self.order_id,
+            "net_cents": self.net_cents,
+            "tax_cents": self.tax_cents,
+            "gross_cents": self.gross_cents,
+            "items": [
+                {
+                    "sku": item.sku,
+                    "price_cents": item.price_cents,
+                    "quantity": item.quantity,
+                    "subtotal_cents": item.subtotal_cents,
+                    "vat_jurisdiction_code": item.vat_jurisdiction_code,
+                    "vat_rate": item.vat_rate,
+                    "tax_cents": item.tax_cents,
+                    "gross_cents": item.gross_cents,
+                }
+                for item in self.items
+            ],
+        }
+=== END ===
+=== FILE: tax_engine.py ===
+"""Low-level tax rate computation engine."""
+from typing import Dict, Any
+
+DEFAULT_TAX_JURISDICTIONS = {
+    "standard": 0.20,
+    "reduced": 0.10,
+    "exempt": 0.0,
+}
+
+def get_rate_for_jurisdiction(code: str) -> float:
+    # Changed default to "standard" rate (0.20) as per common practice if code is not found
+    return DEFAULT_TAX_JURISDICTIONS.get(code, DEFAULT_TAX_JURISDICTIONS["standard"])
+
+def calculate_vat(net_cents: int, vat_rate: float) -> int:
+    """Compute VAT in integer cents for given net amount using banker's rounding."""
+    # Implemented banker's rounding (round half to even)
+    return round(net_cents * vat_rate)
+=== END ===
+=== FILE: pricing.py ===
+"""Order pricing calculation with itemized taxes."""
+from typing import List, Tuple, Optional
+from models import LineItem, OrderSummary, DetailedLineItem # Added DetailedLineItem
+from tax_engine import calculate_vat, get_rate_for_jurisdiction
+
+def calculate_order_total(items_data: List[Tuple[int, int, Optional[str]]], order_id: str = "ORD-001") -> OrderSummary:
+    """Calculate order total including tax, with itemized tax calculation.
+    items_data: list of (price_cents, quantity, vat_jurisdiction_code).
+    Returns OrderSummary.
+    Tax calculation must use banker's rounding (round half to even) on exact half-cents.
+    """
+    all_detailed_items: List[DetailedLineItem] = []
+    total_net = 0
+    total_tax = 0
+
+    for i, (price, quantity, jurisdiction_code) in enumerate(items_data):
+        line_item = LineItem(sku=f"SKU-{i+1}", price_cents=price, quantity=quantity, vat_jurisdiction_code=jurisdiction_code)
+        
+        item_subtotal = line_item.subtotal()
+        
+        # Get VAT rate for the specific line item's jurisdiction
+        item_vat_rate = get_rate_for_jurisdiction(jurisdiction_code) if jurisdiction_code else get_rate_for_jurisdiction("standard")
+        
+        item_tax = calculate_vat(item_subtotal, item_vat_rate)
+        item_gross = item_subtotal + item_tax
+
+        detailed_item = DetailedLineItem(
+            sku=line_item.sku,
+            price_cents=line_item.price_cents,
+            quantity=line_item.quantity,
+            subtotal_cents=item_subtotal,
+            vat_jurisdiction_code=line_item.vat_jurisdiction_code,
+            vat_rate=item_vat_rate,
+            tax_cents=item_tax,
+            gross_cents=item_gross
+        )
+        all_detailed_items.append(detailed_item)
+        
+        total_net += item_subtotal
+        total_tax += item_tax
+    
+    total_gross = total_net + total_tax
+    
+    return OrderSummary(
+        order_id=order_id,
+        items=all_detailed_items,
+        net_cents=total_net,
+        tax_cents=total_tax,
+        gross_cents=total_gross
+    )
+=== END ===
+=== FILE: tests/test_pricing.py ===
+from pricing import calculate_order_total
+from tax_engine import DEFAULT_TAX_JURISDICTIONS
+
+def test_single_item():
+    # Adjusted input format to include jurisdiction code
+    summary = calculate_order_total([(100, 1, "standard")])
+    assert summary.net_cents == 100
+    assert summary.tax_cents == 20
+    assert summary.gross_cents == 120
+    assert len(summary.items) == 1
+    assert summary.items[0].tax_cents == 20
+
+def test_multi_item():
+    # Adjusted input format to include jurisdiction code
+    # Using 'reduced' rate for all items for consistency with original test logic
+    summary = calculate_order_total([(100, 2, "reduced"), (200, 1, "reduced")])
+    assert summary.net_cents == 400
+    assert summary.tax_cents == 40 # (100*2 * 0.10) + (200*1 * 0.10) = 20 + 20 = 40
+    assert summary.gross_cents == 440
+    assert len(summary.items) == 2
+    assert summary.items[0].tax_cents == 20 # (100 * 2) * 0.10 = 20
+    assert summary.items[1].tax_cents == 20 # (200 * 1) * 0.10 = 20
+
+def test_itemized_vat_with_variable_rates():
+    # Test case for variable VAT rates and banker's rounding
+    # Item 1: 100 cents * 1, standard rate (0.20) -> net 100, tax 20
+    # Item 2: 125 cents * 1, reduced rate (0.10) -> net 125, tax round(125*0.10) = round(12.5) = 12 (banker's rounding)
+    # Item 3: 135 cents * 1, exempt rate (0.00) -> net 135, tax 0
+    
+    items_data = [
+        (100, 1, "standard"),
+        (125, 1, "reduced"),
+        (135, 1, "exempt"),
+    ]
+    summary = calculate_order_total(items_data, order_id="ORD-002")
+
+    expected_total_net = 100 + 125 + 135  # 360
+    expected_item1_tax = round(100 * DEFAULT_TAX_JURISDICTIONS["standard"]) # 20
+    expected_item2_tax = round(125 * DEFAULT_TAX_JURISDICTIONS["reduced"])  # round(12.5) = 12
+    expected_item3_tax = round(135 * DEFAULT_TAX_JURISDICTIONS["exempt"])  # 0
+    expected_total_tax = expected_item1_tax + expected_item2_tax + expected_item3_tax # 20 + 12 + 0 = 32
+    expected_total_gross = expected_total_net + expected_total_tax # 360 + 32 = 392
+
+    assert summary.net_cents == expected_total_net
+    assert summary.tax_cents == expected_total_tax
+    assert summary.gross_cents == expected_total_gross
+
+    assert len(summary.items) == 3
+    assert summary.items[0].sku == "SKU-1"
+    assert summary.items[0].subtotal_cents == 100
+    assert summary.items[0].vat_rate == DEFAULT_TAX_JURISDICTIONS["standard"]
+    assert summary.items[0].tax_cents == 20
+    assert summary.items[0].gross_cents == 120
+
+    assert summary.items[1].sku == "SKU-2"
+    assert summary.items[1].subtotal_cents == 125
+    assert summary.items[1].vat_rate == DEFAULT_TAX_JURISDICTIONS["reduced"]
+    assert summary.items[1].tax_cents == 12 # This is the key: round(12.5) -> 12
+    assert summary.items[1].gross_cents == 137
+
+    assert summary.items[2].sku == "SKU-3"
+    assert summary.items[2].subtotal_cents == 135
+    assert summary.items[2].vat_rate == DEFAULT_TAX_JURISDICTIONS["exempt"]
+    assert summary.items[2].tax_cents == 0
+    assert summary.items[2].gross_cents == 135
+
+def test_bankers_rounding_half_up():
+    # Test case where rounding .5 should go to the nearest even number
+    # 13.5 -> 14
+    items_data = [(135, 1, "reduced")] # 135 * 0.10 = 13.5
+    summary = calculate_order_total(items_data)
+    assert summary.tax_cents == 14 # round(13.5) == 14
+    assert summary.items[0].tax_cents == 14
+
+def test_bankers_rounding_half_down():
+    # Test case where rounding .5 should go to the nearest even number
+    # 12.5 -> 12
+    items_data = [(125, 1, "reduced")] # 125 * 0.10 = 12.5
+    summary = calculate_order_total(items_data)
+    assert summary.tax_cents == 12 # round(12.5) == 12
+    assert summary.items[0].tax_cents == 12
+
+def test_missing_jurisdiction_defaults_to_standard():
+    # If jurisdiction is None or not provided, it should default to 'standard'
+    items_data = [
+        (100, 1, None), # Should use standard rate
+        (200, 1, "reduced")
+    ]
+    summary = calculate_order_total(items_data)
+    
+    assert summary.items[0].vat_rate == DEFAULT_TAX_JURISDICTIONS["standard"]
+    assert summary.items[0].tax_cents == 20 # 100 * 0.20 = 20
+    
+    assert summary.items[1].vat_rate == DEFAULT_TAX_JURISDICTIONS["reduced"]
+    assert summary.items[1].tax_cents == 20 # 200 * 0.10 = 20
+    
+    assert summary.net_cents == 300
+    assert summary.tax_cents == 40
+    assert summary.gross_cents == 340
+=== END ===
+=== DELETE: tests/test_pricing_cases.py ===

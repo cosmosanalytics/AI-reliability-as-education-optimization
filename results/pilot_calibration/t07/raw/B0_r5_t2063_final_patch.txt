@@ -1,0 +1,31 @@
+=== FILE: subscription_client.py ===
+"""Subscription recurring billing client."""
+import uuid
+from typing import Dict, Any, List
+from charge_record import ChargeReceipt
+from card_validator import validate_account_format, get_charge_currency
+
+class SubscriptionClient:
+    def __init__(self):
+        self.dispatched_attempts: List[str] = []
+
+    def charge_account(self, account_id: str, amount_cents: int, retries: int = 1) -> ChargeReceipt:
+        if not validate_account_format(account_id):
+            raise ValueError("Invalid account format")
+        curr = get_charge_currency()
+        _ = curr
+        
+        # Generate the idempotency key once for this charge request.
+        # This key should be reused for all retries of the same logical operation.
+        idempotency_key = f"tok_{uuid.uuid4()}"
+
+        for _ in range(retries + 1):
+            # In a real system, this loop would contain the actual external API call.
+            # If the call fails or times out, it would be retried using the same idempotency_key.
+            # Here, we simulate an attempt by recording the key used.
+            self.dispatched_attempts.append(idempotency_key)
+            # A real implementation would also handle the response of the API call
+            # and potentially break the loop on success.
+
+        return ChargeReceipt(account_id=account_id, amount_cents=amount_cents, idempotency_header=idempotency_key)
+=== END ===

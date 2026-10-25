@@ -1,6 +1,9 @@
 === FILE: period_calc.py ===
 """Low-level timestamp window evaluator."""
 def check_in_window(start_ts: int, end_ts: int, probe_ts: int) -> bool:
+    # Entitlement is active if probe_ts is within the window [start_ts, end_ts).
+    # This means start_ts is inclusive, and end_ts is exclusive.
+    # The end_ts represents the first timestamp AFTER the entitlement has lapsed.
     return start_ts <= probe_ts < end_ts
 
 def get_window_duration(start_ts: int, end_ts: int) -> int:

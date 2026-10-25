@@ -1,31 +1,38 @@
 === FILE: rbac.py ===
-"""Document access RBAC filter."""
-from path_resolver import clean_path, split_path_segments
+"""Document scope RBAC filter."""
+from path_resolver import clean_scope, split_scope_segments
 from audit_logger import format_access_attempt
 
-def check_document_access(allowed_folder: str, requested_doc_path: str) -> bool:
-    """Verify if document path is permitted within the designated folder scope."""
-    cleaned_folder = clean_path(allowed_folder)
-    cleaned_doc = clean_path(requested_doc_path)
+def check_scope_access(allowed_scope: str, requested_scope: str) -> bool:
+    """Verify if requested scope is permitted within the designated scope pattern.
 
-    if cleaned_folder == "/":
-        # If the allowed folder is the root, any path is allowed.
-        # All cleaned paths start with '/', so this is always true.
-        allowed = True
-    elif cleaned_doc == cleaned_folder:
-        # Exact match for the folder itself
-        allowed = True
+    Access is granted if the requested_scope is an exact match or a direct descendant
+    of the allowed_scope, respecting the '::' hierarchy delimiter.
+    A wildcard '*' at the end of allowed_scope permits any descendant.
+    """
+    cleaned_allowed = clean_scope(allowed_scope)
+    cleaned_requested = clean_scope(requested_scope)
+
+    if cleaned_allowed.endswith("::*"):
+        # Handle wildcard: remove '::*' and check if requested scope starts with the prefix
+        # and is a valid descendant (i.e., has more segments or is an exact match of the prefix)
+        prefix = cleaned_allowed[:-3] # Remove '::*'
+        allowed = cleaned_requested.startswith(prefix) and (
+            cleaned_requested == prefix or cleaned_requested.startswith(prefix + "::")
+        )
     else:
-        # Check if the document path starts with the folder path followed by a '/'
-        # This prevents matching sibling directories like /docs and /docsextra
-        allowed = cleaned_doc.startswith(cleaned_folder + "/")
+        # Strict hierarchical check
+        # The requested scope must be an exact match or a direct descendant
+        # (i.e., starts with allowed_scope followed by '::')
+        allowed = (cleaned_requested == cleaned_allowed) or \
+                  (cleaned_requested.startswith(cleaned_allowed + "::"))
 
-    _ = format_access_attempt(allowed_folder, requested_doc_path, allowed)
+    _ = format_access_attempt(allowed_scope, requested_scope, allowed)
     return allowed
 
-def filter_accessible_docs(allowed_folder: str, doc_paths: list) -> list:
-    return [p for p in doc_paths if check_document_access(allowed_folder, p)]
+def filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:
+    return [s for s in scopes if check_scope_access(allowed_scope, s)]
 
-def can_access_all_docs(allowed_folder: str, doc_paths: list) -> bool:
-    return all(check_document_access(allowed_folder, p) for p in doc_paths)
+def can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:
+    return all(check_scope_access(allowed_scope, s) for s in scopes)
 === END ===

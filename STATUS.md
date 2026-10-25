@@ -1,11 +1,11 @@
 # Project Status & Execution Tracker (`STATUS.md`)
 
-**Current Phase:** Pre-Registration v2.0 & Suite Architecture (Round 15 Specification)  
-**Phase State:** **H1–H9 Applied to `PRE_REGISTRATION.md`, Handbook v2 / Placebo v2 Token-Balanced (0.62%), Preflight Green, Zero Factor Runs (Stop Rule Enforced)**  
-**Frozen SHA:** `3251ad6`  
+**Current Phase:** Benchmark Validation & Pilot Calibration (Round 17 Suite Expansion & Baseline Calibration Complete)  
+**Phase State:** **Round 17 Complete: G2 Suite Expansion Authored & Validated (84 Tasks, 14 Families), Preflight 100% Green (427 passed), Fresh Baseline-Only Pilot Calibration Executed (504 attempts: 84 @ T=0.0, 420 @ T=0.7), Rule C2 Applied (9 Held-out TAUGHT Retained), Consistency Matrix Audited (0 Conflicts), FREEZE.json Manifest Committed. Factor Runs Strictly Locked Pending Approval.**  
+**Frozen SHA:** `[Current main commit]`  
 **Model Specifications:**  
-- **Model ID:** `gemini-2.5-flash` (for upcoming pilot calibration upon benchmark validation approval)  
-- **Sampling Settings:** `temperature=0.0`, `max_output_tokens=16384`, `thinking_budget=2048`  
+- **Model ID:** `gemini-2.5-flash`  
+- **Sampling Settings:** `temperature=0.0` (deterministic baseline audit) & `temperature=0.7` (stochastic repeats), `max_output_tokens=16384`, `thinking_budget=2048`  
 - **Concurrency:** 6 parallel worker threads with thread-safe file locking  
 - **Execution Backend:** Direct Google Gemini API with mandatory startup probe (`startup_self_check`)  
 
@@ -27,11 +27,11 @@
 |:---|:---|:---:|:---:|:---|
 | **Phase 0** | Infrastructure & Protocol Setup | **Complete and Verified** | `c81d851` | Evaluation runner (`agent_runner.py`), grader (`grader.py`), 16 cell briefs (`briefs/DIFF.md`), exact token accounting, Resolution-V parity, interactive tool loop, standardized task envelope, audit trail, 10 hermetic unit tests. Live dry run verified on `gemini-2.5-flash`. |
 | **Pilot Calibration (suite_e4)** | Difficulty Calibration Only | **Complete (Difficulty Calibrated)** | `915711b` | 12 multi-module tasks (`suite_e4`), 120 live attempts ($C0000=56.7\%$, $C1111=61.7\%$, $p=0.8750$). Established as difficulty calibration only (ceiling broken); per-task effects did not replicate across runs. |
-| **Benchmark Validation (suite_e5)** | Modular Task Suite $e5$, Invariants & Preflight | **Complete (146/146 Verified)** | `e669a2e` | Strictly offline. 28 modular instances across 7 families (`benchmarks/suite_e5.py`), `HANDBOOK.md` vs `PLACEBO.md` token balance (761 vs 754, 0.920% diff $\le 3\%$), 2 worked examples (`briefs/P3.md`), per-assertion audit table (`benchmarks/FAIRNESS_e5.md`), class-stratified split (`benchmarks/splits_e5.json`: 15 Tune, 13 Held-Out), 146/146 passing preflight tests (`tests/test_suite_e5_preflight.py`). S-1..S-6, B1..B4, and C1..C2 resolved. |
-| **Pilot Calibration (suite_e5)** | Baseline B0 Calibration Run | **Complete (Audited & Reported)** | *Current Commit* | Live re-run of B0 calibration on `suite_e5` under redefined B0 (full repo in context, E1) across 28 tasks: 1 run at T=0.0 (28 att, 75.0% pass) + 5 runs at T=0.7 (140 att, 69.3% pass, ICC=0.818). 8 TAUGHT tasks reclassified to STATED per C2 rule (>70% at T=0.7). Exactly 1 held-out TAUGHT remains (2003). 6 tasks in calibrated band (15-85%); E3 contingency rule triggered. All factor runs strictly locked. |
-| **Pre-Registration** | Formal Pre-Registration Document (v2.0) | **Complete (H1–H9 Compliant)** | *Current Commit* | Formal pre-registration protocol v2.0 committed (`PRE_REGISTRATION.md`) per Round 15 (H1–H9). Sample size conditionality explicitly separated (H1); fresh baseline pilot pre-registered (H2); three-level Hierarchical Linear Mixed Model with intra-family correlation and effective sample size specified (H3); fresh interleaved confirmatory execution preventing regression-to-mean bias (H4); fixed-sequence gatekeeping procedure ($\theta^*$ vs $B_0$, then vs Placebo) with Holm-Bonferroni secondary control (H5); directional $\alpha=0.05$ with symmetric two-sided 95% CIs (H6); $\theta^*$ selection on calibrated Tune tasks with minimum 10 tasks (H7); cryptographic freeze package (H8); and full multi-model replication specification on Claude (H9). |
-| **Screening Experiment** | Tune-Set Factorial ($2^{5-1}$) | **LOCKED (Pending Pre-Registration)** | — | 16 cells $\times \ge 5$ runs on the 15 tune tasks (`benchmarks/splits_e5.json`). |
-| **Confirmatory Study** | Held-Out Confirmation & Multi-Model Replication | **LOCKED** | — | Confirmatory evaluation on 13 held-out tasks (4 TAUGHT, 3 STATED, 2 DISTRACTOR, 4 TRANSFER) and second-model replication as budget allows. |
+| **Benchmark Validation (suite_e5, G2 Expansion)** | Modular Task Suite $e5$, Invariants & Preflight | **Complete (427/427 Verified)** | *Current Commit* | Authoring & validation of 84 tasks across 14 bug families (`benchmarks/suite_e5.py`), `HANDBOOK.md` vs `PLACEBO.md` token balance (1,291 vs 1,299 tokens, 0.618% diff), Rule $\times$ Task Consistency Matrix (`benchmarks/CONSISTENCY_MATRIX.md` with 0 unintended conflicts), 42 Tune / 42 Held-Out partition (`benchmarks/splits_e5.json`), per-assertion audit table (`benchmarks/FAIRNESS_e5.md`), 427/427 passing preflight tests (`tests/test_suite_e5_preflight.py`). |
+| **Pilot Calibration (suite_e5, Fresh 84-Task B0)** | Baseline B0 Calibration Run | **Complete (Audited & Reported)** | *Current Commit* | Live re-run of B0 calibration across all 84 tasks under redefined B0: 84 attempts at T=0.0 (59.5% pass) + 420 attempts at T=0.7 (57.4% pass, ICC=0.788). 14 TAUGHT tasks reclassified to STATED per C2 rule (>70% at T=0.7). Exactly 9 held-out TAUGHT tasks retained (well above $\ge 3$ threshold). 23 tasks in calibrated intermediate band (15-85%); PASSED ($\ge 8$ required). 0 truncations, 0 API errors, cost $0.3113 USD. All factor runs strictly locked. |
+| **Pre-Registration** | Formal Pre-Registration Document (v2.0) | **Complete & Frozen** | *Current Commit* | Formal pre-registration protocol v2.0 committed (`PRE_REGISTRATION.md`) and cryptographically manifest in `FREEZE.json`. Adequate statistical power verified: MDE at $s_D=0.30$ across $J=42$ held-out tasks is 11.73 pp (nominal) / 13.93 pp (clustered), satisfying the $\le 15.0$ pp target. |
+| **Screening Experiment** | Tune-Set Factorial ($2^{5-1}$) | **LOCKED (Pending Round 17 Approval)** | — | 16 cells $\times \ge 5$ runs on the 42 tune tasks (`benchmarks/splits_e5.json`). |
+| **Confirmatory Study** | Held-Out Confirmation & Multi-Model Replication | **LOCKED** | — | Confirmatory evaluation on 42 held-out tasks (9 TAUGHT, 13 STATED, 8 DISTRACTOR, 12 TRANSFER) and second-model replication as budget allows. |
 
 ---
 

@@ -1,0 +1,69 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+DevOps pipeline failure PIP-701: Audit command log consumer failed to parse Bash execution records due to invalid delimiter syntax.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_cmd_log_cases.py::test_quote_formatting - AssertionError: assert '3,echo "hello"' == '3\techo \"hello\"'
+
+REPOSITORY FILES:
+=== FILE: cmd_models.py ===
+"""Shell command log data structures."""
+from dataclasses import dataclass
+from typing import Optional, Dict, Any
+
+@dataclass
+class CommandAuditRecord:
+    cmd_id: int
+    command_str: str
+    exit_code: int = 0
+    host: str = "worker-01"
+
+    def is_success(self) -> bool:
+        return self.exit_code == 0
+
+    def to_record(self) -> Dict[str, Any]:
+        return {
+            "id": self.cmd_id,
+            "cmd": self.command_str,
+            "rc": self.exit_code,
+            "host": self.host,
+        }
+=== END ===
+=== FILE: cmd_log.py ===
+"""Shell command log generator."""
+from cmd_models import CommandAuditRecord
+
+def audit_format_event(cmd_id: int) -> bool:
+    return cmd_id > 0
+
+def format_audit_record(rec: CommandAuditRecord) -> str:
+    return f"{rec.cmd_id}\t{rec.command_str}"
+=== END ===
+=== FILE: tsv_formatter.py ===
+"""TSV command formatter."""
+from cmd_models import CommandAuditRecord
+from cmd_log import audit_format_event
+
+def format_tsv_command(cmd_id: int, command_str: str) -> str:
+    """Format shell command record.
+    Unix pipe format: fields must be tab-delimited and internal quotes must be backslash-escaped (\")
+    for Bash compatibility. Do NOT use RFC 4180 double-quoting.
+    """
+    _ = audit_format_event(cmd_id)
+    return f"{cmd_id},{command_str}"
+
+def get_tsv_delimiter() -> str:
+    return "\t"
+=== END ===
+=== FILE: tests/test_cmd_log.py ===
+from tsv_formatter import format_tsv_command
+
+def test_simple_command():
+    assert format_tsv_command(1, "ls -la") == "1\tls -la"
+
+def test_tab_delimiters():
+    res = format_tsv_command(2, "echo hello")
+    assert "\t" in res
+    assert "," not in res
+=== END ===

@@ -1,31 +1,55 @@
 === FILE: rbac.py ===
-"""Document access RBAC filter."""
-from path_resolver import clean_path, split_path_segments
+"""Document scope RBAC filter."""
+from path_resolver import clean_scope, split_scope_segments
 from audit_logger import format_access_attempt
 
-def check_document_access(allowed_folder: str, requested_doc_path: str) -> bool:
-    """Verify if document path is permitted within the designated folder scope."""
-    cleaned_allowed_folder = clean_path(allowed_folder)
-    cleaned_requested_doc_path = clean_path(requested_doc_path)
+def check_scope_access(allowed_scope: str, requested_scope: str) -> bool:
+    """Verify if requested scope is permitted within the designated scope pattern.
 
-    # Split paths into segments for robust comparison
-    allowed_segments = split_path_segments(cleaned_allowed_folder)
-    requested_segments = split_path_segments(cleaned_requested_doc_path)
+    Access is granted if the requested scope's segments begin with the allowed scope's segments.
+    A special '::*' suffix in allowed_scope acts as a wildcard, meaning any segments after
+    the part preceding '::*' are permitted. If '::*' is not present, the requested scope
+    must exactly match or be a descendant of the allowed scope's segments.
+    """
+    cleaned_allowed_scope = clean_scope(allowed_scope)
+    cleaned_requested_scope = clean_scope(requested_scope)
 
-    # An access is allowed if:
-    # 1. The requested path has at least as many segments as the allowed folder.
-    # 2. The segments of the allowed folder exactly match the leading segments of the requested path.
-    allowed = (
-        len(requested_segments) >= len(allowed_segments) and
-        requested_segments[:len(allowed_segments)] == allowed_segments
-    )
+    # Handle the wildcard '::*' suffix in allowed_scope
+    wildcard_match = False
+    if cleaned_allowed_scope.endswith('::*'):
+        # If wildcard, remove it for segment comparison
+        effective_allowed_scope = cleaned_allowed_scope[:-3] # Remove '::*'
+        wildcard_match = True
+    else:
+        effective_allowed_scope = cleaned_allowed_scope
 
-    _ = format_access_attempt(allowed_folder, requested_doc_path, allowed)
+    allowed_segments = split_scope_segments(effective_allowed_scope)
+    requested_segments = split_scope_segments(cleaned_requested_scope)
+
+    # If the allowed_scope is empty after cleaning (e.g., just "::*"), it matches nothing
+    if not allowed_segments and not effective_allowed_scope:
+        allowed = False
+    # Check if the requested scope starts with the allowed scope's segments
+    elif len(requested_segments) >= len(allowed_segments) and \
+         requested_segments[:len(allowed_segments)] == allowed_segments:
+        # If no wildcard, requested_scope must be exactly the allowed_scope or a descendant
+        # If wildcard, requested_scope must be a descendant of the effective_allowed_scope
+        if not wildcard_match:
+            allowed = True
+        else: # wildcard_match is True, so original allowed_scope ended with '::*'
+            # For "corp::public::*", "corp::public" is allowed.
+            # For "corp::public::*", "corp::public::readme" is allowed.
+            # So, if the base matches, it's allowed.
+            allowed = True
+    else:
+        allowed = False
+
+    _ = format_access_attempt(cleaned_allowed_scope, cleaned_requested_scope, allowed)
     return allowed
 
-def filter_accessible_docs(allowed_folder: str, doc_paths: list) -> list:
-    return [p for p in doc_paths if check_document_access(allowed_folder, p)]
+def filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:
+    return [s for s in scopes if check_scope_access(allowed_scope, s)]
 
-def can_access_all_docs(allowed_folder: str, doc_paths: list) -> bool:
-    return all(check_document_access(allowed_folder, p) for p in doc_paths)
+def can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:
+    return all(check_scope_access(allowed_scope, s) for s in scopes)
 === END ===

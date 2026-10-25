@@ -1,19 +1,14 @@
 === FILE: sanitizer.py ===
-"""CSV cell sanitizer."""
+"""TSV cell sanitizer."""
+from typing import Optional
+
+def sanitize_cell(text: Optional[str]) -> str:
+    if text is None:
+        return ""
+    # The audit parser expects backslash escaping for double quotes.
+    # The original implementation used "" for escaping, which caused the parser to crash.
+    return text.replace('"', '\\"')
+
 def requires_sanitization(text: str) -> bool:
-    # A cell needs sanitization if it contains a comma, newline, or double quote.
-    # If it contains a double quote, it must be enclosed and the quote doubled.
-    # If it contains a comma or newline, it must be enclosed.
-    return any(c in text for c in (',', '\n', '"'))
-
-def sanitize_cell(text: str) -> str:
-    # Escape internal double quotes by doubling them.
-    escaped_text = text.replace('"', '""')
-
-    # If the original text required sanitization (due to ',', '\n', or '"'),
-    # the entire cell must be enclosed in double quotes.
-    if requires_sanitization(text):
-        return f'"{escaped_text}"'
-    else:
-        return escaped_text
+    return any(c in text for c in ('\t', '\n', '"'))
 === END ===

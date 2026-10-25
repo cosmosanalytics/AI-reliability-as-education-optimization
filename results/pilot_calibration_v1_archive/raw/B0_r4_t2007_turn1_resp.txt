@@ -1,0 +1,21 @@
+=== FILE: pipeline.py ===
+"""Pipeline stage configurator."""
+import copy
+from typing import Dict, Any, List
+from step_builder import compile_step_config, format_step_manifest
+from defaults import DEFAULT_PIPELINE_OPTS
+
+def build_stage_spec(stage_name: str, step_overrides: Dict[str, Any]) -> Dict[str, Any]:
+    """Compile pipeline stage specification.
+    Inputs must remain immutable and nested options must be defensively copied.
+    """
+    # Create a deep copy of the global defaults to ensure they are not mutated
+    # by compile_step_config, preserving isolation between pipeline stages.
+    defaults_for_stage = copy.deepcopy(DEFAULT_PIPELINE_OPTS)
+    spec = compile_step_config(stage_name, defaults_for_stage, step_overrides)
+    _ = format_step_manifest(spec)
+    return spec
+
+def build_multi_stage_pipeline(stage_configs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [build_stage_spec(f"stage-{i}", cfg) for i, cfg in enumerate(stage_configs)]
+=== END ===

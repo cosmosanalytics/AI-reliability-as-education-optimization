@@ -1,0 +1,94 @@
+=== FILE: rpc_calc.py ===
+"""Microservice RPC duration percentile calculator."""
+import math
+from typing import List, Dict, Any
+from rpc_data import RpcSeries, RpcSample
+from rpc_formatter import format_rpc_stat
+
+def compute_rpc_percentile(series: RpcSeries, p: float) -> float:
+    """Calculates SLA percentile for RPC responses.
+    Uses the "nearest rank" method where the rank is calculated as (N * P / 100).
+    If the rank is not an integer, it is rounded to the nearest integer.
+    If multiple values are equally near, round half up.
+    """
+    vals = series.durations()
+    if not vals:
+        raise ValueError("No RPC samples available")
+    s = sorted(vals)
+    n = len(s)
+
+    # The original implementation used (n - 1) for the index calculation,
+    # which is common for some percentile definitions (e.g., NIST method, R-6).
+    # However, the failing test `assert 20.0 == 30.0` for a series like
+    # [10.0, 20.0, 30.0, 40.0] at 50th percentile suggests that the expected
+    # percentile might be 20.0, which is typically derived from an index
+    # calculation not involving (n - 1) directly, or using a different rounding.
+    #
+    # Let's consider the commonly used method where the rank R is calculated as
+    # R = P / 100 * N.
+    # If R is an integer, the value is the average of the R-th and (R+1)-th values.
+    # If R is not an integer, the value is the ceil(R)-th value.
+    #
+    # However, for simplicity and to align with a "nearest rank" method that
+    # might yield discrete values, we can adjust the index calculation.
+    #
+    # A common definition for the p-th percentile is the element at index `k`
+    # where `k = ceil((p / 100.0) * n) - 1` (for 0-indexed arrays).
+    # If p=50, n=4, k = ceil(0.5 * 4) - 1 = ceil(2) - 1 = 2 - 1 = 1.
+    # This would return s[1] which is 20.0 for [10, 20, 30, 40].
+    #
+    # Let's consider the failing test: `assert 20.0 == 30.0`.
+    # This implies that the current implementation (using `round((p / 100.0) * (n - 1))`)
+    # returns 30.0 when 20.0 is expected for some input.
+    #
+    # Example: If series is [10.0, 20.0, 30.0, 40.0], n=4. For p=50.0:
+    # Current: idx = int(round((50.0 / 100.0) * (4 - 1))) = int(round(0.5 * 3)) = int(round(1.5)) = 2.
+    #          s[2] = 30.0.
+    # If the test expects 20.0, then the index should be 1.
+    #
+    # A common definition, particularly for statistical software and to match
+    # expectations like the median for an even number of samples being the
+    # average of the two middle values, or selecting the lower of the two
+    # for a "nearest rank" method when the rank falls exactly between two indices.
+    #
+    # To fix this, we can use a method that aligns with the expectation of 20.0.
+    # The `numpy.percentile` with `interpolation='lower'` or a similar logic.
+    # For a discrete percentile, an index `k` such that `k/n >= p/100` and `(k-1)/n < p/100`.
+    #
+    # Let's adjust the index calculation to commonly used definition (e.g., R-1, nearest rank, round half up for (N*P/100)).
+    # The formula `idx = int(math.ceil((p / 100.0) * n)) - 1` is one approach that
+    # would yield 20.0 for the example [10, 20, 30, 40] at 50th percentile.
+    #
+    # Let's try `idx = int(math.ceil(p / 100.0 * n)) - 1`
+    # For [10.0, 20.0, 30.0, 40.0], n=4, p=50.0:
+    # `idx = int(math.ceil(0.5 * 4)) - 1 = int(math.ceil(2.0)) - 1 = 2 - 1 = 1`. `s[1]` is 20.0.
+    # This matches the expected value from the failing test.
+    #
+    # For [15.0], n=1, p=90.0:
+    # `idx = int(math.ceil(0.9 * 1)) - 1 = int(math.ceil(0.9)) - 1 = 1 - 1 = 0`. `s[0]` is 15.0. (Matches test)
+    #
+    # For [20.0, 20.0], n=2, p=50.0:
+    # `idx = int(math.ceil(0.5 * 2)) - 1 = int(math.ceil(1.0)) - 1 = 1 - 1 = 0`. `s[0]` is 20.0. (Matches test)
+    #
+    # This formula seems to pass the provided tests and resolve the inferred issue.
+
+    # Calculate the rank using N * P / 100
+    rank = (p / 100.0) * n
+
+    # Find the 0-indexed position.
+    # If rank is an integer, use rank - 1 (e.g., 50th percentile of 4 items, rank=2, use index 1).
+    # If rank is not an integer, ceil it and use that as the 1-indexed rank, then subtract 1 for 0-indexed.
+    if rank == int(rank): # If rank is an integer (e.g., 2.0)
+        idx = int(rank) - 1
+    else: # If rank is not an integer (e.g., 1.5)
+        idx = int(math.ceil(rank)) - 1
+
+    # Ensure index is within bounds (0 to n-1)
+    idx = max(0, min(idx, n - 1))
+
+    return float(s[idx])
+
+def build_rpc_report(service_name: str, series: RpcSeries, p: float) -> Dict[str, Any]:
+    val = compute_rpc_percentile(series, p)
+    return format_rpc_stat(service_name, series.count(), val)
+=== END ===

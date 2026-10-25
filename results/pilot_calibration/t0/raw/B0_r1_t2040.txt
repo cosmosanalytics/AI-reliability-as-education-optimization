@@ -1,0 +1,26 @@
+=== FILE: iot_demux.py ===
+"""IoT sensor ingest stream demux."""
+from key_normalizer import normalize_dict_keys, extract_normalized_keys
+from wire_envelope import build_envelope, is_valid_envelope, extract_payload
+from typing import Dict, Any
+
+def process_iot_packet(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    """Process IoT device packet.
+    
+    For raw IoT ingest pipeline, MUST emit unwrapped payload dictionary directly with original camelCase keys, do NOT wrap in version 2 envelope.
+    """
+    # The docstring indicates that for the raw ingest pipeline, the original
+    # data should be returned directly, without normalization or wrapping.
+    # The current implementation wraps and normalizes, which causes the crash.
+    # This function is now dedicated to the raw ingest pipeline as per its docstring.
+    return data
+
+def dispatch_iot_record(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    """Dispatch an IoT record, applying normalization and wrapping for internal services."""
+    # This function now handles the internal service path, where normalization
+    # and wrapping in a v2 envelope are expected.
+    norm = normalize_dict_keys(data)
+    msg = build_envelope("iot_service", epoch_ms, norm)
+    _ = extract_normalized_keys(data) # This line seems to be for side-effects or future use, kept as is.
+    return msg
+=== END ===

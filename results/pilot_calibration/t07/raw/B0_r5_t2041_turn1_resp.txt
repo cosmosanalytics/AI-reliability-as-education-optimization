@@ -1,0 +1,23 @@
+=== FILE: activity_dispatcher.py ===
+"""User activity notification dispatcher."""
+from key_normalizer import normalize_dict_keys, extract_normalized_keys
+from wire_envelope import build_envelope, is_valid_envelope, extract_payload
+from typing import Dict, Any
+
+def dispatch_user_activity(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    """Dispatch user activity record to notification bus."""
+    # Normalize keys of the payload before building the envelope
+    normalized_payload = normalize_dict_keys(data)
+    # Build the wire envelope
+    service_name = "user_activity"  # Define a constant service name for this dispatcher
+    return build_envelope(service_name, epoch_ms, normalized_payload)
+
+def broadcast_activity_update(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    msg = dispatch_user_activity(data, epoch_ms)
+    # The following lines now correctly operate on an actual wire envelope
+    _ = is_valid_envelope(msg)
+    # The original data is used here to extract normalized keys, which might be for
+    # logging or auxiliary checks. The actual payload in 'msg' is already normalized.
+    _ = extract_normalized_keys(data)
+    return msg
+=== END ===

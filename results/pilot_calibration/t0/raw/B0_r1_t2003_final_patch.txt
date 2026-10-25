@@ -3,8 +3,9 @@
 from typing import Tuple
 
 def apply_fx_rate(cents: int, rate: float) -> int:
-    """Compute converted currency amount in cents, rounded to the nearest cent.
-    Uses round half up for currency conversion to avoid fractional cents.
+    """Compute converted currency amount in cents, rounded to the nearest integer (half up).
+    This avoids truncation issues that can lead to reconciliation failures in financial contexts.
+    For positive numbers, int(x + 0.5) achieves round half up.
     """
     return int(cents * rate + 0.5)
 

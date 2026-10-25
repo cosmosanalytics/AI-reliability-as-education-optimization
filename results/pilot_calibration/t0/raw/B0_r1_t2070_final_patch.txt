@@ -1,0 +1,34 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values.
+    Uses the nearest-rank method (NIST method R-1) for index calculation,
+    which is common in some SLA monitoring contexts where a specific value
+    from the dataset is preferred over interpolation.
+    """
+    if not values:
+        raise ValueError("Empty values")
+    s = sorted(values)
+    n = len(s)
+
+    # For p=0, return the minimum value.
+    if p == 0:
+        return float(s[0])
+    # For p=100, return the maximum value.
+    if p == 100:
+        return float(s[n - 1])
+
+    # Calculate the rank (1-indexed)
+    # This formula corresponds to the nearest-rank method (NIST R-1)
+    # which finds the smallest value in the dataset that is greater than or equal to the p-th percentile.
+    # The index is 1-based, so we convert to 0-based for list access.
+    rank = math.ceil((p / 100.0) * n)
+    
+    # Ensure rank is within bounds [1, n]
+    rank = max(1, min(n, rank))
+    
+    return float(s[int(rank) - 1])
+=== END ===

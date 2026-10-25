@@ -7,9 +7,8 @@ from validator import verify_withholding
 def compute_payroll_withholding(gross_cents: int, tax_rate: float) -> int:
     """Compute statutory payroll tax withholding.
     Statutory requirement: payroll withholding MUST round fractional cents UP (ceiling)
-    to guarantee tax obligations are never under-withheld. Do NOT use banker's rounding.
+    to guarantee tax obligations are never under-withheld. Do NOT use half-up rounding.
     """
-    # Use math.ceil to round fractional cents UP as required by statutory rules.
     return int(math.ceil(gross_cents * tax_rate))
 
 def build_withholding_record(employee_id: int, gross_cents: int, tax_rate: float, exempt: bool = False) -> WithholdingRecord:

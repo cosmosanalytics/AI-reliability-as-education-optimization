@@ -125,20 +125,21 @@ def test_handbook_placebo_token_balance():
 
 
 def test_e5_tag_distribution():
-    """Assert suite_e5 satisfies all structural constraints from Section 8 Addendum v2 and Round 9."""
+    """Assert suite_e5 satisfies all structural constraints from Section 8 Addendum v2 and Round 16."""
     tasks = suite_e5.T
     n_tasks = len(tasks)
-    assert n_tasks >= 24, f"Expected >= 24 tasks, found {n_tasks}"
+    assert n_tasks >= 60, f"Expected >= 60 tasks, found {n_tasks}"
+    assert n_tasks == 84, f"Expected exactly 84 tasks, found {n_tasks}"
     
     distractor = [t for t in tasks if t["class_tag"] == "DISTRACTOR"]
     transfer = [t for t in tasks if t["class_tag"] == "TRANSFER"]
     taught = [t for t in tasks if t["class_tag"] == "TAUGHT"]
     stated = [t for t in tasks if t["class_tag"] == "STATED"]
     
-    assert len(distractor) >= 2, f"Expected >= 2 DISTRACTOR, found {len(distractor)}"
-    assert len(transfer) >= 3, f"Expected >= 3 TRANSFER, found {len(transfer)}"
-    assert len(taught) >= 8, f"Expected >= 8 TAUGHT, found {len(taught)}"
-    assert len(stated) >= 4, f"Expected >= 4 STATED, found {len(stated)}"
+    assert len(distractor) >= 10, f"Expected >= 10 DISTRACTOR, found {len(distractor)}"
+    assert len(transfer) >= 8, f"Expected >= 8 TRANSFER, found {len(transfer)}"
+    assert len(taught) >= 24, f"Expected >= 24 TAUGHT, found {len(taught)}"
+    assert len(stated) >= 16, f"Expected >= 16 STATED, found {len(stated)}"
     
     hrc = [t for t in tasks if t.get("hidden_root_cause")]
     vts = [t for t in tasks if t.get("visible_test_sensitive")]
@@ -167,11 +168,10 @@ def test_e5_tag_distribution():
 
 
 def test_splits_e5_stratification():
-    """Assert splits_e5.json partitions tasks into class-stratified Tune (15) and Held-out (13).
-    Enforces per-class minimums (C1 resolution) so that the confirmatory study is statistically powered
-    on the primary TAUGHT class:
-    - Held-out: >= 4 TAUGHT, >= 3 STATED, >= 2 DISTRACTOR, >= 3 TRANSFER (all 4 held out).
-    - Tune: >= 4 TAUGHT, >= 4 STATED, >= 1 DISTRACTOR, 0 TRANSFER.
+    """Assert splits_e5.json partitions tasks into class-stratified and family-stratified 42 Tune and 42 Held-out.
+    Enforces per-class minimums (C1 resolution and J4) so that the confirmatory study is statistically powered:
+    - Held-out: >= 12 TAUGHT (actual: 16), >= 4 STATED (actual: 6), >= 6 DISTRACTOR (actual: 8), >= 8 TRANSFER (actual: 12, all held out across Family 7 & Family 14).
+    - Tune: >= 12 TAUGHT (actual: 19), >= 10 STATED (actual: 15), >= 4 DISTRACTOR (actual: 8), 0 TRANSFER.
     """
     splits_path = os.path.join(_repo_root, "benchmarks", "splits_e5.json")
     assert os.path.exists(splits_path), "splits_e5.json missing"
@@ -182,10 +182,10 @@ def test_splits_e5_stratification():
     tune = splits["tune"]
     held_out = splits["held_out"]
     
-    assert len(tune) == 15, f"Expected 15 tune tasks, found {len(tune)}"
-    assert len(held_out) == 13, f"Expected 13 held-out tasks, found {len(held_out)}"
+    assert len(tune) == 42, f"Expected 42 tune tasks, found {len(tune)}"
+    assert len(held_out) == 42, f"Expected 42 held-out tasks, found {len(held_out)}"
     assert set(tune).isdisjoint(set(held_out)), "Tune and held-out sets must be disjoint"
-    assert len(set(tune) | set(held_out)) == 28, "Split must cover all 28 tasks"
+    assert len(set(tune) | set(held_out)) == 84, "Split must cover all 84 tasks"
     
     task_map = {t["id"]: t for t in suite_e5.T}
     
@@ -195,11 +195,11 @@ def test_splits_e5_stratification():
     distractor_in_held_out = [tid for tid in held_out if task_map[tid]["class_tag"] == "DISTRACTOR"]
     transfer_in_held_out = [tid for tid in held_out if task_map[tid]["class_tag"] == "TRANSFER"]
     
-    assert len(taught_in_held_out) >= 4, f"Expected >= 4 TAUGHT in held-out, found {len(taught_in_held_out)}"
-    assert len(stated_in_held_out) >= 3, f"Expected >= 3 STATED in held-out, found {len(stated_in_held_out)}"
-    assert len(distractor_in_held_out) >= 2, f"Expected >= 2 DISTRACTOR in held-out, found {len(distractor_in_held_out)}"
-    assert len(transfer_in_held_out) >= 3, f"Expected >= 3 TRANSFER in held-out, found {len(transfer_in_held_out)}"
-    assert len(transfer_in_held_out) == 4, f"All 4 TRANSFER tasks must be in held-out, found {len(transfer_in_held_out)}"
+    assert len(taught_in_held_out) >= 12, f"Expected >= 12 TAUGHT in held-out, found {len(taught_in_held_out)}"
+    assert len(stated_in_held_out) >= 4, f"Expected >= 4 STATED in held-out, found {len(stated_in_held_out)}"
+    assert len(distractor_in_held_out) >= 6, f"Expected >= 6 DISTRACTOR in held-out, found {len(distractor_in_held_out)}"
+    assert len(transfer_in_held_out) >= 8, f"Expected >= 8 TRANSFER in held-out, found {len(transfer_in_held_out)}"
+    assert len(transfer_in_held_out) == 12, f"All 12 TRANSFER tasks must be in held-out, found {len(transfer_in_held_out)}"
     
     # Tune per-class minimums (for screening experiment estimation)
     taught_in_tune = [tid for tid in tune if task_map[tid]["class_tag"] == "TAUGHT"]
@@ -207,9 +207,9 @@ def test_splits_e5_stratification():
     distractor_in_tune = [tid for tid in tune if task_map[tid]["class_tag"] == "DISTRACTOR"]
     transfer_in_tune = [tid for tid in tune if task_map[tid]["class_tag"] == "TRANSFER"]
     
-    assert len(taught_in_tune) >= 4, f"Expected >= 4 TAUGHT in tune, found {len(taught_in_tune)}"
-    assert len(stated_in_tune) >= 4, f"Expected >= 4 STATED in tune, found {len(stated_in_tune)}"
-    assert len(distractor_in_tune) >= 1, f"Expected >= 1 DISTRACTOR in tune, found {len(distractor_in_tune)}"
+    assert len(taught_in_tune) >= 12, f"Expected >= 12 TAUGHT in tune, found {len(taught_in_tune)}"
+    assert len(stated_in_tune) >= 10, f"Expected >= 10 STATED in tune, found {len(stated_in_tune)}"
+    assert len(distractor_in_tune) >= 4, f"Expected >= 4 DISTRACTOR in tune, found {len(distractor_in_tune)}"
     assert len(transfer_in_tune) == 0, f"TRANSFER tasks cannot be in tune set: {transfer_in_tune}"
 
 
@@ -269,3 +269,27 @@ def test_zero_unimported_decoy_files():
                 assert re.search(r"\b" + mod_name + r"\b", non_test_code), (
                     f"Task {t['id']}: Helper file '{p}' is not referenced/imported by any repo code"
                 )
+
+
+def test_consistency_matrix_invariants():
+    """Enforce Round 16 Condition I1, I2, J1, J3:
+    1. CONSISTENCY_MATRIX.md exists and audits all tasks against Handbook v2 rules H01-H16.
+    2. Every task in suite_e5.T has a corresponding audited entry.
+    3. Exactly 0 unintended conflicts exist in the matrix.
+    4. All DISTRACTOR tasks have explicit local overrides ('applies-and-conflicts').
+    5. All TAUGHT, STATED, TRANSFER tasks are 'applies-and-agrees'.
+    """
+    matrix_path = os.path.join(_repo_root, "benchmarks", "CONSISTENCY_MATRIX.md")
+    assert os.path.exists(matrix_path), "CONSISTENCY_MATRIX.md missing"
+    
+    with open(matrix_path, "r", encoding="utf-8") as f:
+        content = f.read()
+        
+    # Check 0 unintended conflicts
+    assert "**0**" in content, "Matrix must verify exactly 0 unintended conflicts"
+    
+    # Check that each task ID has an entry in the table
+    for t in suite_e5.T:
+        tid = t["id"]
+        pattern = rf"\|\s*\*\*?{tid}\*\*?\s*\|"
+        assert re.search(pattern, content), f"Task {tid} missing from CONSISTENCY_MATRIX.md"

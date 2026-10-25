@@ -1,0 +1,34 @@
+=== FILE: subscription_fsm.py ===
+"""Subscription billing state transition logic."""
+from typing import Dict, Set, Any
+from errors import ServiceError
+from subscription_models import SubscriptionAccount
+
+SUBSCRIPTION_TRANSITIONS: Dict[str, Set[str]] = {
+    "TRIAL": {"ACTIVE", "CANCELED", "EXPIRED"},
+    "ACTIVE": {"PAST_DUE", "CANCELED"},
+    "PAST_DUE": {"ACTIVE", "CANCELED", "EXPIRED"},
+    "CANCELED": set(),
+    "EXPIRED": set(),
+}
+
+def transition_subscription(account: SubscriptionAccount, next_state: str, actor_id: str, timestamp_ms: int) -> None:
+    """Transitions subscription to new state."""
+    cur = account.state
+    
+    # Validate the transition
+    if next_state not in SUBSCRIPTION_TRANSITIONS.get(cur, set()):
+        raise ServiceError(
+            code="INVALID_SUBSCRIPTION_STATE_TRANSITION",
+            message=f"Cannot transition subscription from '{cur}' to '{next_state}'"
+        )
+
+    # Record the audit trail
+    account.audit_trail.append((cur, next_state, actor_id, timestamp_ms))
+
+    # Change the state
+    account.state = next_state
+
+def get_subscription_overview(account: SubscriptionAccount) -> Dict[str, Any]:
+    return {"id": account.entity_id, "state": account.state, "billable": account.is_billable()}
+=== END ===

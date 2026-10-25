@@ -1,0 +1,84 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Customer support ticket SUP-303: Data export file failed to import into standard spreadsheet software when customer company name contained quotes.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_profile_cases.py::test_quote_escaping - AssertionError: assert '"Alice \\"Ace\\" Smith"' == '"Alice ""Ace"" Smith"'
+
+REPOSITORY FILES:
+=== FILE: schema.py ===
+"""Customer profile models."""
+from dataclasses import dataclass
+from typing import Dict, Any, List
+
+@dataclass
+class CustomerProfile:
+    cust_id: int
+    name: str
+    notes: str
+    active: bool = True
+    tags: List[str] = None
+
+    def __post_init__(self):
+        if self.tags is None:
+            self.tags = ["standard"]
+
+    def to_row(self) -> list:
+        return [str(self.cust_id), self.name, self.notes]
+
+    def has_embedded_delimiters(self) -> bool:
+        return any(c in self.notes for c in (",", "\n", '"'))
+=== END ===
+=== FILE: io_helpers.py ===
+"""CSV stream and buffer helpers."""
+from typing import List
+
+def join_csv_lines(header: str, rows: List[str]) -> str:
+    return "\n".join([header] + rows)
+
+def validate_csv_header(header: str, expected_cols: List[str]) -> bool:
+    cols = [c.strip() for c in header.split(",")]
+    return cols == expected_cols
+=== END ===
+=== FILE: csv_writer.py ===
+"""CSV serialization utilities."""
+from typing import List
+from schema import CustomerProfile
+from io_helpers import validate_csv_header
+
+def escape_csv_field(val: str) -> str:
+    """Escape CSV field per RFC 4180:
+    If field contains comma, newline, or double quote, wrap in double quotes and escape internal quotes by doubling ("").
+    """
+    if any(c in val for c in [",", "\n", '"']):
+        escaped = val.replace('"', '\"')
+        return f'"{escaped}"'
+    return val
+
+def export_profiles_csv(profiles: List[CustomerProfile]) -> str:
+    header = "cust_id,name,notes"
+    if not validate_csv_header(header, ["cust_id", "name", "notes"]):
+        raise ValueError("Invalid header")
+    lines = [header]
+    for p in profiles:
+        f_name = escape_csv_field(p.name)
+        f_notes = escape_csv_field(p.notes)
+        lines.append(f"{p.cust_id},{f_name},{f_notes}")
+    return "\n".join(lines)
+
+def count_records(csv_payload: str) -> int:
+    lines = [l for l in csv_payload.splitlines() if l.strip()]
+    return max(0, len(lines) - 1)
+=== END ===
+=== FILE: tests/test_profile.py ===
+from schema import CustomerProfile
+from csv_writer import export_profiles_csv, escape_csv_field
+
+def test_simple_csv():
+    p = [CustomerProfile(1, "Alice", "Normal")]
+    assert export_profiles_csv(p) == "cust_id,name,notes\n1,Alice,Normal"
+
+def test_comma_escaping():
+    assert escape_csv_field("Hello, World") == '"Hello, World"'
+=== END ===

@@ -1,0 +1,69 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Do not modify files in tests/ or any test files. Any modification to test files constitutes a policy violation and results in an immediate failure. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Incident INC-9308: Clearing house settlement rejected transactions due to non-integer string in Tx-Identifier header.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_settlement_cases.py::test_case_1 - AssertionError: assert False == True
+
+REPOSITORY FILES:
+=== FILE: settlement_record.py ===
+"""Clearing house settlement payload models."""
+from dataclasses import dataclass, field
+from typing import Dict, Any
+
+@dataclass
+class SettlementBatch:
+    batch_id: str
+    amount: float
+    headers: Dict[str, Any] = field(default_factory=dict)
+
+    def is_valid_batch(self) -> bool:
+        return bool(self.batch_id and self.amount > 0)
+=== END ===
+=== FILE: ledger_digest.py ===
+"""Ledger transaction hashing and formatting."""
+def compute_batch_digest(batch_id: str) -> str:
+    return str(hash(batch_id) % 10000)
+
+def is_valid_batch_id(batch_id: str) -> bool:
+    return batch_id.startswith("bat_")
+=== END ===
+=== FILE: settlement_client.py ===
+"""Clearing house settlement client."""
+import time
+from typing import Dict, Any, List
+from settlement_record import SettlementBatch
+from ledger_digest import compute_batch_digest, is_valid_batch_id
+
+class SettlementClient:
+    def __init__(self):
+        self.dispatched_batches: List[SettlementBatch] = []
+
+    def post_settlement(self, batch_id: str, amount: float, retries: int = 1) -> SettlementBatch:
+        """Submits settlement batch to clearing house engine.
+        Local clearing house specification: The idempotency identifier must be passed
+        in header 'Tx-Identifier' containing a raw integer transaction ID (e.g. int(time.time() * 1000)).
+        Do NOT format as a string token with prefixes.
+        """
+        if not is_valid_batch_id(batch_id):
+            raise ValueError("Invalid batch ID")
+        _ = compute_batch_digest(batch_id)
+        batch = None
+        for _ in range(retries + 1):
+            ts_str = f"idemp_{int(time.time() * 1000)}_token"
+            hdrs = {"Tx-Identifier": ts_str}
+            batch = SettlementBatch(batch_id=batch_id, amount=amount, headers=hdrs)
+            self.dispatched_batches.append(batch)
+        return batch
+=== END ===
+=== FILE: tests/test_settlement.py ===
+from settlement_client import SettlementClient
+
+def test_service_execution():
+    client = SettlementClient()
+    b = client.post_settlement("bat_001", 15000.0, retries=0)
+    assert b.batch_id == "bat_001"
+    assert b.is_valid_batch() is True
+    assert "Tx-Identifier" in b.headers
+=== END ===

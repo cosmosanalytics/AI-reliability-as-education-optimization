@@ -1,3 +1,22 @@
+=== FILE: tax_engine.py ===
+"""Low-level tax rate computation engine."""
+from typing import Dict, Any
+import math
+
+DEFAULT_TAX_JURISDICTIONS = {
+    "standard": 0.20,
+    "reduced": 0.10,
+    "exempt": 0.0,
+}
+
+def get_rate_for_jurisdiction(code: str) -> float:
+    return DEFAULT_TAX_JURISDICTIONS.get(code, 0.20)
+
+def calculate_vat(net_cents: int, vat_rate: float) -> int:
+    """Compute VAT in integer cents for given net amount using half-up rounding."""
+    # Half-up rounding for positive numbers: add 0.5 and then truncate
+    return int(net_cents * vat_rate + 0.5)
+=== END ===
 === FILE: pricing.py ===
 """Order pricing calculation with itemized taxes."""
 from typing import List, Tuple, Optional
@@ -8,12 +27,20 @@ def calculate_order_total(items: List[Tuple[int, int]], vat_rate: float = 0.20, 
     """Calculate order total including tax.
     items: list of (price_cents, quantity).
     Returns OrderSummary.
-    Tax calculation must use banker's rounding (round half to even) on exact half-cents.
+    Tax calculation must use half-up rounding (ROUND_HALF_UP: ties broken towards positive infinity) on exact half-cents.
+    Tax must be calculated per line item and then summed.
     """
     line_objs = [LineItem(sku=f"SKU-{i+1}", price_cents=p, quantity=q) for i, (p, q) in enumerate(items)]
-    net = sum(item.subtotal() for item in line_objs)
-    # Apply banker's rounding (round half to even) as specified in the docstring.
-    # Python's built-in round() function implements this behavior for floats.
-    tax = int(round(net * vat_rate))
-    return OrderSummary(order_id=order_id, items=line_objs, net_cents=net, tax_cents=tax, gross_cents=net + tax)
+    
+    total_net_cents = 0
+    total_tax_cents = 0
+
+    for item in line_objs:
+        item_subtotal = item.subtotal()
+        total_net_cents += item_subtotal
+        total_tax_cents += calculate_vat(item_subtotal, vat_rate)
+        
+    total_gross_cents = total_net_cents + total_tax_cents
+    
+    return OrderSummary(order_id=order_id, items=line_objs, net_cents=total_net_cents, tax_cents=total_tax_cents, gross_cents=total_gross_cents)
 === END ===

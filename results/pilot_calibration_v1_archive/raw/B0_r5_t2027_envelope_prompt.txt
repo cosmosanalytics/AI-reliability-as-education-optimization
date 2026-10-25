@@ -1,0 +1,36 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Distributed lock split-brain LOCK-881: Two nodes simultaneously held master lock when lease was retained at exact expiration second.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_lease_cases.py::test_lease_validity_boundary - AssertionError: assert True is False
+
+REPOSITORY FILES:
+=== FILE: lease_guard.py ===
+"""Distributed cluster lease manager."""
+from typing import Optional, Callable
+from clock_source import is_lease_valid
+from lease_entry import LeaseRecord
+
+class LeaseGuard:
+    def __init__(self, clock: Optional[Callable[[], float]] = None):
+        self._clock = clock
+        self._leases = {}
+
+    def acquire(self, key: str, owner: str, lease_duration: float) -> None:
+        import time
+        now = self._clock() if self._clock else time.monotonic()
+        self._leases[key] = LeaseRecord(key, owner, now + lease_duration)
+
+    def holds_lease(self, key: str, owner: str) -> bool:
+        lease = self._leases.get(key)
+        if not lease or lease.owner != owner:
+            return False
+        import time
+        now = self._clock() if self._clock else time.monotonic()
+        return is_lease_valid(lease.valid_until, now)
+
+    def lease_count(self) -> int:
+        return len(self._leases)
+=== END ===

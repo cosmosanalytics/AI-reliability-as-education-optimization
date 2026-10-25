@@ -10,14 +10,15 @@
     {
       "name": "hidden tests",
       "expect": "pass",
-      "rc": 1,
+      "rc": 2,
       "ok": false
     }
   ],
-  "visible_rc": 0,
-  "visible_output": "..                                                                       [100%]\n2 passed in 0.05s\n",
-  "diff_lines": 5,
+  "visible_rc": 2,
+  "visible_output": "\n=================================== ERRORS ====================================\n___________________ ERROR collecting tests/test_cmd_log.py ____________________\nImportError while importing test module 'C:\\Users\\richa\\AppData\\Local\\Temp\\swe_eval_otnio8dt\\tests\\test_cmd_log.py'.\nHint: make sure your test modules/packages have valid Python names.\nTraceback:\nC:\\Program Files\\Python310\\lib\\importlib\\__init__.py:126: in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\ntests\\test_cmd_log.py:1: in <module>\n    from tsv_formatter import format_command_record\ntsv_formatter.py:3: in <module>\n    from cmd_log import audit_format_event\ncmd_log.py:3: in <module>\n    from tsv_formatter import format_command_record # Import the RFC 4180 CSV formatter\nE   ImportError: cannot import name 'format_command_record' from partially initialized module 'tsv_formatter' (most likely due to a circular import) (C:\\Users\\richa\\AppData\\Local\\Temp\\swe_eval_otnio8dt\\tsv_formatter.py)\n=========================== short test summary info ===========================\nERROR tests/test_cmd_log.py\n!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\n1 error in 0.43s\n",
+  "diff_lines": 15,
   "changed_files": [
+    "cmd_log.py",
     "tsv_formatter.py"
   ]
 }

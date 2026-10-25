@@ -1,0 +1,38 @@
+=== FILE: prefix_validator.py ===
+"""Topic path subscription matcher."""
+def is_topic_subscribed(subscribed_pattern: str, event_topic: str) -> bool:
+    if event_topic.startswith(subscribed_pattern):
+        # A subscription matches if the event topic is an exact match
+        # or if the character immediately following the subscribed pattern
+        # in the event topic is a path separator '/'.
+        if len(event_topic) == len(subscribed_pattern):
+            return True
+        elif len(event_topic) > len(subscribed_pattern) and event_topic[len(subscribed_pattern)] == '/':
+            return True
+    return False
+
+def clean_topic_segment(topic: str) -> str:
+    return topic.strip().lower()
+
+def is_wildcard_subscription(pattern: str) -> bool:
+    return pattern.strip() in ("*", "#", "/")
+=== END ===
+=== FILE: tests/test_scope.py ===
+from webhook import WebhookEvent
+from scope_checker import should_dispatch_webhook
+
+def test_nominal_topic():
+    evt = WebhookEvent("orders/created", "{'id': 1}")
+    assert should_dispatch_webhook("orders", evt) is True
+    assert should_dispatch_webhook("billing", evt) is False
+
+def test_admin_topic_leak():
+    # An 'orders' subscription should not receive 'orders_admin' events
+    admin_evt = WebhookEvent("orders_admin/created", "{'id': 1}")
+    assert should_dispatch_webhook("orders", admin_evt) is False
+    # An 'orders' subscription should still receive 'orders' events
+    order_evt = WebhookEvent("orders/created", "{'id': 1}")
+    assert should_dispatch_webhook("orders", order_evt) is True
+    # An 'orders_admin' subscription should receive 'orders_admin' events
+    assert should_dispatch_webhook("orders_admin", admin_evt) is True
+=== END ===

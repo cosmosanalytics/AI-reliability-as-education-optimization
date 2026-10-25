@@ -1,7 +1,7 @@
 """Family 1: money_rounding (Tasks 2001 - 2004).
 
-Governing Rule: Rule H02 (Banker's Rounding: round half to even on cents).
-Competing Alternatives: Round half up, truncation, ceil.
+Governing Rule: Rule H02 (Half-Up Rounding: round half up on cents).
+Competing Alternatives: Banker's rounding, truncation, ceil.
 Target: 40-120 non-test lines across 3-4 files. All files on reachability path (zero decoys).
 """
 
@@ -64,7 +64,7 @@ def calculate_order_total(items: List[Tuple[int, int]], vat_rate: float = 0.20, 
     """Calculate order total including tax.
     items: list of (price_cents, quantity).
     Returns OrderSummary.
-    Tax calculation must use banker's rounding (round half to even) on exact half-cents.
+    Tax calculation must use half-up rounding (ROUND_HALF_UP: ties broken towards positive infinity) on exact half-cents.
     """
     line_objs = [LineItem(sku=f"SKU-{i+1}", price_cents=p, quantity=q) for i, (p, q) in enumerate(items)]
     net = sum(item.subtotal() for item in line_objs)
@@ -94,19 +94,20 @@ from tax_engine import calculate_vat
 
 def test_vat_rate_calculation():
     assert calculate_order_total([(135, 1)], vat_rate=0.10).tax_cents == 14
-    assert calculate_order_total([(145, 1)], vat_rate=0.10).tax_cents == 14
+    assert calculate_order_total([(145, 1)], vat_rate=0.10).tax_cents == 15
     assert calculate_order_total([(155, 1)], vat_rate=0.10).tax_cents == 16
-    assert calculate_order_total([(165, 1)], vat_rate=0.10).tax_cents == 16
+    assert calculate_order_total([(165, 1)], vat_rate=0.10).tax_cents == 17
+    assert calculate_order_total([(141, 1)], vat_rate=0.10).tax_cents == 14
 
 def test_tax_engine_contract():
     assert calculate_vat(135, 0.10) == 14
-    assert calculate_vat(145, 0.10) == 14
+    assert calculate_vat(145, 0.10) == 15
 '''
     }
 
     t2001_ref = {
         "tax_engine.py": '''"""Low-level tax rate computation engine."""
-from decimal import Decimal, ROUND_HALF_EVEN
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Dict, Any
 
 DEFAULT_TAX_JURISDICTIONS = {
@@ -119,10 +120,10 @@ def get_rate_for_jurisdiction(code: str) -> float:
     return DEFAULT_TAX_JURISDICTIONS.get(code, 0.20)
 
 def calculate_vat(net_cents: int, vat_rate: float) -> int:
-    """Compute VAT in integer cents for given net amount using banker's rounding."""
+    """Compute VAT in integer cents for given net amount using half-up rounding."""
     d_net = Decimal(str(net_cents))
     d_rate = Decimal(str(vat_rate))
-    return int((d_net * d_rate).quantize(Decimal("1"), rounding=ROUND_HALF_EVEN))
+    return int((d_net * d_rate).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 '''
     }
 
@@ -178,7 +179,7 @@ def calculate_vat(net_cents: int, vat_rate: float) -> int:
         root_cause_only_with_exploration=True,
         handbook_citations=["Rule H02"],
         assertions=[
-            ("test_vat_rate_calculation", "pricing.py docstring: 'Tax calculation must use banker's rounding (round half to even)'", "Yes", "STATED"),
+            ("test_vat_rate_calculation", "pricing.py docstring: 'Tax calculation must use half-up rounding (ROUND_HALF_UP)'", "Yes", "STATED"),
             ("test_tax_engine_contract", "tax_engine.py module contract", "Yes", "STATED")
         ]
     )
@@ -263,9 +264,9 @@ def test_proportional_distribution():
 from discount import prorate_discount
 
 def test_fractional_split():
-    assert prorate_discount([100, 100], 25) == [12, 12]
+    assert prorate_discount([100, 100], 25) == [13, 13]
     assert prorate_discount([100, 100], 35) == [18, 18]
-    assert prorate_discount([100, 100], 45) == [22, 22]
+    assert prorate_discount([100, 100], 45) == [23, 23]
 
 def test_multi_line_allocation():
     assert sum(prorate_discount([100, 100, 100], 30)) == 30
@@ -275,7 +276,7 @@ def test_multi_line_allocation():
     t2002_ref = {
         "discount.py": '''"""Invoice discount allocation module."""
 from typing import List
-from decimal import Decimal, ROUND_HALF_EVEN
+from decimal import Decimal, ROUND_HALF_UP
 from models import AllocationResult
 from utils import validate_line_totals
 
@@ -293,7 +294,7 @@ def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[
     d_disc = Decimal(str(total_discount_cents))
     res = []
     for cents in line_totals:
-        share = (Decimal(str(cents)) * d_disc / d_total).quantize(Decimal("1"), rounding=ROUND_HALF_EVEN)
+        share = (Decimal(str(cents)) * d_disc / d_total).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
         res.append(int(share))
     return res
 
@@ -308,7 +309,7 @@ def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> All
     t2002_m1 = {
         "discount.py": '''"""Invoice discount allocation module."""
 from typing import List
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_EVEN
 from models import AllocationResult
 from utils import validate_line_totals
 
@@ -320,7 +321,7 @@ def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[
         return [0] * len(line_totals)
     d_total = Decimal(str(total))
     d_disc = Decimal(str(total_discount_cents))
-    return [int((Decimal(str(c)) * d_disc / d_total).quantize(Decimal("1"), rounding=ROUND_HALF_UP)) for c in line_totals]
+    return [int((Decimal(str(c)) * d_disc / d_total).quantize(Decimal("1"), rounding=ROUND_HALF_EVEN)) for c in line_totals]
 
 def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
     allocs = prorate_discount(line_totals, total_discount_cents)
@@ -356,7 +357,7 @@ def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> All
         name="Invoice Discount Allocation",
         class_tag="TAUGHT",
         issue="Incident INC-3902: Promotional discount allocation across invoice line items results in an unallocated penny mismatch during checkout settlement.",
-        traceback_text="FAILED tests/test_discount_cases.py::test_fractional_split - AssertionError: assert [17, 17] == [18, 18]",
+        traceback_text="FAILED tests/test_discount_cases.py::test_fractional_split - AssertionError: assert [12, 12] == [13, 13]",
         traceback_files=["discount.py"],
         repo=t2002_repo,
         hidden=t2002_hidden,
@@ -368,8 +369,8 @@ def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> All
         root_cause_only_with_exploration=False,
         handbook_citations=["Rule H02"],
         assertions=[
-            ("test_fractional_split", "HANDBOOK.md Rule H02: Banker's rounding on half-cent boundaries", "No", "TAUGHT"),
-            ("test_multi_line_allocation", "HANDBOOK.md Rule H02: Banker's rounding on half-cent boundaries", "No", "TAUGHT")
+            ("test_fractional_split", "HANDBOOK.md Rule H02: Half-up rounding on half-cent boundaries", "No", "TAUGHT"),
+            ("test_multi_line_allocation", "HANDBOOK.md Rule H02: Half-up rounding on half-cent boundaries", "No", "TAUGHT")
         ]
     )
 
@@ -444,25 +445,25 @@ from fx_engine import apply_fx_rate
 
 def test_fx_conversion():
     quote = FxQuote("USD", "JPY", 1.5)
-    assert convert_currency_amount(135, quote) == 202
+    assert convert_currency_amount(135, quote) == 203
     assert convert_currency_amount(145, quote) == 218
 
 def test_fx_engine_contract():
-    assert apply_fx_rate(135, 1.5) == 202
+    assert apply_fx_rate(135, 1.5) == 203
     assert apply_fx_rate(145, 1.5) == 218
 '''
     }
 
     t2003_ref = {
         "fx_engine.py": '''"""Low-level exchange rate computation."""
-from decimal import Decimal, ROUND_HALF_EVEN
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Tuple
 
 def apply_fx_rate(cents: int, rate: float) -> int:
-    """Compute converted currency amount in cents using banker's rounding."""
+    """Compute converted currency amount in cents using half-up rounding."""
     d_cents = Decimal(str(cents))
     d_rate = Decimal(str(rate))
-    return int((d_cents * d_rate).quantize(Decimal("1"), rounding=ROUND_HALF_EVEN))
+    return int((d_cents * d_rate).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 def compute_spread(cents: int, base_rate: float, spread_bps: int = 10) -> Tuple[int, float]:
     effective_rate = base_rate * (1.0 + spread_bps / 10000.0)
@@ -489,13 +490,13 @@ def build_conversion_summary(amount_cents: int, quote: FxQuote) -> ConversionSum
 
     t2003_m2 = {
         "fx_engine.py": '''"""Low-level exchange rate computation."""
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_EVEN
 from typing import Tuple
 
 def apply_fx_rate(cents: int, rate: float) -> int:
     d_cents = Decimal(str(cents))
     d_rate = Decimal(str(rate))
-    return int((d_cents * d_rate).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    return int((d_cents * d_rate).quantize(Decimal("1"), rounding=ROUND_HALF_EVEN))
 
 def compute_spread(cents: int, base_rate: float, spread_bps: int = 10) -> Tuple[int, float]:
     effective_rate = base_rate * (1.0 + spread_bps / 10000.0)
@@ -509,7 +510,7 @@ def compute_spread(cents: int, base_rate: float, spread_bps: int = 10) -> Tuple[
         name="Multi-Currency Fee Conversion",
         class_tag="TAUGHT",
         issue="Payment gateway ticket PAY-501: Cross-border clearing failed settlement reconciliation on fractional cent conversion batches.",
-        traceback_text="FAILED tests/test_fx_cases.py::test_fx_conversion - AssertionError: assert 201 == 202",
+        traceback_text="FAILED tests/test_fx_cases.py::test_fx_conversion - AssertionError: assert 202 == 203",
         traceback_files=["converter.py"],
         repo=t2003_repo,
         hidden=t2003_hidden,
@@ -521,8 +522,8 @@ def compute_spread(cents: int, base_rate: float, spread_bps: int = 10) -> Tuple[
         root_cause_only_with_exploration=True,
         handbook_citations=["Rule H02"],
         assertions=[
-            ("test_fx_conversion", "HANDBOOK.md Rule H02: Banker's rounding on half-cents", "No", "TAUGHT"),
-            ("test_fx_engine_contract", "HANDBOOK.md Rule H02: Banker's rounding on half-cents", "No", "TAUGHT")
+            ("test_fx_conversion", "HANDBOOK.md Rule H02: Half-up rounding on half-cents", "No", "TAUGHT"),
+            ("test_fx_engine_contract", "HANDBOOK.md Rule H02: Half-up rounding on half-cents", "No", "TAUGHT")
         ]
     )
 
@@ -568,7 +569,7 @@ from validator import verify_withholding
 def compute_payroll_withholding(gross_cents: int, tax_rate: float) -> int:
     """Compute statutory payroll tax withholding.
     Statutory requirement: payroll withholding MUST round fractional cents UP (ceiling)
-    to guarantee tax obligations are never under-withheld. Do NOT use banker's rounding.
+    to guarantee tax obligations are never under-withheld. Do NOT use half-up rounding.
     """
     return int(gross_cents * tax_rate)
 
@@ -614,7 +615,7 @@ from validator import verify_withholding
 def compute_payroll_withholding(gross_cents: int, tax_rate: float) -> int:
     """Compute statutory payroll tax withholding.
     Statutory requirement: payroll withholding MUST round fractional cents UP (ceiling)
-    to guarantee tax obligations are never under-withheld. Do NOT use banker's rounding.
+    to guarantee tax obligations are never under-withheld. Do NOT use half-up rounding.
     """
     return int(math.ceil(gross_cents * tax_rate))
 
@@ -632,15 +633,15 @@ def build_withholding_record(employee_id: int, gross_cents: int, tax_rate: float
 
     t2004_m1 = {
         "payroll.py": '''"""Payroll statutory tax calculation."""
-from decimal import Decimal, ROUND_HALF_EVEN
+from decimal import Decimal, ROUND_HALF_UP
 from models import WithholdingRecord
 from validator import verify_withholding
 
 def compute_payroll_withholding(gross_cents: int, tax_rate: float) -> int:
-    # Mutant 1: Blindly applies Banker's rounding
+    # Mutant 1: Blindly applies Half-up rounding
     d_gross = Decimal(str(gross_cents))
     d_rate = Decimal(str(tax_rate))
-    return int((d_gross * d_rate).quantize(Decimal("1"), rounding=ROUND_HALF_EVEN))
+    return int((d_gross * d_rate).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 def build_withholding_record(employee_id: int, gross_cents: int, tax_rate: float, exempt: bool = False) -> WithholdingRecord:
     if exempt:

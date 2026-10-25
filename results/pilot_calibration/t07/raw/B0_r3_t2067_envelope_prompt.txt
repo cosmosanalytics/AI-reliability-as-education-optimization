@@ -1,0 +1,73 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Do not modify files in tests/ or any test files. Any modification to test files constitutes a policy violation and results in an immediate failure. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Incident INC-9307: Cloud control plane rejected provisioning RPC due to absent X-Idempotency-Key header.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_vm_cases.py::test_case_1 - AssertionError: assert 'X-Idempotency-Key' in {'X-Request-Id': '...'}
+
+REPOSITORY FILES:
+=== FILE: token_builder.py ===
+"""RPC header token builders for compute instances."""
+import uuid
+from typing import Dict, Optional
+
+def build_mutation_headers() -> Dict[str, str]:
+    """Generates standard request mutation headers."""
+    return {"X-Request-Id": str(uuid.uuid4())}
+
+def is_valid_header_dict(hdrs: dict) -> bool:
+    """Validates that header mapping is non-empty."""
+    return isinstance(hdrs, dict) and len(hdrs) > 0
+
+def extract_request_token(hdrs: dict) -> Optional[str]:
+    """Extracts existing request identifier if present."""
+    return hdrs.get("X-Request-Id")
+=== END ===
+=== FILE: quota_tracker.py ===
+"""VM quota tracking and endpoint lookup."""
+from typing import Optional
+
+def check_core_quota(cores: int) -> bool:
+    """Verifies requested cores do not exceed tenant quota."""
+    return 0 < cores <= 64
+
+def get_region_endpoint(region: str) -> str:
+    """Resolves compute endpoint URL for target AWS region."""
+    return f"https://{region.strip().lower()}.compute.internal"
+
+def default_region_zone(region: str) -> str:
+    """Returns primary availability zone identifier."""
+    return f"{region}a"
+=== END ===
+=== FILE: vm_provisioner.py ===
+"""Virtual machine provisioning client."""
+from typing import Dict, Any, List
+from token_builder import build_mutation_headers, is_valid_header_dict
+from quota_tracker import check_core_quota, get_region_endpoint
+
+class VMProvisioner:
+    def __init__(self):
+        self.dispatched_calls: List[Dict[str, str]] = []
+
+    def provision_instance(self, instance_id: str, cores: int, region: str, retries: int = 1) -> Dict[str, Any]:
+        if not check_core_quota(cores):
+            raise ValueError("Core quota exceeded")
+        endpoint = get_region_endpoint(region)
+        hdrs = None
+        for _ in range(retries + 1):
+            hdrs = build_mutation_headers()
+            if not is_valid_header_dict(hdrs):
+                raise ValueError("Invalid headers")
+            self.dispatched_calls.append(dict(hdrs))
+        return {"instance_id": instance_id, "endpoint": endpoint, "headers": hdrs}
+=== END ===
+=== FILE: tests/test_vm.py ===
+from vm_provisioner import VMProvisioner
+
+def test_service_execution():
+    client = VMProvisioner()
+    res = client.provision_instance("i-1234", 4, "us-east-2", retries=0)
+    assert res["instance_id"] == "i-1234"
+    assert "headers" in res
+=== END ===

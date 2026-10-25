@@ -1,0 +1,38 @@
+=== FILE: job_fsm.py ===
+"""Batch compute job entities and lifecycle transition engine."""
+from dataclasses import dataclass, field
+from typing import List, Tuple, Any, Dict, Set
+from errors import ServiceError
+
+@dataclass
+class BatchJob:
+    entity_id: str
+    state: str = "SUBMITTED"
+    audit_trail: List[Tuple[Any, ...]] = field(default_factory=list)
+
+    def is_finished(self) -> bool:
+        return self.state in {"COMPLETED", "FAILED", "ABORTED"}
+
+JOB_TRANSITIONS: Dict[str, Set[str]] = {
+    "SUBMITTED": {"QUEUED", "ABORTED"},
+    "QUEUED": {"RUNNING", "ABORTED"},
+    "RUNNING": {"COMPLETED", "FAILED", "ABORTED"},
+    "COMPLETED": set(),
+    "FAILED": set(),
+    "ABORTED": set(),
+}
+
+def apply_job_transition(job: BatchJob, target_state: str, actor_id: str, timestamp_ms: int) -> None:
+    """Executes state transition for batch job."""
+    cur = job.state
+    allowed = JOB_TRANSITIONS.get(cur, set())
+    if target_state not in allowed:
+        # Resolve: Incident INC-8208 - Use a specific and standard error code for invalid state transitions.
+        # The previous error code "ERR_JOB_BAD_STATE" was deemed non-standard and generic.
+        # The message is also made more descriptive to indicate the specific issue.
+        raise ServiceError(
+            code="JOB_INVALID_STATE_TRANSITION",
+            message=f"Invalid state transition from '{cur}' to '{target_state}'. Allowed transitions are: {', '.join(sorted(allowed)) or 'None'}."
+        )
+    job.state = target_state
+=== END ===

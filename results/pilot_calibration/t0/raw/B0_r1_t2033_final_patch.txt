@@ -1,0 +1,55 @@
+=== FILE: errors.py ===
+"""Domain exception specifications."""
+from typing import Dict, Any, Optional
+
+class ServiceError(Exception):
+    def __init__(self, code: str, message: str = "", details: Optional[Dict[str, Any]] = None):
+        super().__init__(f"[{code}] {message}")
+        self.code = code
+        self.message = message
+        self.details = details or {}
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"code": self.code, "message": self.message, "details": self.details}
+
+class LockConflictError(ServiceError):
+    def __init__(self, resource_id: str, owner_id: str, message: str = "Resource is currently locked by another owner.", details: Optional[Dict[str, Any]] = None):
+        super().__init__(
+            code="LOCK_CONFLICT",
+            message=message,
+            details={
+                "resource_id": resource_id,
+                "owner_id": owner_id,
+                **(details or {})
+            }
+        )
+=== END ===
+=== FILE: lock_manager.py ===
+"""Concurrent resource lock manager."""
+from errors import ServiceError, LockConflictError
+from lock_record import LockEntry
+from typing import Dict, Optional
+
+class ResourceLockManager:
+    def __init__(self):
+        self._locks: Dict[str, LockEntry] = {}
+
+    def acquire_lock(self, resource_id: str, owner_id: str) -> LockEntry:
+        """Acquire exclusive lock on resource.
+        
+        Raises an error if resource is currently held by another worker.
+        """
+        existing = self._locks.get(resource_id)
+        if existing and existing.is_active and existing.owner_id != owner_id:
+            raise LockConflictError(resource_id=resource_id, owner_id=existing.owner_id)
+        entry = LockEntry(resource_id=resource_id, owner_id=owner_id, is_active=True)
+        self._locks[resource_id] = entry
+        return entry
+
+    def release_lock(self, resource_id: str, owner_id: str) -> bool:
+        existing = self._locks.get(resource_id)
+        if existing and existing.owner_id == owner_id:
+            existing.is_active = False
+            return True
+        return False
+=== END ===

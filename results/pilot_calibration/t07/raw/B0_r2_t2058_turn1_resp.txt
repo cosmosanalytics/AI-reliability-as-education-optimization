@@ -1,0 +1,36 @@
+=== FILE: migration_loader.py ===
+"""Migration execution option loader."""
+from typing import Dict, Any, List
+from migration_model import MigrationPlan
+from version_parser import is_valid_version, extract_major_version
+
+def merge_migration_options(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """Merges migration option dictionaries recursively.
+    Nested dictionaries are merged recursively. List values must NOT be replaced;
+    lists must be concatenated in order of [base_items + override_items] with duplicate
+    items removed while preserving first-seen order.
+    """
+    merged = dict(base)
+    for k, v in override.items():
+        if k in merged and isinstance(merged[k], dict) and isinstance(v, dict):
+            merged[k] = merge_migration_options(merged[k], v)
+        elif k in merged and isinstance(merged[k], list) and isinstance(v, list):
+            # Concatenate lists and remove duplicates while preserving first-seen order
+            combined_list = merged[k] + v
+            deduplicated_list = []
+            seen = set()
+            for item in combined_list:
+                if item not in seen:
+                    deduplicated_list.append(item)
+                    seen.add(item)
+            merged[k] = deduplicated_list
+        else:
+            merged[k] = v
+    return merged
+
+def prepare_migration_plan(plan_id: str, version: str, base_opt: Dict[str, Any], run_opt: Dict[str, Any]) -> MigrationPlan:
+    if not is_valid_version(version):
+        raise ValueError("Invalid target version")
+    opts = merge_migration_options(base_opt, run_opt)
+    return MigrationPlan(plan_id=plan_id, target_version=version, options=opts)
+=== END ===

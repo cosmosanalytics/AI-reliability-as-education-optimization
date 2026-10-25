@@ -1,17 +1,17 @@
 === FILE: sanitizer.py ===
-"""CSV cell sanitizer."""
-def sanitize_cell(text: str) -> str:
-    if requires_sanitization(text):
-        # Escape internal double quotes by doubling them
-        escaped_text = text.replace('"', '""')
-        # Enclose the entire string in double quotes
-        return f'"{escaped_text}"'
-    else:
-        # No special characters, return as is
-        return text
+"""TSV cell sanitizer."""
+from typing import Optional
+
+def sanitize_cell(text: Optional[str]) -> str:
+    if text is None:
+        return ""
+    # Escape backslashes first to prevent double-escaping of newly introduced backslashes
+    # Then escape double quotes with a backslash, as expected by the audit parser.
+    return text.replace('\\', '\\\\').replace('"', '\\"')
 
 def requires_sanitization(text: str) -> bool:
-    # A cell requires sanitization (quoting) if it contains a comma,
-    # a double quote, or a newline character.
-    return any(c in text for c in (',', '\n', '"'))
+    # This function is currently not used by exporter.py for actual sanitization logic,
+    # but it correctly identifies characters that would typically require escaping
+    # or quoting in a TSV context.
+    return any(c in text for c in ('\t', '\n', '"', '\\'))
 === END ===

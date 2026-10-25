@@ -1,0 +1,36 @@
+=== FILE: io_calc.py ===
+"""Disk IO wait time percentile calculation."""
+import math
+from typing import List, Dict, Any
+from io_types import IoBatch, IoWaitSample
+from io_summary import format_io_summary
+
+def compute_io_percentile(batch: IoBatch, p: float) -> float:
+    """Computes storage wait percentile.
+    Uses the nearest-rank method where the index is calculated as int(p/100 * n).
+    """
+    times = batch.times()
+    if not times:
+        raise ValueError("Empty IO batch")
+    s = sorted(times)
+    n = len(s)
+    # The original implementation used int((p / 100.0) * (n - 1)),
+    # which is common for some percentile definitions, particularly when
+    # interpolating or for 0-100% inclusive range.
+    # The traceback suggests a definition where for a value near the maximum,
+    # the maximum is returned. Using int((p / 100.0) * n) aligns with
+    # some other percentile definitions (e.g., nearest-rank, rounding up fractional ranks)
+    # where the 100th percentile of n items is the largest item.
+    # For example, with [100, 200, 300, 400, 500] (n=5), 90th percentile:
+    # Old: int(0.9 * (5-1)) = int(3.6) = 3, s[3] = 400
+    # New: int(0.9 * 5) = int(4.5) = 4, s[4] = 500
+    # This change addresses the INC-7107 issue.
+    idx = int((p / 100.0) * n)
+    # Ensure the index is within bounds [0, n-1]
+    idx = min(max(0, idx), n - 1)
+    return float(s[idx])
+
+def summarize_io_batch(batch: IoBatch, p: float) -> Dict[str, Any]:
+    val = compute_io_percentile(batch, p)
+    return format_io_summary(batch.count(), val)
+=== END ===

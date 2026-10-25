@@ -1,37 +1,34 @@
-=== FILE: path_normalizer.py ===
-"""Storage path normalization engine."""
-def normalize_bucket_path(path: str) -> str:
-    # Ensure path starts with a single '/' and does not end with a '/' unless it's just '/'
-    normalized = "/" + path.strip("/")
-    return normalized
+=== FILE: asset_service.py ===
+"""Asset bucket retrieval service."""
+from path_normalizer import validate_prefix_match, get_scope_depth
+from models import StorageAsset
 
-def validate_prefix_match(scope_prefix: str, asset_path: str) -> bool:
+def can_access_asset(asset: StorageAsset, required_scope: str) -> bool:
+    """Check if asset scope matches the required storage scope.
+    Access control scopes must use the double-colon hierarchy tenant::department::service::action.
+    Sibling paths must be checked against '::' segment boundaries.
     """
-    Validates if an asset's path falls within a given scope prefix, respecting directory boundaries.
-    For example, '/assets' should match '/assets/image.png' but not '/assets-private/doc.pdf'.
-    Trailing slashes are normalized before comparison.
-    """
-    normalized_scope = normalize_bucket_path(scope_prefix)
-    normalized_asset_path = normalize_bucket_path(asset_path)
+    asset_scope = asset.scope_path
 
-    # If the asset path is exactly the scope path, it's a match
-    if normalized_asset_path == normalized_scope:
+    # First, ensure the required_scope is a prefix of the asset_scope
+    if not asset_scope.startswith(required_scope):
+        return False
+
+    # If the scopes are identical, access is granted
+    if asset_scope == required_scope:
         return True
 
-    # If the asset path starts with the scope path, check if the character
-    # immediately following the scope path in the asset path is a directory separator.
-    # This enforces directory boundary matching.
-    if normalized_asset_path.startswith(normalized_scope):
-        # The character after the scope must be a '/' to qualify as being 'inside' the directory
-        # e.g., for scope='/assets', asset='/assets/image.png', then normalized_scope='/assets'
-        # normalized_asset_path[len(normalized_scope)] would be '/'
-        # For scope='/assets', asset='/assets-private/doc.pdf', then normalized_scope='/assets'
-        # normalized_asset_path[len(normalized_scope)] would be '-'
-        if len(normalized_asset_path) > len(normalized_scope) and \
-           normalized_asset_path[len(normalized_scope)] == '/':
-            return True
-    return False
+    # If the asset_scope is longer, ensure the part immediately
+    # after the required_scope starts with a double-colon separator '::'.
+    # This prevents matching 'assets::images_private' with 'assets::images'
+    # but allows 'assets::images::logo' with 'assets::images'.
+    end_of_required_scope_idx = len(required_scope)
+    
+    return asset_scope[end_of_required_scope_idx:].startswith("::")
 
-def get_scope_depth(path: str) -> int:
-    return len([seg for seg in path.split("/") if seg])
+def filter_accessible_assets(assets: list, required_scope: str) -> list:
+    return [a for a in assets if can_access_asset(a, required_scope)]
+
+def get_asset_hierarchy_level(asset: StorageAsset) -> int:
+    return get_scope_depth(asset.scope_path)
 === END ===

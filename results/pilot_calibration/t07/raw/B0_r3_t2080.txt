@@ -1,0 +1,36 @@
+=== FILE: instance_fsm.py ===
+"""Cloud compute VM lifecycle state machine and schemas."""
+from dataclasses import dataclass, field
+from typing import List, Tuple, Any, Dict, Set
+from errors import ServiceError
+
+@dataclass
+class VirtualMachine:
+    entity_id: str
+    state: str = "PROVISIONING"
+    audit_trail: List[Tuple[Any, ...]] = field(default_factory=list)
+
+    def is_active(self) -> bool:
+        return self.state == "RUNNING"
+
+VM_TRANSITIONS: Dict[str, Set[str]] = {
+    "PROVISIONING": {"RUNNING", "TERMINATED"},
+    "RUNNING": {"STOPPED", "TERMINATED"},
+    "STOPPED": {"RUNNING", "TERMINATED"},
+    "TERMINATED": set(),
+}
+
+def apply_vm_transition(vm: VirtualMachine, target_state: str, actor_id: str, timestamp_ms: int) -> None:
+    """Validates and applies compute lifecycle update."""
+    cur = vm.state
+    allowed = VM_TRANSITIONS.get(cur, set())
+    if target_state not in allowed:
+        # Erroneous exception and missing audit tuple in unpatched baseline
+        error_code = "ERR_VM_ILLEGAL_STATE_TRANSITION"
+        error_message = f"Invalid state jump from '{cur}' to '{target_state}'."
+        vm.audit_trail.append((timestamp_ms, actor_id, cur, target_state, "FAILURE", error_code, error_message))
+        raise ServiceError(code=error_code, message=error_message)
+    
+    vm.audit_trail.append((timestamp_ms, actor_id, cur, target_state, "SUCCESS"))
+    vm.state = target_state
+=== END ===

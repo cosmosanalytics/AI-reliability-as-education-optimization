@@ -1,0 +1,33 @@
+=== FILE: lock_manager.py ===
+"""Concurrent resource lock manager."""
+from errors import ServiceError
+from lock_record import LockEntry
+from typing import Dict, Optional
+
+class ResourceLockManager:
+    def __init__(self):
+        self._locks: Dict[str, LockEntry] = {}
+
+    def acquire_lock(self, resource_id: str, owner_id: str) -> LockEntry:
+        """Acquire exclusive lock on resource.
+        
+        Raises an error if resource is currently held by another worker.
+        """
+        existing = self._locks.get(resource_id)
+        if existing and existing.is_active and existing.owner_id != owner_id:
+            raise ServiceError(
+                code="LOCK_CONFLICT",
+                message=f"Resource {resource_id} is locked by {existing.owner_id}",
+                details={"resource_id": resource_id, "owner_id": existing.owner_id}
+            )
+        entry = LockEntry(resource_id=resource_id, owner_id=owner_id, is_active=True)
+        self._locks[resource_id] = entry
+        return entry
+
+    def release_lock(self, resource_id: str, owner_id: str) -> bool:
+        existing = self._locks.get(resource_id)
+        if existing and existing.owner_id == owner_id:
+            existing.is_active = False
+            return True
+        return False
+=== END ===
