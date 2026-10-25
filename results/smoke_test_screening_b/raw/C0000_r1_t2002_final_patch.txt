@@ -1,0 +1,60 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+    Ensures the sum of allocated discounts equals total_discount_cents,
+    distributing any remainder cents to the first lines.
+
+    line_totals: list of integer cents.
+    Returns list of discount cents per line.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+
+    total_value = sum(line_totals)
+    num_lines = len(line_totals)
+
+    if total_value == 0:
+        # If total value is zero, distribute the discount evenly if possible,
+        # otherwise, all zeros.
+        if num_lines == 0:
+            return []
+        # If total_discount_cents is 0, return all zeros.
+        # If total_discount_cents is not 0, and total_value is 0,
+        # there's no basis for proportional allocation.
+        # A simple approach is to allocate 0 to all lines, or distribute evenly.
+        # Given the context of "prorate proportionally", it implies 0 allocation
+        # if the total value is 0.
+        return [0] * num_lines
+
+    # Calculate base allocation for each line using integer division
+    base_allocations = [
+        (cents * total_discount_cents) // total_value
+        for cents in line_totals
+    ]
+
+    # Calculate the sum of base allocations
+    sum_of_base_allocations = sum(base_allocations)
+
+    # Calculate the remainder that needs to be distributed
+    remainder = total_discount_cents - sum_of_base_allocations
+
+    # Distribute the remainder cents one by one to the first lines
+    final_allocations = list(base_allocations) # Create a mutable copy
+    
+    # Positive remainder: add cents
+    for i in range(remainder):
+        final_allocations[i] += 1
+    
+    return final_allocations
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===

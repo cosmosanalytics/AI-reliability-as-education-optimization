@@ -1,0 +1,24 @@
+{
+  "strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "failing_variants": [
+    "hidden tests"
+  ],
+  "variants": [
+    {
+      "name": "hidden tests",
+      "expect": "pass",
+      "rc": 1,
+      "ok": false
+    }
+  ],
+  "visible_rc": 1,
+  "visible_output": ".F.                                                                      [100%]\n================================== FAILURES ===================================\n____________________________ test_profile_builder _____________________________\ntests\\test_routing.py:11: in test_profile_builder\n    p = build_route_profile(\"tenant-1\", {\"host\": \"internal\"}, {\"port\": 8080})\nrouting.py:38: in build_route_profile\n    from errors import ServiceError # Import locally to avoid circular dependency\nerrors.py:3: in <module>\n    class ServiceError(Exception):\nerrors.py:5: in ServiceError\n    def __init__(self, code: str, message: str, details: Any = None):\nE   NameError: name 'Any' is not defined\n=========================== short test summary info ===========================\nFAILED tests/test_routing.py::test_profile_builder - NameError: name 'Any' is...\n1 failed, 2 passed in 0.32s\n",
+  "diff_lines": 45,
+  "changed_files": [
+    "errors.py",
+    "routing.py"
+  ]
+}

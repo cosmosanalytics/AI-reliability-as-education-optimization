@@ -1,0 +1,18 @@
+Visible Test Failure (exit code 1):
+.F.                                                                      [100%]
+================================== FAILURES ===================================
+____________________________ test_profile_builder _____________________________
+tests\test_routing.py:11: in test_profile_builder
+    p = build_route_profile("tenant-1", {"host": "internal"}, {"port": 8080})
+routing.py:43: in build_route_profile
+    from errors import ServiceError
+errors.py:4: in <module>
+    class ServiceError(Exception):
+errors.py:14: in ServiceError
+    def to_dict(self) -> Dict[str, Any]:
+E   NameError: name 'Dict' is not defined
+=========================== short test summary info ===========================
+FAILED tests/test_routing.py::test_profile_builder - NameError: name 'Dict' i...
+1 failed, 2 passed in 0.31s
+
+Reply with your complete corrected patch in the required === FILE: path === ... === END === block format.

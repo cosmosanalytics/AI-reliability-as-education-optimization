@@ -1,0 +1,24 @@
+{
+  "strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "failing_variants": [
+    "hidden tests"
+  ],
+  "variants": [
+    {
+      "name": "hidden tests",
+      "expect": "pass",
+      "rc": 1,
+      "ok": false
+    }
+  ],
+  "visible_rc": 1,
+  "visible_output": ".F.                                                                      [100%]\n================================== FAILURES ===================================\n____________________________ test_profile_builder _____________________________\ntests\\test_routing.py:11: in test_profile_builder\n    p = build_route_profile(\"tenant-1\", {\"host\": \"internal\"}, {\"port\": 8080})\nrouting.py:44: in build_route_profile\n    raise ServiceError(\nE   errors.ServiceError: Routing configuration for tenant 'tenant-1' is missing required keys (e.g., 'retries', 'timeout').\n=========================== short test summary info ===========================\nFAILED tests/test_routing.py::test_profile_builder - errors.ServiceError: Rou...\n1 failed, 2 passed in 0.31s\n",
+  "diff_lines": 54,
+  "changed_files": [
+    "errors.py",
+    "routing.py"
+  ]
+}

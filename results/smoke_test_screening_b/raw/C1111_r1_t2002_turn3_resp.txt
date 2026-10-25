@@ -1,0 +1,105 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from decimal import Decimal, ROUND_HALF_UP
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+
+    The sum of allocated discounts will exactly equal total_discount_cents,
+    distributing any remainder cents to the first lines.
+
+    Args:
+        line_totals: List of integer cents for each line item. Must be non-negative.
+        total_discount_cents: The total discount amount in integer cents to allocate.
+
+    Returns:
+        List of discount cents allocated per line, summing exactly to total_discount_cents.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+
+    total_line_value = sum(line_totals)
+    num_lines = len(line_totals)
+
+    if total_line_value == 0:
+        # If total_line_value is zero, and there's a discount, it implies an unusual scenario.
+        # Distribute the discount equally among all lines, if any, otherwise all zeros.
+        # This handles cases like prorate_discount([0,0], 10).
+        if num_lines > 0:
+            # If total_discount_cents is 0, this will correctly result in [0, 0, ...]
+            # If total_discount_cents is non-zero, this ensures the sum is correct
+            # by distributing remainder after initial floor division.
+            base_allocation = total_discount_cents // num_lines
+            allocations = [base_allocation] * num_lines
+            remainder = total_discount_cents - sum(allocations)
+            
+            # Distribute remainder to the first `remainder` lines
+            for i in range(remainder):
+                allocations[i] += 1
+            return allocations
+        else:
+            return [] # No lines to allocate to
+            
+    # Use Decimal for precise calculation and ROUND_HALF_UP as per Rule H02
+    d_total_discount = Decimal(str(total_discount_cents))
+    d_total_line_value = Decimal(str(total_line_value))
+
+    # Calculate proportional share for each line item
+    exact_allocations = []
+    for cents in line_totals:
+        d_cents = Decimal(str(cents))
+        exact_allocations.append((d_cents / d_total_line_value) * d_total_discount)
+
+    # Round each allocation using ROUND_HALF_UP
+    rounded_allocations_int = [
+        int(alloc.quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+        for alloc in exact_allocations
+    ]
+
+    # Calculate the sum of the rounded allocations
+    current_sum = sum(rounded_allocations_int)
+
+    # Distribute the remainder (unallocated pennies) to ensure the total sums up correctly.
+    # This handles both positive (under-allocated) and negative (over-allocated) remainders.
+    remainder = total_discount_cents - current_sum
+
+    # Distribute remainder cents to ensure total_allocated == total_discount_cents.
+    # This loop handles both positive and negative remainders by adding/subtracting 1 cent
+    # to/from items sequentially until the remainder is zero.
+    # It prioritizes the first items for distribution for deterministic behavior.
+    line_idx = 0
+    while remainder != 0 and line_idx < num_lines:
+        if remainder > 0:
+            rounded_allocations_int[line_idx] += 1
+            remainder -= 1
+        elif remainder < 0:
+            # Only subtract if the current allocation is positive to avoid negative allocations
+            # for a positive total_discount_cents. If total_discount_cents is negative,
+            # this logic would still attempt to keep individual allocations as non-negative as possible.
+            if rounded_allocations_int[line_idx] > 0:
+                rounded_allocations_int[line_idx] -= 1
+                remainder += 1
+        line_idx += 1
+        
+    # If there's still a remainder after iterating through all lines (e.g., negative allocations
+    # prevented further subtraction, or lines are empty), this indicates an edge case
+    # where the discount cannot be fully distributed while maintaining non-negative individual
+    # line allocations. For promotional discounts, this would typically imply an invalid input state.
+    # The problem statement implies `total_discount_cents` should be fully allocated,
+    # and `line_totals` are non-negative, so this scenario should ideally not leave a remainder.
+    # If it does, the current implementation will return the best effort.
+
+    return rounded_allocations_int
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result.
+    Ensures that the sum of allocated discounts exactly matches total_discount_cents.
+    """
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    # The new prorate_discount ensures tot == total_discount_cents
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===

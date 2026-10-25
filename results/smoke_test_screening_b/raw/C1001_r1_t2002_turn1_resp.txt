@@ -1,0 +1,93 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+import decimal
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+    The total discount is distributed using half-up rounding, with any remaining
+    cents allocated to lines with the largest fractional parts to ensure the
+    sum matches `total_discount_cents`.
+    line_totals: list of integer cents.
+    Returns list of discount cents per line.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+    
+    total_line_value = sum(line_totals)
+    num_lines = len(line_totals)
+
+    if total_line_value == 0:
+        # If the total value of lines is zero, no discount can be proportionally applied.
+        # Return zeros for all lines, consistent with previous behavior.
+        return [0] * num_lines
+
+    # Use Decimal for precise monetary arithmetic as per H02: Monetary Arithmetic and Half-Up Rounding Convention
+    D = decimal.Decimal
+    ROUND_HALF_UP = decimal.ROUND_HALF_UP
+
+    # Calculate proportional shares with high precision
+    # Store tuples of (fractional_part, original_index, rounded_value)
+    # The fractional_part is used for deterministic distribution of remainder pennies.
+    # We use `decimal.getcontext().prec = 28` to ensure sufficient precision for calculations
+    # before quantizing to 2 decimal places (representing cents).
+    allocations_with_fractions = []
+    
+    # Temporarily increase precision for intermediate calculations
+    original_precision = decimal.getcontext().prec
+    decimal.getcontext().prec = 28 # Sufficient precision for intermediate calculations
+
+    for i, cents in enumerate(line_totals):
+        proportion = D(cents) / D(total_line_value)
+        exact_allocation = proportion * D(total_discount_cents)
+        
+        # Round to nearest integer using ROUND_HALF_UP
+        rounded_value = exact_allocation.quantize(D('1'), rounding=ROUND_HALF_UP)
+        
+        # Calculate the fractional part (positive if exact_allocation > rounded_value,
+        # negative if exact_allocation < rounded_value, 0 if exact_allocation is integer)
+        # This helps in distributing remaining cents.
+        fractional_part = exact_allocation - rounded_value
+        
+        # Store for later distribution of remainder pennies
+        # We need the absolute value of fractional_part for sorting, and the original index for tie-breaking.
+        allocations_with_fractions.append((abs(fractional_part), i, int(rounded_value)))
+    
+    # Restore original precision
+    decimal.getcontext().prec = original_precision
+
+    # Extract initial rounded allocations
+    final_allocations = [item[2] for item in allocations_with_fractions]
+    
+    # Calculate the current sum and the remainder to distribute
+    current_sum = sum(final_allocations)
+    remainder = total_discount_cents - current_sum
+
+    # Distribute the remainder pennies.
+    # Sort by absolute fractional part (descending) and then by original index (ascending) for deterministic tie-breaking.
+    # The original index ensures stability if fractional parts are identical.
+    allocations_with_fractions.sort(key=lambda x: (x[0], -x[1]), reverse=True) # Sort by abs(fractional_part) DESC, then original_index ASC (negated for reverse=True)
+
+    # Add or subtract pennies based on the remainder
+    for i in range(abs(remainder)):
+        # Get the line that should receive/lose a penny
+        # We cycle through the sorted lines to distribute the remainder one by one.
+        # The modulo ensures we handle cases where remainder > num_lines.
+        line_idx_in_sorted_list = i % num_lines
+        original_idx = allocations_with_fractions[line_idx_in_sorted_list][1]
+
+        if remainder > 0:
+            final_allocations[original_idx] += 1
+        elif remainder < 0:
+            final_allocations[original_idx] -= 1
+
+    return final_allocations
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===

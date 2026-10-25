@@ -1,0 +1,35 @@
+=== FILE: routing.py ===
+"""Tenant routing configuration aggregator."""
+import copy
+from typing import Dict, Any
+from models import RouteProfile
+from schema import validate_route_keys
+
+def merge_tenant_routing(base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge tenant overrides into base configuration.
+    Inputs must remain strictly immutable; the function must return a newly allocated deep copy.
+    
+    This function performs a deep merge:
+    - Top-level keys from `tenant_overrides` take precedence.
+    - If both `base_config` and `tenant_overrides` contain a key whose value is a dictionary,
+      these nested dictionaries are recursively merged.
+    - All other values are deep copied to ensure immutability.
+    """
+    merged = copy.deepcopy(base_config)
+    for key, value in tenant_overrides.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            # Recursively deep-merge nested dictionaries
+            # Ensure merged[key] is a deep copy before updating it
+            merged[key] = merge_tenant_routing(merged[key], value)
+        else:
+            # For non-dict values or new keys, deep copy the override value
+            merged[key] = copy.deepcopy(value)
+    return merged
+
+def build_route_profile(tenant_id: str, base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> RouteProfile:
+    cfg = merge_tenant_routing(base_config, tenant_overrides)
+    # The validation function itself should not mutate the config.
+    # It's assumed validate_route_keys performs read-only checks.
+    validate_route_keys(cfg)
+    return RouteProfile(tenant_id=tenant_id, settings=cfg)
+=== END ===

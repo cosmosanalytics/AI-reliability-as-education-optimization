@@ -1,0 +1,68 @@
+=== FILE: routing.py ===
+"""Tenant routing configuration aggregator."""
+import copy
+from typing import Dict, Any
+from models import RouteProfile
+from schema import validate_route_keys
+
+def _deep_merge_config(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Recursively merges two dictionaries.
+    Values from 'override' overwrite values in 'base'.
+    If both dictionaries contain a key that maps to another dictionary,
+    the merge is performed recursively. All new structures are deep copied.
+    """
+    merged = copy.deepcopy(base)
+    for key, value in override.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            # Recursively merge nested dictionaries
+            merged[key] = _deep_merge_config(merged[key], value)
+        else:
+            # For non-dict values or new keys, deep copy the override value
+            merged[key] = copy.deepcopy(value)
+    return merged
+
+def merge_tenant_routing(base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge tenant overrides into base configuration.
+    Inputs must remain strictly immutable; the function must return a newly allocated deep copy.
+    """
+    # Rule H03: Container Immutability and Defensive Allocation.
+    # The original implementation performed a shallow copy and update,
+    # which broke isolation for nested dictionaries, leading to the OUT-104 outage.
+    # A deep, recursive merge is required to correctly combine configuration
+    # while preserving isolation and adhering to the deep copy requirement.
+    return _deep_merge_config(base_config, tenant_overrides)
+
+def build_route_profile(tenant_id: str, base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> RouteProfile:
+    cfg = merge_tenant_routing(base_config, tenant_overrides)
+    # Rule H04: Structured Service Exception Hierarchy.
+    # Validate configuration keys and raise a ServiceError if validation fails.
+    # The original code called validate_route_keys but did not act on its return value.
+    # If validation fails, an appropriate ServiceError should be raised.
+    if not validate_route_keys(cfg):
+        # Import locally to prevent potential circular dependencies and keep module imports clean.
+        from errors import ServiceError
+        raise ServiceError(
+            code="ERR_PAYLOAD_SCHEMA_INVALID",
+            message=f"Routing configuration for tenant '{tenant_id}' is missing required keys (e.g., 'retries', 'timeout')."
+        )
+    return RouteProfile(tenant_id=tenant_id, settings=cfg)
+=== END ===
+=== FILE: errors.py ===
+"""Centralized service error definitions."""
+from typing import Any
+
+class ServiceError(Exception):
+    """Base class for all service-specific errors.
+    Adheres to Rule H04: Structured Service Exception Hierarchy.
+    """
+    def __init__(self, code: str, message: str, details: Any = None):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.details = details
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serializes the error into a dictionary for API responses or logging."""
+        return {"code": self.code, "message": self.message, "details": self.details}
+=== END ===

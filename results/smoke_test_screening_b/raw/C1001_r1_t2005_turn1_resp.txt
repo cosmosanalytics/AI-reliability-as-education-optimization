@@ -1,0 +1,59 @@
+=== FILE: routing.py ===
+"""Tenant routing configuration aggregator."""
+import copy
+from typing import Dict, Any
+from models import RouteProfile
+from schema import validate_route_keys
+
+def _deep_merge_config(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Recursively merges two dictionaries.
+    Values from 'override' overwrite values in 'base'.
+    If both dictionaries contain a key that maps to another dictionary,
+    the merge is performed recursively.
+    """
+    merged = copy.deepcopy(base)
+    for key, value in override.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            merged[key] = _deep_merge_config(merged[key], value)
+        else:
+            merged[key] = copy.deepcopy(value)
+    return merged
+
+def merge_tenant_routing(base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge tenant overrides into base configuration.
+    Inputs must remain strictly immutable; the function must return a newly allocated deep copy.
+    """
+    # Rule H03: Container Immutability and Defensive Allocation.
+    # The original implementation performed a shallow copy and update,
+    # which broke isolation for nested dictionaries.
+    # A deep, recursive merge is required to correctly combine configuration
+    # while preserving isolation and adhering to the deep copy requirement.
+    return _deep_merge_config(base_config, tenant_overrides)
+
+def build_route_profile(tenant_id: str, base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> RouteProfile:
+    cfg = merge_tenant_routing(base_config, tenant_overrides)
+    # Rule H04: Structured Service Exception Hierarchy.
+    # Validate configuration keys and raise a ServiceError if validation fails.
+    if not validate_route_keys(cfg):
+        from errors import ServiceError # Import locally to avoid circular dependency
+        raise ServiceError(
+            code="ERR_PAYLOAD_SCHEMA_INVALID",
+            message=f"Routing configuration for tenant '{tenant_id}' is missing required keys (e.g., 'retries', 'timeout')."
+        )
+    return RouteProfile(tenant_id=tenant_id, settings=cfg)
+=== END ===
+=== FILE: errors.py ===
+"""Centralized service error definitions."""
+
+class ServiceError(Exception):
+    """Base class for all service-specific errors."""
+    def __init__(self, code: str, message: str, details: Any = None):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.details = details
+
+    def to_dict(self):
+        return {"code": self.code, "message": self.message, "details": self.details}
+=== END ===
