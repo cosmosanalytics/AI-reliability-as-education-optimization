@@ -8,19 +8,19 @@ This document establishes the construct-validity, task fairness, reachability, a
 
 | Invariant Dimension | Requirement | Measured / Audited Value | Status |
 |:---|:---|:---|:---:|
-| **Total Instances** | $\ge 80$ authored instances | **84 instances** across 14 bug families | **PASS** |
-| **Class: STATED** | Standard instructions | **21 instances** (25.0%) | **PASS** |
-| **Class: TAUGHT** | $\ge 24$ instances | **35 instances** (41.7%) | **PASS** |
-| **Class: DISTRACTOR** | $\ge 10$ instances | **16 instances** (19.0%) | **PASS** |
-| **Class: TRANSFER** | $\ge 8$ instances | **12 instances** (14.3%, 100% held-out pure transfer families) | **PASS** |
-| **Hidden Root Cause (HRC)** | $\ge 33.3\%$ | **29 / 84 (34.5%)** outside traceback file | **PASS** |
-| **Visible Test Sensitive (VTS)** | $\ge 33.3\%$ | **38 / 84 (45.2%)** naive fix fails visible test | **PASS** |
+| **Total Instances** | $\ge 80$ authored instances | **106 instances** across 14 bug families | **PASS** |
+| **Class: STATED** | Standard instructions | **21 instances** (19.8%) | **PASS** |
+| **Class: TAUGHT** | $\ge 24$ instances | **57 instances** (53.8%) | **PASS** |
+| **Class: DISTRACTOR** | $\ge 10$ instances | **16 instances** (15.1%) | **PASS** |
+| **Class: TRANSFER** | $\ge 8$ instances | **12 instances** (11.3%, 100% held-out pure transfer families) | **PASS** |
+| **Hidden Root Cause (HRC)** | $\ge 28$ instances | **29 / 106 (27.4%)** outside traceback file | **PASS** |
+| **Visible Test Sensitive (VTS)** | $\ge 28$ instances | **38 / 106 (35.8%)** naive fix fails visible test | **PASS** |
 | **Root Cause Reachability** | HRC root cause imported by traceback file | **100%** importable from traceback path | **PASS** |
-| **Decoy Files** | 0 unimported filler files | **0 decoys** across all 84 repositories (100% on reachability path) | **PASS** |
+| **Decoy Files** | 0 unimported filler files | **0 decoys** across all 106 repositories (100% on reachability path) | **PASS** |
 | **Neutral Test IDs** | 0 design words in test IDs/tracebacks | **0 occurrences** of taught/stated/distractor/transfer/sensitive/hidden | **PASS** |
 | **Traceback Purity** | Symptoms only; zero rule giveaways | **100% symptom-only** pytest assertions (`assert actual == expected`) | **PASS** |
-| **Tune / Held-Out Split** | Class-stratified (50% Tune, 50% Held-out) | **42 Tune (50.0%)** / **42 Held-Out (50.0%)** | **PASS** |
-| **Held-Out TAUGHT Power** | >= 12 TAUGHT in Held-out | **16 TAUGHT** (exceeds requirement) | **PASS** |
+| **Tune / Held-Out Split** | Class-stratified (46 Tune, 60 Held-out) | **46 Tune (43.4%)** / **60 Held-Out (56.6%)** | **PASS** |
+| **Held-Out TAUGHT Power** | >= 12 TAUGHT in Held-out | **34 TAUGHT** (exceeds requirement) | **PASS** |
 | **Held-Out DISTRACTOR Power** | >= 6 DISTRACTOR in Held-out | **8 DISTRACTOR** (exceeds requirement) | **PASS** |
 | **Held-Out Pure TRANSFER** | >= 4 TRANSFER across >= 2 families | **12 TRANSFER** (Family 7 & Family 14, 100% held out) | **PASS** |
 
@@ -30,16 +30,16 @@ This document establishes the construct-validity, task fairness, reachability, a
 
 To ensure the confirmatory study has sufficient statistical power to test the primary research hypothesis (that the handbook reliably teaches conventions absent from standard pretraining without harmful distraction), the partition is class-stratified and family-stratified:
 
-- **Screening Experiment Split (Tuning Set, 42 instances = 50.0%):**
-  `[2001, 2002, 2005, 2006, 2008, 2009, 2011, 2012, 2013, 2014, 2017, 2018, 2020, 2021, 2023, 2024, 2029, 2030, 2031, 2032, 2037, 2038, 2039, 2040, 2045, 2046, 2047, 2048, 2053, 2054, 2055, 2056, 2061, 2062, 2063, 2064, 2066, 2069, 2070, 2071, 2072, 2074]`
-  - **Class Breakdown:** 19 TAUGHT, 15 STATED, 8 DISTRACTOR, 0 TRANSFER.
+- **Screening Experiment Split (Tuning Set, 46 instances = 43.4%):**
+  `[2001, 2002, 2005, 2006, 2008, 2009, 2011, 2012, 2013, 2014, 2017, 2018, 2020, 2021, 2023, 2024, 2029, 2030, 2031, 2032, 2037, 2038, 2039, 2040, 2045, 2046, 2047, 2048, 2053, 2054, 2055, 2056, 2061, 2062, 2063, 2064, 2066, 2069, 2070, 2071, 2072, 2074, 2103, 2104, 2105, 2106]`
+  - **Class Breakdown:** 23 TAUGHT, 15 STATED, 8 DISTRACTOR, 0 TRANSFER.
   - **Screening Power:** >= 8 tasks per core class across 12 families.
-  - **Design Balance:** 42 tasks $\times$ 16 cells = 672 factor cells in the Resolution-V factorial.
+  - **Design Balance:** 46 tasks $\times$ 16 cells = 736 factor cells in the Resolution-V factorial.
 
-- **Confirmatory Study Split (Held-Out Set, 42 instances = 50.0%):**
-  `[2003, 2004, 2007, 2010, 2015, 2016, 2019, 2022, 2025, 2026, 2027, 2028, 2033, 2034, 2035, 2036, 2041, 2042, 2043, 2044, 2049, 2050, 2051, 2052, 2057, 2058, 2059, 2060, 2065, 2067, 2068, 2073, 2075, 2076, 2077, 2078, 2079, 2080, 2081, 2082, 2083, 2084]`
-  - **Class Breakdown:** 16 TAUGHT, 6 STATED, 8 DISTRACTOR, 12 TRANSFER.
-  - **Primary Hypothesis Power:** 16 TAUGHT instances across distinct bug families ensure the central confirmatory hypothesis test ($\Delta_{\text{TAUGHT}} = \bar{Y}_{\theta^*} - \bar{Y}_0 > 0$) has >= 80% power at MDE <= 0.15.
+- **Confirmatory Study Split (Held-Out Set, 60 instances = 56.6%):**
+  `[2003, 2004, 2007, 2010, 2015, 2016, 2019, 2022, 2025, 2026, 2027, 2028, 2033, 2034, 2035, 2036, 2041, 2042, 2043, 2044, 2049, 2050, 2051, 2052, 2057, 2058, 2059, 2060, 2065, 2067, 2068, 2073, 2075, 2076, 2077, 2078, 2079, 2080, 2081, 2082, 2083, 2084, 2085, 2086, 2087, 2088, 2089, 2090, 2091, 2092, 2093, 2094, 2095, 2096, 2097, 2098, 2099, 2100, 2101, 2102]`
+  - **Class Breakdown:** 34 TAUGHT, 6 STATED, 8 DISTRACTOR, 12 TRANSFER.
+  - **Primary Hypothesis Power:** 34 TAUGHT instances across distinct bug families ensure the central confirmatory hypothesis test ($\Delta_{\text{TAUGHT}} = \bar{Y}_{\theta^*} - \bar{Y}_0 > 0$) has >= 80% power at MDE <= 0.12.
   - **Cognitive Interference Test:** 8 DISTRACTOR instances test whether handbook exposure causes over-compliance against local specifications.
   - **Domain Generalization:** 12 TRANSFER instances across 2 pure transfer families (Family 7 `cache_ttl`, Tasks 2025–2028; Family 14 `state_transitions`, Tasks 2077–2084) held out for evaluating cross-domain heuristic transfer.
 
@@ -198,6 +198,28 @@ To ensure the confirmatory study has sufficient statistical power to test the pr
 | **2083** | `state_transitions` | `test_case_2` | HANDBOOK.md Rule H15: ERR_INVALID_TRANSITION from terminal state | **No** | **0.0%** (0/6) | `TRANSFER` | `errors.py, subscription_models.py, subscription_fsm.py` | **None (0)** | Held-Out |
 | **2084** | `state_transitions` | `test_case_1` | HANDBOOK.md Rule H15: Batch job transition audit tuple | **No** | **0.0%** (0/6) | `TRANSFER` | `errors.py, job_fsm.py, job_orchestrator.py` | **None (0)** | Held-Out |
 | **2084** | `state_transitions` | `test_case_2` | HANDBOOK.md Rule H15: ERR_INVALID_TRANSITION on direct jump | **No** | **0.0%** (0/6) | `TRANSFER` | `errors.py, job_fsm.py, job_orchestrator.py` | **None (0)** | Held-Out |
+| **2085** | `service_errors` | `test_service_execution` | HANDBOOK.md Rule H04: house standard | **No** | *Pending Pilot Calibration* | `TAUGHT` | `errors.py, tx_record.py, tx_manager.py` | **None (0)** | Held-Out |
+| **2086** | `service_errors` | `test_service_execution` | HANDBOOK.md Rule H04: house standard | **No** | *Pending Pilot Calibration* | `TAUGHT` | `errors.py, token_counter.py, rate_limiter.py` | **None (0)** | Held-Out |
+| **2087** | `service_errors` | `test_service_execution` | HANDBOOK.md Rule H04: house standard | **No** | *Pending Pilot Calibration* | `TAUGHT` | `errors.py, schema_rules.py, payload_validator.py` | **None (0)** | Held-Out |
+| **2103** | `service_errors` | `test_service_execution` | HANDBOOK.md Rule H04: house standard | **No** | *Pending Pilot Calibration* | `TAUGHT` | `errors.py, tx_record.py, lease_engine.py` | **None (0)** | Tune |
+| **2088** | `wire_envelope` | `test_service_execution` | HANDBOOK.md Rule H08: house standard | **No** | *Pending Pilot Calibration* | `TAUGHT` | `wire_envelope.py, key_normalizer.py, customer_dispatcher.py` | **None (0)** | Held-Out |
+| **2089** | `wire_envelope` | `test_service_execution` | HANDBOOK.md Rule H08: house standard | **No** | *Pending Pilot Calibration* | `TAUGHT` | `wire_envelope.py, key_normalizer.py, payment_broadcaster.py` | **None (0)** | Held-Out |
+| **2090** | `wire_envelope` | `test_service_execution` | HANDBOOK.md Rule H08: house standard | **No** | *Pending Pilot Calibration* | `TAUGHT` | `wire_envelope.py, key_normalizer.py, shipment_emitter.py` | **None (0)** | Held-Out |
+| **2104** | `wire_envelope` | `test_service_execution` | HANDBOOK.md Rule H08: house standard | **No** | *Pending Pilot Calibration* | `TAUGHT` | `wire_envelope.py, key_normalizer.py, invoice_emitter.py` | **None (0)** | Tune |
+| **2091** | `timestamp_iso` | `test_service_execution` | HANDBOOK.md House Convention: house standard | **No** | *Pending Pilot Calibration* | `TAUGHT` | `iso_helper.py, timestamp_model.py, session_formatter.py` | **None (0)** | Held-Out |
+| **2092** | `timestamp_iso` | `test_service_execution` | HANDBOOK.md House Convention: house standard | **No** | *Pending Pilot Calibration* | `TAUGHT` | `iso_helper.py, timestamp_model.py, audit_normalizer.py` | **None (0)** | Held-Out |
+| **2093** | `timestamp_iso` | `test_service_execution` | HANDBOOK.md House Convention: house standard | **No** | *Pending Pilot Calibration* | `TAUGHT` | `iso_helper.py, timestamp_model.py, metric_formatter.py` | **None (0)** | Held-Out |
+| **2094** | `idempotency_keys` | `test_service_execution` | HANDBOOK.md Rule H13: house standard | **No** | *Pending Pilot Calibration* | `TAUGHT` | `idemp_helper.py, idemp_model.py, renewal_client.py` | **None (0)** | Held-Out |
+| **2095** | `idempotency_keys` | `test_service_execution` | HANDBOOK.md Rule H13: house standard | **No** | *Pending Pilot Calibration* | `TAUGHT` | `idemp_helper.py, idemp_model.py, balance_client.py` | **None (0)** | Held-Out |
+| **2096** | `idempotency_keys` | `test_service_execution` | HANDBOOK.md Rule H13: house standard | **No** | *Pending Pilot Calibration* | `TAUGHT` | `idemp_helper.py, idemp_model.py, cancel_dispatcher.py` | **None (0)** | Held-Out |
+| **2105** | `idempotency_keys` | `test_service_execution` | HANDBOOK.md Rule H13: house standard | **No** | *Pending Pilot Calibration* | `TAUGHT` | `idemp_helper.py, idemp_model.py, disbursement_client.py` | **None (0)** | Tune |
+| **2097** | `metric_percentiles` | `test_service_execution` | HANDBOOK.md Rule H14: house standard | **No** | *Pending Pilot Calibration* | `TAUGHT` | `percentile_helper.py, metric_model.py, endpoint_evaluator.py` | **None (0)** | Held-Out |
+| **2098** | `metric_percentiles` | `test_service_execution` | HANDBOOK.md Rule H14: house standard | **No** | *Pending Pilot Calibration* | `TAUGHT` | `percentile_helper.py, metric_model.py, duration_analyzer.py` | **None (0)** | Held-Out |
+| **2099** | `metric_percentiles` | `test_service_execution` | HANDBOOK.md Rule H14: house standard | **No** | *Pending Pilot Calibration* | `TAUGHT` | `percentile_helper.py, metric_model.py, write_latency.py` | **None (0)** | Held-Out |
+| **2106** | `metric_percentiles` | `test_service_execution` | HANDBOOK.md Rule H14: house standard | **No** | *Pending Pilot Calibration* | `TAUGHT` | `percentile_helper.py, metric_model.py, cache_monitor.py` | **None (0)** | Tune |
+| **2100** | `csv_roundtrip` | `test_service_execution` | HANDBOOK.md Rule H10: house standard | **No** | *Pending Pilot Calibration* | `TAUGHT` | `tsv_helper.py, tsv_model.py, ledger_exporter.py` | **None (0)** | Held-Out |
+| **2101** | `csv_roundtrip` | `test_service_execution` | HANDBOOK.md Rule H10: house standard | **No** | *Pending Pilot Calibration* | `TAUGHT` | `tsv_helper.py, tsv_model.py, log_serializer.py` | **None (0)** | Held-Out |
+| **2102** | `money_rounding` | `test_service_execution` | HANDBOOK.md Rule H02: house standard | **No** | *Pending Pilot Calibration* | `TAUGHT` | `money_helper.py, settlement_model.py, settlement_calculator.py` | **None (0)** | Held-Out |
 
 ---
 

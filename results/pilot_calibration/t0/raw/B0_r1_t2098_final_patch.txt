@@ -1,0 +1,66 @@
+=== FILE: duration_analyzer.py ===
+"""Worker Job Execution Duration Analyzer percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def compute_duration_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("compute_duration_percentile", samples)
+    s = validate_metric_samples(win.values)
+    n = len(s)
+    if n == 0:
+        raise ValueError("Cannot compute percentile for empty samples list")
+
+    # The "nearest-rank house standard" typically refers to a method where
+    # the rank is calculated as (p/100) * N, and the value at that rank
+    # (or nearest integer rank) is returned.
+    # A common interpretation for the 50th percentile (median) is to
+    # take the middle element for odd N, or the average of the two middle
+    # elements for even N.
+    # For a general percentile 'p', the rank 'k' is often calculated as
+    # k = ceil(p/100 * N). The percentile value is then s[k-1] (0-indexed).
+    # This method is sometimes called the "nearest-rank" method (R-1 or R-2).
+    #
+    # Given the failing test `assert compute_duration_percentile(d1, 50.0) == 40.0`
+    # where the current implementation returns 45.0, it suggests that the
+    # "nearest-rank house standard" implies a different rank calculation or
+    # interpolation.
+    #
+    # Let's consider the standard definition where the index `i` is
+    # `i = (p / 100.0) * n`.
+    # If `i` is an integer, the percentile is the average of `s[i-1]` and `s[i]`.
+    # If `i` is not an integer, the percentile is `s[floor(i)]`.
+    # This is often referred to as the "R-6" method or "C = 0" method.
+    #
+    # Let's test this with an example: `d1 = [10, 20, 30, 40, 50, 60, 70, 80]`
+    # N = 8, p = 50.0
+    # i = (50/100) * 8 = 4.0
+    # According to R-6, if i is an integer, take average of s[i-1] and s[i].
+    # s[3] = 40, s[4] = 50. Average = (40+50)/2 = 45.0. This matches the failing test's actual output.
+    # The expected output is 40.0.
+    #
+    # This implies the "nearest-rank house standard" is simpler, likely
+    # directly picking an element based on a rounded index.
+    #
+    # A common "nearest-rank" method (e.g., R-1 or R-2) calculates the rank
+    # `k = ceil(p/100 * N)`. The percentile is then `s[k-1]`.
+    # For `d1 = [10, 20, 30, 40, 50, 60, 70, 80]`, N=8, p=50.0
+    # k = ceil(0.5 * 8) = ceil(4.0) = 4.
+    # Percentile = s[k-1] = s[3] = 40.0. This matches the expected output.
+    #
+    # Let's implement this "nearest-rank" method.
+    # The index should be 1-based for rank, then converted to 0-based for list access.
+    
+    # Calculate the 1-based rank
+    rank = math.ceil((p / 100.0) * n)
+    
+    # Convert to 0-based index
+    # Ensure rank is at least 1 and at most n
+    index = max(0, min(n - 1, int(rank) - 1))
+    
+    return s[index]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

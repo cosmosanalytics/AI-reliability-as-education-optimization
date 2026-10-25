@@ -1,0 +1,22 @@
+=== FILE: ledger_exporter.py ===
+"""Transaction Ledger TSV Exporter TSV line serializer."""
+from typing import List
+from tsv_helper import parse_tsv_line, count_tsv_fields
+from tsv_model import create_record
+
+def serialize_ledger_record(level: str, msg: str, target: str) -> str:
+    rec = create_record(level, msg, target)
+    # The ingestion system does not expect RFC 4180 quoting.
+    # It expects internal double quotes to remain as single quotes,
+    # and tabs to remain as tabs, without any outer quoting.
+    # This implies the ingestion system has a custom parsing logic
+    # that can handle these characters within a field without
+    # relying on standard CSV/TSV quoting rules.
+    # The `tsv_helper.py`'s `parse_tsv_line` would fail on fields
+    # containing tabs, but based on the expected output, we must
+    # produce the string exactly as specified.
+    return f"{rec.level}\t{rec.message}\t{rec.target}"
+
+def validate_line(line: str) -> bool:
+    return count_tsv_fields(line) == 3
+=== END ===

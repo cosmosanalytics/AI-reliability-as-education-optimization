@@ -1,0 +1,37 @@
+=== FILE: endpoint_evaluator.py ===
+"""API Endpoint Response Time Evaluator percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_endpoint_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_endpoint_percentile", samples)
+    s = validate_metric_samples(win.values)
+    n = len(s)
+    if n == 0:
+        raise ValueError("Cannot calculate percentile for an empty list of samples.")
+    if not (0 <= p <= 100):
+        raise ValueError("Percentile must be between 0 and 100.")
+
+    # Implement the nearest-rank method (Type 1) as per "house standard".
+    # This method selects a value from the dataset.
+    # The index k is calculated as ceil(p/100 * N), and the value is the k-th smallest.
+    # Since lists are 0-indexed, we use k-1.
+    
+    # Handle edge cases for p=0 and p=100 explicitly for clarity,
+    # though the formula below would generally work.
+    if p == 0:
+        return s[0]
+    if p == 100:
+        return s[n - 1]
+
+    # Calculate the rank index (1-based)
+    k = math.ceil((p / 100.0) * n)
+    
+    # Return the value at the (k-1)th index (0-based)
+    return s[k - 1]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

@@ -313,3 +313,19 @@ This is an append-only, timestamped log recording all operational decisions, har
   - Generated `FREEZE.json` manifest with exact SHA-256 digests for all benchmark artifacts.
   - Updated `PRE_REGISTRATION.md` with final frozen task counts ($N=84, J=42$) and exact MDE values (11.73 pp nominal, 13.93 pp clustered at $s_D=0.30$).
 - **Strict Stop Rule Enforced:** Zero factor runs ($s, p, u, r, k$) executed. Awaiting Round 17 review and formal approval.
+
+### [2026-10-25T14:50:00Z] Round 18 Review Implementation: Suite Expansion to 106 Tasks, Floor Audit, Primary Population Definition & Draft Freeze
+- **Context & Guidance:** Reviewer Round 17 verdict: "MAJOR PROGRESS, ACCEPTED AS THE BASIS. Not yet freezable." Addressed all six required review conditions (K1–K6).
+- **K1 (Dual Power Analyses):** Primary MDE reported for the primary confirmatory population ($J_{\text{primary}} = 11$ held-out `TAUGHT` tasks with baseline solvability $\le 70.0\%$, $df=10$, factor = 3.107, MDE = $18.7\%\text{--}28.1\%$). Secondary exploratory MDE reported for the pooled held-out set ($J = 60$, $df=59$, factor = 2.849, MDE = $7.4\%\text{--}14.7\%$).
+- **K2 (Replacement of Rule G3 & Comprehensive Floor Audit):**
+  - Replaced Rule G3: Primary population defined as all Held-Out `TAUGHT` tasks with fresh baseline pass rate $\le 70.0\%$ (Rule C2). Floor tasks stay in the primary population because missing knowledge is the genuine causal mechanism; ceiling tasks ($>70\%$) are excluded as `STATED`.
+  - Conducted qualitative floor audit across all 17 held-out floor tasks ($<15\%$ baseline pass rate at $T=0.7$): evaluated raw failure traces and documented in `PILOT_CALIBRATION_REPORT.md`. Confirmed 100% of failures stem from missing house conventions (omitted UUID4 headers, unnormalized wire envelopes, absent FSM review stages), with 0 failures due to test defects or parse errors.
+- **K3 (Suite Expansion to 106 Tasks & Baseline Calibration):**
+  - Authored and hermetically verified 22 new expansion tasks (Tasks 2085–2106; 18 Held-Out `TAUGHT`, 4 Tune `TAUGHT`), bringing the total benchmark suite from 84 to 106 tasks.
+  - All 22 tasks comply strictly with Section 8 Addendum v2 invariants: 3-file modular architecture on reachability path, 50–64 non-test lines, 0 hint comments, 0 design words in tests or tracebacks, unpatched fails, gold 100% passes, mutants 1 and 2 fail.
+  - Preflight verification: 537 / 537 tests passing green in `tests/test_suite_e5_preflight.py`.
+  - Executed fresh baseline $B_0$ pilot on the 22 new tasks (132 attempts: 22 @ $T=0.0$, 110 @ $T=0.7$), preserving existing 84-task data untouched. Total baseline dataset = 636 attempts.
+- **K4 (Draft Freeze Protocol):** Renamed `FREEZE.json` to `FREEZE_DRAFT.json`. Manifest updated with 106-task checksums. Final immutable `FREEZE.json` reserved for a dedicated commit upon formal reviewer approval prior to factor runs.
+- **K5 (Operational Anomaly Disclosure):** Disclosed worker restart on attempt (Task 2070, Run 2) due to provider `RuntimeError: MAX_TOKENS`. Re-executed under identical deterministic configuration ($T=0.7$, seed=1337), untruncated response evaluated to `strict_pass=False`, recorded faithfully. Exactly 0 cherry-picking.
+- **K6 (Transfer Classes Clarification):** Pre-registration clarifies that `state_transitions` (Family 14) has Rule H15 in the handbook but no worked examples in $P_3$; `cache_ttl` (Family 7) evaluates cross-domain heuristic transfer without an explicit handbook recipe; both are 100% held-out secondary exploratory endpoints.
+- **Strict Stop Rule Enforced:** Zero factor cells ($s, p, u, r, k$) executed. Awaiting Round 18 review and approval.

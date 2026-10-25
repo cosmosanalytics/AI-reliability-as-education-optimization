@@ -1,6 +1,6 @@
 # Rule x Task Consistency Matrix (`CONSISTENCY_MATRIX.md`)
 
-**Benchmark Suite:** Suite E5 Expanded (84 Tasks across 14 Bug Families)  
+**Benchmark Suite:** Suite E5 Expanded (106 Tasks across 14 Bug Families)  
 **Handbook Version:** `briefs/HANDBOOK.md` v2 (16 Frozen House Conventions, H01–H16)  
 **Audit Standard:** Issue I1, I2, and Conditions J1–J5 from Round 16 Review  
 
@@ -10,11 +10,11 @@
 
 | Audit Dimension | Requirement | Measured / Audited Value | Status |
 | :--- | :--- | :---: | :---: |
-| **Total Evaluated Tasks** | $\ge 80$ authored tasks | **84 tasks** across 14 bug families | **PASS** |
-| **TAUGHT Tasks** | $\ge 24$ total ($\ge 12$ held-out) | **35 tasks** (41.7%) | **PASS** |
-| **DISTRACTOR Tasks** | Intentional local overrides | **16 tasks** (19.0%) | **PASS** |
-| **STATED Tasks** | Rule stated in ticket/docstring | **21 tasks** (25.0%) | **PASS** |
-| **TRANSFER Tasks** | Pure transfer families held out | **12 tasks** (14.3%) | **PASS** |
+| **Total Evaluated Tasks** | $\ge 80$ authored tasks | **106 tasks** across 14 bug families | **PASS** |
+| **TAUGHT Tasks** | $\ge 24$ total ($\ge 12$ held-out) | **57 tasks** (53.8%) | **PASS** |
+| **DISTRACTOR Tasks** | Intentional local overrides | **16 tasks** (15.1%) | **PASS** |
+| **STATED Tasks** | Rule stated in ticket/docstring | **21 tasks** (19.8%) | **PASS** |
+| **TRANSFER Tasks** | Pure transfer families held out | **12 tasks** (11.3%) | **PASS** |
 | **Unintended Conflicts** | Exactly 0 accidental contradictions | **0** | **PASS** |
 | **Rule Coverage (J3)** | Every rule exercised by $\ge 2$ tasks | **100% of rules** exercised across families | **PASS** |
 
@@ -119,25 +119,49 @@
 | **2084** | Transaction Settlement Lifecycle Guard | `state_transitions` | **Rule H15** | `applies-and-agrees` | Pure Transfer: evaluates transfer of Rule H15 FSM transition invariants to financial transaction settlements. | **`TRANSFER`** |
 
 ---
+| **2085** | Database Transaction Lock Manager | `service_errors` | **Rule H04** | `applies-and-agrees` | tx_manager.py docstring: 'Execute serializable database transaction.' (Does not specify lock error code; hidden test enforces Rule H04: "Lock conflict failures MUST raise ServiceError with code 'ERR_RESOURCE_LOCKED'"). | **`TAUGHT`** |
+| **2086** | API Token Rate Limiter | `service_errors` | **Rule H04** | `applies-and-agrees` | rate_limiter.py docstring: 'Enforce per-client token consumption quotas.' (Does not specify rate limit error code; hidden test enforces Rule H04: "Rate quota exhaustion MUST raise ServiceError with code 'ERR_RATE_LIMIT_EXCEEDED'"). | **`TAUGHT`** |
+| **2087** | Webhook Payload Validator | `service_errors` | **Rule H04** | `applies-and-agrees` | payload_validator.py docstring: 'Validate inbound webhook JSON payload.' (Does not specify schema error code; hidden test enforces Rule H04: "Schema validation errors MUST raise ServiceError with code 'ERR_PAYLOAD_SCHEMA_INVALID'"). | **`TAUGHT`** |
+| **2088** | Customer Notification Dispatcher | `wire_envelope` | **Rule H08** | `applies-and-agrees` | notification_dispatcher.py docstring: 'Dispatch customer account notification events.' (Does not specify envelope wrap; hidden test enforces Rule H08: "All outgoing event messages MUST be wrapped in a version 2 envelope containing `_v: 2`, `_ts`: epoch millis, `_src`: service name, and `payload`: payload dict with snake_case keys"). | **`TAUGHT`** |
+| **2089** | Payment Confirmation Broadcaster | `wire_envelope` | **Rule H08** | `applies-and-agrees` | broadcaster.py docstring: 'Broadcast payment confirmation events.' (Does not specify envelope wrap; hidden test enforces Rule H08: "All outgoing event messages MUST be wrapped in a version 2 envelope containing `_v: 2`, `_ts`: epoch millis, `_src`: service name, and `payload`: payload dict with snake_case keys"). | **`TAUGHT`** |
+| **2090** | Shipment Tracking Event Emitter | `wire_envelope` | **Rule H08** | `applies-and-agrees` | shipment_emitter.py docstring: 'Emit parcel tracking status updates.' (Does not specify envelope wrap; hidden test enforces Rule H08: "All outgoing event messages MUST be wrapped in a version 2 envelope containing `_v: 2`, `_ts`: epoch millis, `_src`: service name, and `payload`: payload dict with snake_case keys"). | **`TAUGHT`** |
+| **2091** | Session Activity Timestamp Formatter | `event_timestamp` | **Rule H09** | `applies-and-agrees` | session_formatter.py docstring: 'Format user session activity event timestamps.' (Does not state formatting details; hidden test enforces Rule H09: "Timestamps MUST be formatted strictly in canonical ISO 8601 UTC with millisecond precision and uppercase Z suffix: `YYYY-MM-DDTHH:MM:SS.sssZ`"). | **`TAUGHT`** |
+| **2092** | Audit Trail Event Time Normalizer | `event_timestamp` | **Rule H09** | `applies-and-agrees` | event_normalizer.py docstring: 'Normalize audit trail record event timestamps.' (Does not state formatting details; hidden test enforces Rule H09: "Timestamps MUST be formatted strictly in canonical ISO 8601 UTC with millisecond precision and uppercase Z suffix: `YYYY-MM-DDTHH:MM:SS.sssZ`"). | **`TAUGHT`** |
+| **2093** | Telemetry Metric Ingest Formatter | `event_timestamp` | **Rule H09** | `applies-and-agrees` | ingest_formatter.py docstring: 'Format incoming metric stream timestamps.' (Does not state formatting details; hidden test enforces Rule H09: "Timestamps MUST be formatted strictly in canonical ISO 8601 UTC with millisecond precision and uppercase Z suffix: `YYYY-MM-DDTHH:MM:SS.sssZ`"). | **`TAUGHT`** |
+| **2094** | Subscription Renewal Payment RPC | `idempotency_keys` | **Rule H13** | `applies-and-agrees` | renewal_rpc.py docstring: 'Dispatch recurring subscription billing RPC.' (Does not specify idempotency header; hidden test enforces Rule H13: "Mutating HTTP/RPC requests MUST include an `X-Idempotency-Key` header with format `idemp_<timestamp_ms>_<hex_token_8chars>`"). | **`TAUGHT`** |
+| **2095** | Account Balance Settlement Client | `idempotency_keys` | **Rule H13** | `applies-and-agrees` | balance_client.py docstring: 'Execute account balance settlement mutation.' (Does not specify idempotency header; hidden test enforces Rule H13: "Mutating HTTP/RPC requests MUST include an `X-Idempotency-Key` header with format `idemp_<timestamp_ms>_<hex_token_8chars>`"). | **`TAUGHT`** |
+| **2096** | Order Cancellation Dispatcher | `idempotency_keys` | **Rule H13** | `applies-and-agrees` | cancellation_dispatcher.py docstring: 'Dispatch order cancellation mutation.' (Does not specify idempotency header; hidden test enforces Rule H13: "Mutating HTTP/RPC requests MUST include an `X-Idempotency-Key` header with format `idemp_<timestamp_ms>_<hex_token_8chars>`"). | **`TAUGHT`** |
+| **2097** | API Endpoint Response Time Evaluator | `metric_percentiles` | **Rule H14** | `applies-and-agrees` | endpoint_evaluator.py docstring: 'API Endpoint Response Time Evaluator percentile calculator.' (Does not specify percentile algorithm; hidden test enforces Rule H14: "Metric percentiles MUST be calculated using the nearest-rank method on sorted values: index $k = \lceil \frac{P}{100} \times N \rceil - 1$. Linear interpolation is prohibited"). | **`TAUGHT`** |
+| **2098** | Worker Job Execution Duration Analyzer | `metric_percentiles` | **Rule H14** | `applies-and-agrees` | duration_analyzer.py docstring: 'Worker Job Execution Duration Analyzer percentile calculator.' (Does not specify percentile algorithm; hidden test enforces Rule H14: "Metric percentiles MUST be calculated using the nearest-rank method on sorted values: index $k = \lceil \frac{P}{100} \times N \rceil - 1$. Linear interpolation is prohibited"). | **`TAUGHT`** |
+| **2099** | Database Write Latency Calculator | `metric_percentiles` | **Rule H14** | `applies-and-agrees` | write_latency.py docstring: 'Database Write Latency Calculator percentile calculator.' (Does not specify percentile algorithm; hidden test enforces Rule H14: "Metric percentiles MUST be calculated using the nearest-rank method on sorted values: index $k = \lceil \frac{P}{100} \times N \rceil - 1$. Linear interpolation is prohibited"). | **`TAUGHT`** |
+| **2100** | Transaction Ledger TSV Exporter | `csv_roundtrip` | **Rule H10** | `applies-and-agrees` | ledger_exporter.py docstring: 'Transaction Ledger TSV Exporter TSV line serializer.' (Does not specify escaping convention; hidden test enforces Rule H10: "TSV format: tab-separated (`\t`), internal double quotes escaped with backslash (`\"`), newline characters escaped as `\n`. Do NOT use RFC 4180 double-quoting"). | **`TAUGHT`** |
+| **2101** | System Log TSV Serializer | `csv_roundtrip` | **Rule H10** | `applies-and-agrees` | log_serializer.py docstring: 'System Log TSV Serializer TSV line serializer.' (Does not specify escaping convention; hidden test enforces Rule H10: "TSV format: tab-separated (`\t`), internal double quotes escaped with backslash (`\"`), newline characters escaped as `\n`. Do NOT use RFC 4180 double-quoting"). | **`TAUGHT`** |
+| **2102** | Merchant Settlement Fee Calculator | `money_rounding` | **Rule H02** | `applies-and-agrees` | settlement_calculator.py docstring: 'Merchant settlement fee calculator.' (Does not specify rounding mode; hidden test enforces Rule H02: "All monetary fee quantizations MUST use half-up rounding (`ROUND_HALF_UP`: exact half-cents round away from zero). Banker's rounding (`ROUND_HALF_EVEN`) is prohibited"). | **`TAUGHT`** |
+| **2103** | Resource Lease Lock Engine | `service_errors` | **Rule H04** | `applies-and-agrees` | lease_engine.py docstring: 'Coordinate distributed resource lease acquisition.' (Does not specify lock error code; hidden test enforces Rule H04: "Lock conflict failures MUST raise ServiceError with code 'ERR_RESOURCE_LOCKED'"). | **`TAUGHT`** |
+| **2104** | Invoice Notification Event Emitter | `wire_envelope` | **Rule H08** | `applies-and-agrees` | invoice_emitter.py docstring: 'Emit billing invoice notification events.' (Does not specify envelope wrap; hidden test enforces Rule H08: "All outgoing event messages MUST be wrapped in a version 2 envelope containing `_v: 2`, `_ts`: epoch millis, `_src`: service name, and `payload`: payload dict with snake_case keys"). | **`TAUGHT`** |
+| **2105** | Fund Disbursement RPC Client | `idempotency_keys` | **Rule H13** | `applies-and-agrees` | fund_client.py docstring: 'Dispatch fund disbursement transfer request.' (Does not specify idempotency header; hidden test enforces Rule H13: "Mutating HTTP/RPC requests MUST include an `X-Idempotency-Key` header with format `idemp_<timestamp_ms>_<hex_token_8chars>`"). | **`TAUGHT`** |
+| **2106** | Cache Hit Latency Percentile Monitor | `metric_percentiles` | **Rule H14** | `applies-and-agrees` | cache_monitor.py docstring: 'Cache Hit Latency Percentile Monitor percentile calculator.' (Does not specify percentile algorithm; hidden test enforces Rule H14: "Metric percentiles MUST be calculated using the nearest-rank method on sorted values: index $k = \lceil \frac{P}{100} \times N \rceil - 1$. Linear interpolation is prohibited"). | **`TAUGHT`** |
+
+---
 
 ## 4. Rule Coverage Audit Matrix (Condition J3)
 
 | Rule ID | Rule Name | Active Tasks Exercising Rule | Total Tasks | Audit Status |
 | :---: | :---| :---| :---: | :---: |
-| **H01** | Test Directory Protection | All tasks (Enforced across all 84 repositories via protected paths) | 84 | **PASS** |
-| **H02** | Monetary Half-Up Rounding | 2001, 2002, 2003, 2004 | 4 | **PASS** |
+| **H01** | Test Directory Protection | All tasks (Enforced across all 106 repositories via protected paths) | 106 | **PASS** |
+| **H02** | Monetary Half-Up Rounding | 2001, 2002, 2003, 2004, 2102 | 5 | **PASS** |
 | **H03** | Container Immutability & Defensive Copy | 2005, 2006, 2007, 2008 | 4 | **PASS** |
-| **H04** | Structured Service Exception Hierarchy | 2029, 2030, 2031, 2032, 2033, 2034, 2035, 2036 | 8 | **PASS** |
+| **H04** | Structured Service Exception Hierarchy | 2029-2036, 2085, 2086, 2087, 2103 | 12 | **PASS** |
 | **H05** | Temporal Representation Half-Open vs Inclusive | 2009, 2010, 2011, 2012 | 4 | **PASS** |
 | **H06** | Hierarchical Access Control Scopes `::` | 2017, 2018, 2019, 2020 | 4 | **PASS** |
 | **H07** | Priority Queue SHA-256 Tie-Breaking | 2021, 2022, 2023, 2024 | 4 | **PASS** |
-| **H08** | Message Wire Envelope & snake_case | 2037, 2038, 2039, 2040, 2041, 2042, 2043, 2044 | 8 | **PASS** |
-| **H09** | Canonical UTC Millisecond Timestamps | 2045, 2046, 2047, 2048, 2049, 2050, 2051, 2052 | 8 | **PASS** |
-| **H10** | TSV Audit Logging & Backslash Escaping | 2013, 2014, 2015, 2016 | 4 | **PASS** |
+| **H08** | Message Wire Envelope & snake_case | 2037-2044, 2088, 2089, 2090, 2104 | 12 | **PASS** |
+| **H09** | Canonical UTC Millisecond Timestamps | 2045-2052, 2091, 2092, 2093 | 11 | **PASS** |
+| **H10** | TSV Audit Logging & Backslash Escaping | 2013-2016, 2100, 2101 | 6 | **PASS** |
 | **H11** | Cache Key Namespace Architecture | 2025, 2026, 2027, 2028 | 4 | **PASS** |
 | **H12** | Configuration Merge Deduplicated List Concatenation | 2053, 2054, 2055, 2056, 2057, 2058, 2059, 2060 | 8 | **PASS** |
-| **H13** | Outbound Request Idempotency Headers | 2061, 2062, 2063, 2064, 2065, 2066, 2067, 2068 | 8 | **PASS** |
-| **H14** | Metric Percentile Nearest-Rank Method | 2069, 2070, 2071, 2072, 2073, 2074, 2075, 2076 | 8 | **PASS** |
+| **H13** | Outbound Request Idempotency Headers | 2061-2068, 2094, 2095, 2096, 2105 | 12 | **PASS** |
+| **H14** | Metric Percentile Nearest-Rank Method | 2069-2076, 2097, 2098, 2099, 2106 | 12 | **PASS** |
 | **H15** | FSM Transition Validation & Audit Tuples | 2077, 2078, 2079, 2080, 2081, 2082, 2083, 2084 | 8 | **PASS** |
 | **H16** | Rate Limiting Token Bucket Integer Truncation | Exercised as general invariant across rate-limit tasks | 4 | **PASS** |
 

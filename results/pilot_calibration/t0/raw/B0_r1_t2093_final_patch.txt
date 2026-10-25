@@ -1,0 +1,17 @@
+=== FILE: metric_formatter.py ===
+"""Telemetry Metric Ingest Formatter utility."""
+from datetime import datetime, timezone
+from iso_helper import parse_epoch_seconds, is_valid_iso_format, extract_year_component, format_epoch_millis
+from timestamp_model import TimestampRecord, create_event_record
+
+def format_metric_timestamp(epoch_s: float) -> str:
+    # Convert epoch_s (float seconds) to epoch_ms (integer milliseconds)
+    # ensuring millisecond precision is retained.
+    epoch_ms = int(epoch_s * 1000)
+    rec = create_event_record("format_metric_timestamp", epoch_ms)
+    # Use the dedicated helper function to format with millisecond precision.
+    return format_epoch_millis(epoch_ms)
+
+def format_sequence(timestamps: list) -> list:
+    return [format_metric_timestamp(t) for t in timestamps]
+=== END ===

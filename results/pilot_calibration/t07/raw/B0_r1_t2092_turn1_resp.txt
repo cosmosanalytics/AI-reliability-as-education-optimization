@@ -1,0 +1,19 @@
+=== FILE: audit_normalizer.py ===
+"""Audit Trail Event Time Normalizer utility."""
+from datetime import datetime, timezone
+from iso_helper import parse_epoch_seconds, is_valid_iso_format, extract_year_component, format_epoch_millis
+from timestamp_model import TimestampRecord, create_event_record
+
+def normalize_audit_timestamp(epoch_s: float) -> str:
+    # The create_event_record function expects epoch_ms (integer milliseconds).
+    # Convert epoch_s (float seconds) to integer milliseconds for the record.
+    epoch_ms_for_record = int(epoch_s * 1000)
+    rec = create_event_record("normalize_audit_timestamp", epoch_ms_for_record)
+
+    # Reuse the format_epoch_millis function from iso_helper to ensure
+    # consistent millisecond precision in the output string.
+    return format_epoch_millis(epoch_ms_for_record)
+
+def format_sequence(timestamps: list) -> list:
+    return [normalize_audit_timestamp(t) for t in timestamps]
+=== END ===

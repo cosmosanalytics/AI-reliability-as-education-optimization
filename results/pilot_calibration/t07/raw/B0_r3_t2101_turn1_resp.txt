@@ -1,0 +1,18 @@
+=== FILE: log_serializer.py ===
+"""System Log TSV Serializer TSV line serializer."""
+from typing import List
+from tsv_helper import parse_tsv_line, count_tsv_fields
+from tsv_model import create_record
+
+def serialize_log_line(level: str, msg: str, target: str) -> str:
+    rec = create_record(level, msg, target)
+    # The previous logic applied RFC 4180-like quoting (doubling internal quotes
+    # and wrapping the field if it contained quotes or tabs).
+    # The ticket indicates this quoting is "unexpected" for TSV ingestion.
+    # For TSV, fields are typically separated by tabs, and internal content
+    # is taken literally without special quote escaping or wrapping.
+    return f"{rec.level}\t{rec.message}\t{rec.target}"
+
+def validate_line(line: str) -> bool:
+    return count_tsv_fields(line) == 3
+=== END ===

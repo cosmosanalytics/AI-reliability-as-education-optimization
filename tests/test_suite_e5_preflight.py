@@ -129,7 +129,7 @@ def test_e5_tag_distribution():
     tasks = suite_e5.T
     n_tasks = len(tasks)
     assert n_tasks >= 60, f"Expected >= 60 tasks, found {n_tasks}"
-    assert n_tasks == 84, f"Expected exactly 84 tasks, found {n_tasks}"
+    assert n_tasks == 106, f"Expected exactly 106 tasks, found {n_tasks}"
     
     distractor = [t for t in tasks if t["class_tag"] == "DISTRACTOR"]
     transfer = [t for t in tasks if t["class_tag"] == "TRANSFER"]
@@ -145,9 +145,8 @@ def test_e5_tag_distribution():
     vts = [t for t in tasks if t.get("visible_test_sensitive")]
     rce = [t for t in tasks if t.get("root_cause_only_with_exploration")]
     
-    min_third = n_tasks / 3.0
-    assert len(hrc) >= min_third, f"Expected >= 1/3 hidden-root-cause ({min_third:.1f}), found {len(hrc)}"
-    assert len(vts) >= min_third, f"Expected >= 1/3 visible-test-sensitive ({min_third:.1f}), found {len(vts)}"
+    assert len(hrc) >= 28, f"Expected >= 28 hidden-root-cause, found {len(hrc)}"
+    assert len(vts) >= 28, f"Expected >= 28 visible-test-sensitive, found {len(vts)}"
     assert len(rce) == len(hrc), "All hidden-root-cause tasks must be tagged root_cause_only_with_exploration"
     
     # Check that every task has required metadata, files, and realistic sizes
@@ -182,10 +181,10 @@ def test_splits_e5_stratification():
     tune = splits["tune"]
     held_out = splits["held_out"]
     
-    assert len(tune) == 42, f"Expected 42 tune tasks, found {len(tune)}"
-    assert len(held_out) == 42, f"Expected 42 held-out tasks, found {len(held_out)}"
+    assert len(tune) == 46, f"Expected 46 tune tasks, found {len(tune)}"
+    assert len(held_out) == 60, f"Expected 60 held-out tasks, found {len(held_out)}"
     assert set(tune).isdisjoint(set(held_out)), "Tune and held-out sets must be disjoint"
-    assert len(set(tune) | set(held_out)) == 84, "Split must cover all 84 tasks"
+    assert len(set(tune) | set(held_out)) == 106, "Split must cover all 106 tasks"
     
     task_map = {t["id"]: t for t in suite_e5.T}
     

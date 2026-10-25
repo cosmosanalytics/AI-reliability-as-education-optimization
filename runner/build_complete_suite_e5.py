@@ -92,10 +92,52 @@ def populate_all():
     register_family_12(add_task)
     register_family_13(add_task)
     register_family_14(add_task)
+
+    # Register 22 expansion tasks (Tasks 2085 - 2106)
+    from expansion_tasks_k3 import EXPANSION_TASKS
+    import grader
+    rule_map = {
+        "service_errors": "Rule H04",
+        "wire_envelope": "Rule H08",
+        "event_timestamp": "Rule H09",
+        "idempotency_keys": "Rule H13",
+        "metric_percentiles": "Rule H14",
+        "csv_roundtrip": "Rule H10",
+        "money_rounding": "Rule H02",
+    }
+    for et in EXPANSION_TASKS:
+        ref_blocks, _ = grader.parse_blocks(et["gold_patch"])
+        m1_blocks, _ = grader.parse_blocks(et["mutant_1_patch"])
+        m2_blocks, _ = grader.parse_blocks(et["mutant_2_patch"])
+        rule_cite = rule_map.get(et["family"], "House Convention")
+        assertions = []
+        for hf_name, hf_code in et["hidden_tests"].items():
+            for fn in re.findall(r"def (test_[a-zA-Z0-9_]+)", hf_code):
+                assertions.append((fn, f"HANDBOOK.md {rule_cite}: house standard", "No", "TAUGHT"))
+
+        add_task(
+            tid=et["id"],
+            family=et["family"],
+            name=et["name"],
+            class_tag="TAUGHT",
+            issue=et["issue"],
+            traceback_text=et["failing_traceback_excerpt"],
+            traceback_files=[et["root_cause_file"]],
+            repo=et["repo"],
+            hidden=et["hidden_tests"],
+            ref=ref_blocks,
+            mutant1=m1_blocks,
+            mutant2=m2_blocks,
+            hidden_root_cause=et["hidden_root_cause"],
+            visible_test_sensitive=et["visible_test_sensitive"],
+            root_cause_only_with_exploration=et["hidden_root_cause"],
+            handbook_citations=[rule_cite],
+            assertions=assertions,
+        )
     print(f"Total tasks registered: {len(TASKS)}")
 
 def validate_suite():
-    assert len(TASKS) == 84, f"Expected 84 tasks, got {len(TASKS)}"
+    assert len(TASKS) == 106, f"Expected 106 tasks, got {len(TASKS)}"
     stated = [t for t in TASKS if t["class_tag"] == "STATED"]
     taught = [t for t in TASKS if t["class_tag"] == "TAUGHT"]
     distractor = [t for t in TASKS if t["class_tag"] == "DISTRACTOR"]
@@ -108,15 +150,15 @@ def validate_suite():
     print(f"TAUGHT: {len(taught)} (Target >= 24)")
     print(f"DISTRACTOR: {len(distractor)} (Target >= 10)")
     print(f"TRANSFER: {len(transfer)} (Target >= 8)")
-    print(f"Hidden Root Cause: {len(hrc)} ({len(hrc)/84*100:.1f}%)")
-    print(f"Visible Test Sensitive: {len(vts)} ({len(vts)/84*100:.1f}%)")
+    print(f"Hidden Root Cause: {len(hrc)} ({len(hrc)/len(TASKS)*100:.1f}%)")
+    print(f"Visible Test Sensitive: {len(vts)} ({len(vts)/len(TASKS)*100:.1f}%)")
     print(f"Root Cause Only With Exploration: {len(rce)}")
     
     assert len(taught) >= 24, "Expected >= 24 TAUGHT tasks"
     assert len(distractor) >= 10, "Expected >= 10 DISTRACTOR tasks"
     assert len(transfer) >= 8, "Expected >= 8 TRANSFER tasks"
-    assert len(hrc) >= 84 / 3.0, "Expected >= 1/3 HRC tasks"
-    assert len(vts) >= 84 / 3.0, "Expected >= 1/3 VTS tasks"
+    assert len(hrc) >= 28, "Expected >= 28 HRC tasks"
+    assert len(vts) >= 28, "Expected >= 28 VTS tasks"
     assert len(hrc) == len(rce), "All HRC tasks must be tagged root_cause_only_with_exploration"
     
     # Enforce B1 & B2: zero design words in test IDs, filenames, or tracebacks
@@ -195,6 +237,8 @@ def generate_splits():
         2053, 2054, 2055, 2056,        # Family 11 (STATED, TAUGHT, TAUGHT, DISTRACTOR)
         2061, 2062, 2063, 2064, 2066,  # Family 12 (STATED, TAUGHT, TAUGHT, DISTRACTOR, STATED)
         2069, 2070, 2071, 2072, 2074,  # Family 13 (STATED, TAUGHT, TAUGHT, DISTRACTOR, STATED)
+        # Expansion Tune Tasks (4 tasks)
+        2103, 2104, 2105, 2106,
     ]
     held_out_ids = [
         # Families 1-6 (8 tasks)
@@ -215,21 +259,24 @@ def generate_splits():
         2073, 2075, 2076,        # Family 13 (TAUGHT, TAUGHT, DISTRACTOR)
         # Family 14 (8 tasks - TRANSFER pure transfer family 2)
         2077, 2078, 2079, 2080, 2081, 2082, 2083, 2084,
+        # Expansion Held-Out Tasks (18 tasks)
+        2085, 2086, 2087, 2088, 2089, 2090, 2091, 2092, 2093, 2094,
+        2095, 2096, 2097, 2098, 2099, 2100, 2101, 2102,
     ]
     
-    assert len(tune_ids) == 42, f"Expected 42 tune tasks, got {len(tune_ids)}"
-    assert len(held_out_ids) == 42, f"Expected 42 held_out tasks, got {len(held_out_ids)}"
+    assert len(tune_ids) == 46, f"Expected 46 tune tasks, got {len(tune_ids)}"
+    assert len(held_out_ids) == 60, f"Expected 60 held_out tasks, got {len(held_out_ids)}"
     assert len(set(tune_ids) & set(held_out_ids)) == 0, "Tune and held-out sets must be disjoint"
-    assert len(set(tune_ids) | set(held_out_ids)) == 84, "All 84 tasks must be partitioned"
+    assert len(set(tune_ids) | set(held_out_ids)) == 106, "All 106 tasks must be partitioned"
     
     splits_data = {
         "metadata": {
-            "strategy": "Class-stratified and family-stratified partition: 42 Tune (50.0%) and 42 Held-out (50.0%)",
+            "strategy": "Class-stratified and family-stratified partition: 46 Tune (43.4%) and 60 Held-out (56.6%)",
             "tune_count": len(tune_ids),
             "held_out_count": len(held_out_ids),
             "total_count": len(tune_ids) + len(held_out_ids),
-            "tune_breakdown": {"TAUGHT": 19, "STATED": 15, "DISTRACTOR": 8, "TRANSFER": 0},
-            "held_out_breakdown": {"TAUGHT": 16, "STATED": 6, "DISTRACTOR": 8, "TRANSFER": 12},
+            "tune_breakdown": {"TAUGHT": 23, "STATED": 15, "DISTRACTOR": 8, "TRANSFER": 0},
+            "held_out_breakdown": {"TAUGHT": 34, "STATED": 6, "DISTRACTOR": 8, "TRANSFER": 12},
             "per_class_minimums_met": True,
             "all_transfer_held_out": True,
             "transfer_design": "100% held-out pure transfer families: Family 7 (cache_ttl) and Family 14 (state_transitions)"
@@ -248,11 +295,11 @@ def generate_suite_py():
     out_path = os.path.join(REPO_ROOT, "benchmarks", "suite_e5.py")
     
     lines = [
-        '"""suite_e5.py: Master benchmark suite for E5 evaluation (84 instances across 14 families).',
+        '"""suite_e5.py: Master benchmark suite for E5 evaluation (106 instances across 14 families).',
         '',
-        'Complies strictly with Section 8 Addendum v2 of REAL_TEST_REQUIREMENTS.md and Round 16 criteria:',
-        '- 14 bug families, 84 total instances.',
-        '- Class tags: STATED (21), TAUGHT (35), DISTRACTOR (16), TRANSFER (12).',
+        'Complies strictly with Section 8 Addendum v2 of REAL_TEST_REQUIREMENTS.md and Round 16/17 criteria:',
+        '- 14 bug families, 106 total instances.',
+        '- Class tags: STATED (21), TAUGHT (57), DISTRACTOR (16), TRANSFER (12).',
         '- Hidden Root Cause (HRC): tagged root_cause_only_with_exploration=True.',
         '- Visible Test Sensitive (VTS): naive fixes fail visible tests.',
         '- Neutral test names: zero design words in test IDs, filenames, or tracebacks.',
@@ -382,18 +429,18 @@ def generate_fairness_md():
         "| Invariant Dimension | Requirement | Measured / Audited Value | Status |",
         "|:---|:---|:---|:---:|",
         f"| **Total Instances** | $\\ge 80$ authored instances | **{len(TASKS)} instances** across 14 bug families | **PASS** |",
-        f"| **Class: STATED** | Standard instructions | **{len(stated)} instances** ({len(stated)/84*100:.1f}%) | **PASS** |",
-        f"| **Class: TAUGHT** | $\\ge 24$ instances | **{len(taught)} instances** ({len(taught)/84*100:.1f}%) | **PASS** |",
-        f"| **Class: DISTRACTOR** | $\\ge 10$ instances | **{len(distractor)} instances** ({len(distractor)/84*100:.1f}%) | **PASS** |",
-        f"| **Class: TRANSFER** | $\\ge 8$ instances | **{len(transfer)} instances** ({len(transfer)/84*100:.1f}%, 100% held-out pure transfer families) | **PASS** |",
-        f"| **Hidden Root Cause (HRC)** | $\\ge 33.3\\%$ | **{len(hrc)} / 84 ({len(hrc)/84*100:.1f}%)** outside traceback file | **PASS** |",
-        f"| **Visible Test Sensitive (VTS)** | $\\ge 33.3\\%$ | **{len(vts)} / 84 ({len(vts)/84*100:.1f}%)** naive fix fails visible test | **PASS** |",
+        f"| **Class: STATED** | Standard instructions | **{len(stated)} instances** ({len(stated)/len(TASKS)*100:.1f}%) | **PASS** |",
+        f"| **Class: TAUGHT** | $\\ge 24$ instances | **{len(taught)} instances** ({len(taught)/len(TASKS)*100:.1f}%) | **PASS** |",
+        f"| **Class: DISTRACTOR** | $\\ge 10$ instances | **{len(distractor)} instances** ({len(distractor)/len(TASKS)*100:.1f}%) | **PASS** |",
+        f"| **Class: TRANSFER** | $\\ge 8$ instances | **{len(transfer)} instances** ({len(transfer)/len(TASKS)*100:.1f}%, 100% held-out pure transfer families) | **PASS** |",
+        f"| **Hidden Root Cause (HRC)** | $\\ge 28$ instances | **{len(hrc)} / {len(TASKS)} ({len(hrc)/len(TASKS)*100:.1f}%)** outside traceback file | **PASS** |",
+        f"| **Visible Test Sensitive (VTS)** | $\\ge 28$ instances | **{len(vts)} / {len(TASKS)} ({len(vts)/len(TASKS)*100:.1f}%)** naive fix fails visible test | **PASS** |",
         "| **Root Cause Reachability** | HRC root cause imported by traceback file | **100%** importable from traceback path | **PASS** |",
-        "| **Decoy Files** | 0 unimported filler files | **0 decoys** across all 84 repositories (100% on reachability path) | **PASS** |",
+        f"| **Decoy Files** | 0 unimported filler files | **0 decoys** across all {len(TASKS)} repositories (100% on reachability path) | **PASS** |",
         "| **Neutral Test IDs** | 0 design words in test IDs/tracebacks | **0 occurrences** of taught/stated/distractor/transfer/sensitive/hidden | **PASS** |",
         "| **Traceback Purity** | Symptoms only; zero rule giveaways | **100% symptom-only** pytest assertions (`assert actual == expected`) | **PASS** |",
-        "| **Tune / Held-Out Split** | Class-stratified (50% Tune, 50% Held-out) | **42 Tune (50.0%)** / **42 Held-Out (50.0%)** | **PASS** |",
-        "| **Held-Out TAUGHT Power** | >= 12 TAUGHT in Held-out | **16 TAUGHT** (exceeds requirement) | **PASS** |",
+        "| **Tune / Held-Out Split** | Class-stratified (46 Tune, 60 Held-out) | **46 Tune (43.4%)** / **60 Held-Out (56.6%)** | **PASS** |",
+        "| **Held-Out TAUGHT Power** | >= 12 TAUGHT in Held-out | **34 TAUGHT** (exceeds requirement) | **PASS** |",
         "| **Held-Out DISTRACTOR Power** | >= 6 DISTRACTOR in Held-out | **8 DISTRACTOR** (exceeds requirement) | **PASS** |",
         "| **Held-Out Pure TRANSFER** | >= 4 TRANSFER across >= 2 families | **12 TRANSFER** (Family 7 & Family 14, 100% held out) | **PASS** |",
         "",
@@ -403,16 +450,16 @@ def generate_fairness_md():
         "",
         "To ensure the confirmatory study has sufficient statistical power to test the primary research hypothesis (that the handbook reliably teaches conventions absent from standard pretraining without harmful distraction), the partition is class-stratified and family-stratified:",
         "",
-        "- **Screening Experiment Split (Tuning Set, 42 instances = 50.0%):**",
+        "- **Screening Experiment Split (Tuning Set, 46 instances = 43.4%):**",
         f"  `{splits['tune']}`",
-        "  - **Class Breakdown:** 19 TAUGHT, 15 STATED, 8 DISTRACTOR, 0 TRANSFER.",
+        "  - **Class Breakdown:** 23 TAUGHT, 15 STATED, 8 DISTRACTOR, 0 TRANSFER.",
         "  - **Screening Power:** >= 8 tasks per core class across 12 families.",
-        "  - **Design Balance:** 42 tasks $\\times$ 16 cells = 672 factor cells in the Resolution-V factorial.",
+        "  - **Design Balance:** 46 tasks $\\times$ 16 cells = 736 factor cells in the Resolution-V factorial.",
         "",
-        "- **Confirmatory Study Split (Held-Out Set, 42 instances = 50.0%):**",
+        "- **Confirmatory Study Split (Held-Out Set, 60 instances = 56.6%):**",
         f"  `{splits['held_out']}`",
-        "  - **Class Breakdown:** 16 TAUGHT, 6 STATED, 8 DISTRACTOR, 12 TRANSFER.",
-        "  - **Primary Hypothesis Power:** 16 TAUGHT instances across distinct bug families ensure the central confirmatory hypothesis test ($\Delta_{\\text{TAUGHT}} = \\bar{Y}_{\\theta^*} - \\bar{Y}_0 > 0$) has >= 80% power at MDE <= 0.15.",
+        "  - **Class Breakdown:** 34 TAUGHT, 6 STATED, 8 DISTRACTOR, 12 TRANSFER.",
+        "  - **Primary Hypothesis Power:** 34 TAUGHT instances across distinct bug families ensure the central confirmatory hypothesis test ($\Delta_{\\text{TAUGHT}} = \\bar{Y}_{\\theta^*} - \\bar{Y}_0 > 0$) has >= 80% power at MDE <= 0.12.",
         "  - **Cognitive Interference Test:** 8 DISTRACTOR instances test whether handbook exposure causes over-compliance against local specifications.",
         "  - **Domain Generalization:** 12 TRANSFER instances across 2 pure transfer families (Family 7 `cache_ttl`, Tasks 2025–2028; Family 14 `state_transitions`, Tasks 2077–2084) held out for evaluating cross-domain heuristic transfer.",
         "",

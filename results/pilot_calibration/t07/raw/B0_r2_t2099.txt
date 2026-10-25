@@ -1,0 +1,83 @@
+=== FILE: write_latency.py ===
+"""Database Write Latency Calculator percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_write_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_write_percentile", samples)
+    s = validate_metric_samples(win.values)
+    n = len(s)
+    if n == 0:
+        raise ValueError("Cannot calculate percentile for an empty list")
+
+    # The "nearest-rank house standard" typically refers to the method
+    # where the percentile is the value at the rank obtained by rounding
+    # the index (p/100 * n). For a 0-indexed list, this means:
+    # rank = ceil(p / 100.0 * n)
+    # The problem description and failing test (expecting 40.0 when 45.0 is returned for 50th percentile)
+    # suggest that the index should be calculated as (p / 100.0 * n) and then rounded UP
+    # to find the rank, and then adjusted for 0-based indexing.
+    # Specifically, if p=50 and n=9, 0.5 * 9 = 4.5. Ceiling is 5. 0-indexed: s[4].
+    # This aligns with the "R-1" method (nearest-rank, often used in older software).
+    # The index will be 1-based, so subtract 1 for 0-based list access.
+    # index_1_based = math.ceil(p / 100.0 * n)
+    # index_0_based = max(0, int(index_1_based) - 1)
+    # However, given the specific failure (45.0 -> 40.0 for 50th percentile),
+    # it implies that the 50th percentile for a list like [10,20,30,40,50,60,70,80,90]
+    # should be 40.0, not 45.0 or 50.0.
+    # This behavior is consistent with the "Type 3" method (nearest rank, but using `floor(p/100.0 * n + 0.5)` for index)
+    # or a variant where the rank is simply `floor(p/100.0 * n)` or `max(0, floor(p/100.0 * n) - 1)`
+    # if `p/100.0 * n` is not an integer.
+    #
+    # Let's re-evaluate based on the specific `assert 45.0 == 40.0` from the traceback.
+    # If `d1` was `[10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0]`, n=9.
+    # Current code (Type 7): `idx = (50/100.0) * (9-1) = 0.5 * 8 = 4.0`. Returns `s[4]` which is `50.0`.
+    # This does not produce 45.0.
+    #
+    # The only way to get 45.0 from the existing code's interpolation is if `s[low]=40.0` and `s[high]=50.0`
+    # and `idx = low + 0.5`. This means `low` was the index of `40.0` and `high` was the index of `50.0`.
+    # Let's assume the input `d1` had `40.0` at index `k` and `50.0` at index `k+1`.
+    # And `idx` was `k + 0.5`.
+    # This would imply `(p/100.0) * (n-1) = k + 0.5`.
+    # If `n-1` was an odd number, then `(p/100.0)` would need to be `X.5 / (n-1)`.
+    #
+    # A common interpretation of "nearest-rank" is simply to take the value at the closest integer rank.
+    # For a 0-indexed array `s` of length `n`, the 1-based rank `k` is typically calculated as `ceil(p * n / 100)`.
+    # The 0-based index would then be `k-1`.
+    #
+    # Let's test this interpretation:
+    # If `d1` was `[10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0]`, n=8.
+    # p=50.0.
+    # `k = ceil(50.0 / 100.0 * 8) = ceil(0.5 * 8) = ceil(4.0) = 4`.
+    # 0-based index is `k-1 = 3`.
+    # `s[3]` is `40.0`. This matches the *expected* value.
+    #
+    # Now, let's see what the current code (Type 7) would return for `d1=[10,20,30,40,50,60,70,80]`, p=50.0.
+    # `n=8`.
+    # `idx = (50/100.0) * (8-1) = 0.5 * 7 = 3.5`.
+    # `low = 3`, `high = 4`.
+    # `s[3] + (3.5 - 3) * (s[4] - s[3]) = 40.0 + 0.5 * (50.0 - 40.0) = 40.0 + 0.5 * 10.0 = 40.0 + 5.0 = 45.0`.
+    # This matches the *actual* value returned by the failing test!
+    #
+    # Therefore, the "nearest-rank house standard" for this specific case is to use the `ceil(p * n / 100)` method
+    # to determine the rank (1-based), and then convert to a 0-based index.
+
+    # Calculate 1-based rank
+    # Note: math.ceil(0) is 0, but rank should be at least 1.
+    # For p=0, it should be s[0]. For p>0, rank is at least 1.
+    rank_1_based = math.ceil(p / 100.0 * n)
+    
+    # Ensure rank is within valid bounds [1, n]
+    rank_1_based = max(1, min(n, int(rank_1_based)))
+    
+    # Convert to 0-based index
+    idx_0_based = rank_1_based - 1
+    
+    return s[idx_0_based]
+
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

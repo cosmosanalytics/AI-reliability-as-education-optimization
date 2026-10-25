@@ -1,0 +1,23 @@
+=== FILE: rate_limiter.py ===
+"""Token rate limiter enforcement."""
+from errors import ServiceError, format_error_response
+from token_counter import BucketRecord, deduct_token_allowance, is_allowance_exhausted
+from typing import Dict
+
+class TokenRateLimiter:
+    """Enforce per-client token consumption quotas."""
+    def __init__(self, capacity: int = 100):
+        self.capacity = capacity
+        self._tokens: Dict[str, int] = {}
+
+    def consume(self, token: str, amount: int = 1) -> BucketRecord:
+        rem = self._tokens.get(token, self.capacity)
+        if is_allowance_exhausted(rem, amount):
+            raise ServiceError("ERR_RATE_LIMIT_EXCEEDED", f"Token '{token}' has exceeded allowance")
+        new_bal = deduct_token_allowance(rem, amount)
+        self._tokens[token] = new_bal
+        return BucketRecord(token=token, remaining=new_bal, limit=self.capacity)
+
+    def reset_quota(self, token: str) -> None:
+        self._tokens[token] = self.capacity
+=== END ===

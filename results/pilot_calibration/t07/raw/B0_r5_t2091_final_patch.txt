@@ -1,0 +1,14 @@
+=== FILE: session_formatter.py ===
+"""Session Activity Timestamp Formatter utility."""
+from datetime import datetime, timezone
+from iso_helper import parse_epoch_seconds, is_valid_iso_format, extract_year_component, format_epoch_millis
+from timestamp_model import TimestampRecord, create_event_record
+
+def format_session_timestamp(epoch_s: float) -> str:
+    epoch_ms = int(epoch_s * 1000)
+    rec = create_event_record("format_session_timestamp", epoch_ms)
+    return format_epoch_millis(epoch_ms)
+
+def format_sequence(timestamps: list) -> list:
+    return [format_session_timestamp(t) for t in timestamps]
+=== END ===

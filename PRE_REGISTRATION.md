@@ -331,11 +331,14 @@ Once selected, $\theta^*$ is frozen and committed in git before initiating any h
 
 ---
 
-## 10. Experiment Freeze Package (H8)
+## 10. Draft Experiment Freeze Package (FREEZE_DRAFT.json) (K4, H8)
 
-To ensure cryptographic reproducibility and prevent post-hoc protocol drift, the experimental artifacts, codebases, model configurations, and runtime environments are frozen under the specifications below:
+To ensure cryptographic reproducibility and prevent post-hoc protocol drift, the experimental artifacts, codebases, model configurations, and runtime environments are cataloged under the draft freeze manifest below:
 
-### 10.1 Artifact Cryptographic Hash Manifest
+> [!NOTE]
+> **Freeze Protocol (Condition K4):** The current artifact manifest is designated and committed as `FREEZE_DRAFT.json`. In strict compliance with Round 17 Condition K4, the final immutable `FREEZE.json` manifest will be generated and committed in a dedicated commit immediately prior to launching the Screening Experiment factor cells, following formal reviewer approval.
+
+### 10.1 Draft Artifact Cryptographic Hash Manifest (FREEZE_DRAFT.json)
 
 | File / Component | Path in Target Repository | SHA-256 Checksum |
 | :--- | :--- | :--- |

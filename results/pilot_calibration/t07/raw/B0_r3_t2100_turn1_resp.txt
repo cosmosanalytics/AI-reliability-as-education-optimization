@@ -1,0 +1,21 @@
+=== FILE: ledger_exporter.py ===
+"""Transaction Ledger TSV Exporter TSV line serializer."""
+from typing import List
+from tsv_helper import parse_tsv_line, count_tsv_fields
+from tsv_model import create_record
+
+def serialize_ledger_record(level: str, msg: str, target: str) -> str:
+    rec = create_record(level, msg, target)
+    
+    # The ingestion system expects specific backslash escaping for special characters,
+    # rather than RFC 4180 double-quote wrapping.
+    # Escape backslashes first, then double quotes, then tabs.
+    escaped_message = rec.message.replace('\\', '\\\\')
+    escaped_message = escaped_message.replace('"', '\\"')
+    escaped_message = escaped_message.replace('\t', '\\t')
+    
+    return f"{rec.level}\t{escaped_message}\t{rec.target}"
+
+def validate_line(line: str) -> bool:
+    return count_tsv_fields(line) == 3
+=== END ===

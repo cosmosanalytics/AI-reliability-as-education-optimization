@@ -1,0 +1,25 @@
+=== FILE: endpoint_evaluator.py ===
+"""API Endpoint Response Time Evaluator percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_endpoint_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_endpoint_percentile", samples)
+    s = validate_metric_samples(win.values)
+    n = len(s)
+    if n == 0:
+        raise ValueError("Cannot calculate percentile for an empty list of samples.")
+
+    # The "nearest-rank house standard" typically refers to the method
+    # where the rank is calculated as ceil(p/100 * n) and the value at that rank is returned.
+    # Using 1-based indexing for rank, then converting to 0-based for list access.
+    rank = math.ceil((p / 100.0) * n)
+    # Ensure rank is within valid bounds (1 to n)
+    rank = max(1, min(n, int(rank)))
+    return s[rank - 1]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

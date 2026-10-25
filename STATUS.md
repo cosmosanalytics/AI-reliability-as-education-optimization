@@ -1,7 +1,7 @@
 # Project Status & Execution Tracker (`STATUS.md`)
 
-**Current Phase:** Benchmark Validation & Pilot Calibration (Round 17 Suite Expansion & Baseline Calibration Complete)  
-**Phase State:** **Round 17 Complete: G2 Suite Expansion Authored & Validated (84 Tasks, 14 Families), Preflight 100% Green (427 passed), Fresh Baseline-Only Pilot Calibration Executed (504 attempts: 84 @ T=0.0, 420 @ T=0.7), Rule C2 Applied (9 Held-out TAUGHT Retained), Consistency Matrix Audited (0 Conflicts), FREEZE.json Manifest Committed. Factor Runs Strictly Locked Pending Approval.**  
+**Current Phase:** Benchmark Validation & Pilot Calibration (Round 18 Suite Expansion to 106 Tasks & Baseline Calibration Complete)  
+**Phase State:** **Round 18 Complete: Suite Expanded to 106 Tasks across 14 Families (46 Tune / 60 Held-Out), Preflight 100% Green (537 passed), Floor Audit of 17 Held-Out Floor Tasks Completed (100% house conventions, 0 test bugs), Baseline Pilot Calibration Complete (636 attempts: 106 @ T=0.0, 530 @ T=0.7), Rule C2 Applied (11 Held-Out TAUGHT Retained), Dual Power Analyses Documented (Primary MDE 18.7% - 28.1%), FREEZE_DRAFT.json Committed. Factor Runs Strictly Locked Pending Approval.**  
 **Frozen SHA:** `[Current main commit]`  
 **Model Specifications:**  
 - **Model ID:** `gemini-2.5-flash`  

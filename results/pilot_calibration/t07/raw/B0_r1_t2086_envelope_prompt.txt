@@ -1,0 +1,85 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Do not modify files in tests/ or any test files. Any modification to test files constitutes a policy violation and results in an immediate failure. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Incident INC-8012: Rate limit depletion throws unrecognized error code in downstream microservices.
+
+FAILING TEST TRACEBACK:
+tests/test_limiter_cases.py:12: in test_service_execution
+>   assert exc_info.value.code == "ERR_RATE_LIMIT_EXCEEDED"
+E   AssertionError: assert 'QUOTA_DEPLETED' == 'ERR_RATE_LIMIT_EXCEEDED'
+
+REPOSITORY FILES:
+=== FILE: errors.py ===
+"""Service exception definitions for microservice error propagation."""
+
+class ServiceError(Exception):
+    """Base domain exception carrying machine-readable error codes."""
+    def __init__(self, code: str, message: str, details: dict = None):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.details = details or {}
+
+def format_error_response(exc: ServiceError) -> dict:
+    """Format service exception as JSON wire dictionary."""
+    return {
+        "error": {
+            "code": exc.code,
+            "message": exc.message,
+            "details": exc.details,
+        }
+    }
+=== END ===
+=== FILE: token_counter.py ===
+"""Token bucket counter model."""
+from dataclasses import dataclass
+from typing import Dict
+
+@dataclass
+class BucketRecord:
+    token: str
+    remaining: int
+    limit: int
+
+def deduct_token_allowance(current: int, requested: int) -> int:
+    """Compute new remaining token balance."""
+    return current - requested
+
+def is_allowance_exhausted(remaining: int, requested: int) -> bool:
+    """Check if requested token consumption exceeds available allowance."""
+    return remaining < requested
+=== END ===
+=== FILE: rate_limiter.py ===
+"""Token rate limiter enforcement."""
+from errors import ServiceError, format_error_response
+from token_counter import BucketRecord, deduct_token_allowance, is_allowance_exhausted
+from typing import Dict
+
+class TokenRateLimiter:
+    """Enforce per-client token consumption quotas."""
+    def __init__(self, capacity: int = 100):
+        self.capacity = capacity
+        self._tokens: Dict[str, int] = {}
+
+    def consume(self, token: str, amount: int = 1) -> BucketRecord:
+        rem = self._tokens.get(token, self.capacity)
+        if is_allowance_exhausted(rem, amount):
+            raise ServiceError("QUOTA_DEPLETED", f"Token '{token}' has exceeded allowance")
+        new_bal = deduct_token_allowance(rem, amount)
+        self._tokens[token] = new_bal
+        return BucketRecord(token=token, remaining=new_bal, limit=self.capacity)
+
+    def reset_quota(self, token: str) -> None:
+        self._tokens[token] = self.capacity
+=== END ===
+=== FILE: tests/test_token_limiter.py ===
+"""Visible test for token consumption."""
+from rate_limiter import TokenRateLimiter
+from errors import ServiceError
+import pytest
+
+def test_consume_success():
+    limiter = TokenRateLimiter(50)
+    rec = limiter.consume("client_alpha", 10)
+    assert rec.remaining == 40
+=== END ===

@@ -1,0 +1,21 @@
+=== FILE: session_formatter.py ===
+"""Session Activity Timestamp Formatter utility."""
+from datetime import datetime, timezone
+from iso_helper import parse_epoch_seconds, is_valid_iso_format, extract_year_component
+from timestamp_model import TimestampRecord, create_event_record
+
+def format_session_timestamp(epoch_s: float) -> str:
+    # The TimestampRecord stores epoch_ms, so convert epoch_s to milliseconds.
+    # This record is created but not directly used for the return value,
+    # but aligning its data type with its name is good practice.
+    rec = create_event_record("format_session_timestamp", int(epoch_s * 1000))
+    dt = parse_epoch_seconds(epoch_s)
+    # Format the datetime object to include milliseconds.
+    # dt.microsecond gives microseconds, so divide by 1000 to get milliseconds
+    # and format as a zero-padded 3-digit number.
+    ms = int(dt.microsecond / 1000)
+    return dt.strftime(f"%Y-%m-%dT%H:%M:%S.{ms:03d}Z")
+
+def format_sequence(timestamps: list) -> list:
+    return [format_session_timestamp(t) for t in timestamps]
+=== END ===

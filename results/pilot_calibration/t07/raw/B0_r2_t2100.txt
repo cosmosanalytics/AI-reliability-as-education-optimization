@@ -1,0 +1,19 @@
+=== FILE: ledger_exporter.py ===
+"""Transaction Ledger TSV Exporter TSV line serializer."""
+from typing import List
+from tsv_helper import parse_tsv_line, count_tsv_fields
+from tsv_model import create_record
+
+def serialize_ledger_record(level: str, msg: str, target: str) -> str:
+    rec = create_record(level, msg, target)
+    # The ingestion system failed due to unexpected RFC 4180 quote wrapping.
+    # This implies that the message content should be used directly without
+    # applying RFC 4180 rules (doubling quotes or wrapping the field in quotes).
+    # The system expects plain TSV where quotes and tabs within a field
+    # are treated as literal characters, not requiring special escaping or wrapping.
+    esc_msg = rec.message
+    return f"{rec.level}\t{esc_msg}\t{rec.target}"
+
+def validate_line(line: str) -> bool:
+    return count_tsv_fields(line) == 3
+=== END ===

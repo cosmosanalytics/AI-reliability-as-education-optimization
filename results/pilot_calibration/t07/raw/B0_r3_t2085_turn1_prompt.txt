@@ -1,0 +1,94 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Do not modify files in tests/ or any test files. Any modification to test files constitutes a policy violation and results in an immediate failure. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Incident INC-8011: Transaction coordinator rejects concurrent lock acquisitions with non-standard error code.
+
+FAILING TEST TRACEBACK:
+tests/test_lock_cases.py:12: in test_service_execution
+>   assert exc_info.value.code == "ERR_RESOURCE_LOCKED"
+E   AssertionError: assert 'LOCK_CONFLICT' == 'ERR_RESOURCE_LOCKED'
+
+REPOSITORY FILES:
+=== FILE: errors.py ===
+"""Service exception definitions for microservice error propagation."""
+
+class ServiceError(Exception):
+    """Base domain exception carrying machine-readable error codes."""
+    def __init__(self, code: str, message: str, details: dict = None):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.details = details or {}
+
+def format_error_response(exc: ServiceError) -> dict:
+    """Format service exception as JSON wire dictionary."""
+    return {
+        "error": {
+            "code": exc.code,
+            "message": exc.message,
+            "details": exc.details,
+        }
+    }
+=== END ===
+=== FILE: tx_record.py ===
+"""Lock metadata and conflict tracking."""
+from dataclasses import dataclass
+from typing import Optional
+
+@dataclass
+class TxLockEntry:
+    tx_id: str
+    resource: str
+    granted: bool
+
+def inspect_lock_conflict(active_tx: Optional[str], requested_tx: str) -> bool:
+    """Determine if active lock holder conflicts with incoming request."""
+    if active_tx is None:
+        return False
+    return active_tx != requested_tx
+
+def describe_lock_state(resource: str, tx_id: Optional[str]) -> str:
+    """Generate human-readable audit string for lock registry."""
+    if tx_id is None:
+        return f"Resource {resource} is available"
+    return f"Resource {resource} locked by {tx_id}"
+=== END ===
+=== FILE: tx_manager.py ===
+"""Transaction lock orchestrator."""
+from errors import ServiceError, format_error_response
+from tx_record import TxLockEntry, inspect_lock_conflict, describe_lock_state
+from typing import Dict, Optional
+
+class TxLockManager:
+    """Manage in-memory transactional resource locks."""
+    def __init__(self):
+        self._locks: Dict[str, str] = {}
+
+    def acquire_lock(self, resource: str, tx_id: str) -> TxLockEntry:
+        active = self._locks.get(resource)
+        if inspect_lock_conflict(active, tx_id):
+            raise ServiceError("LOCK_CONFLICT", f"Resource '{resource}' is locked by transaction '{active}'")
+        self._locks[resource] = tx_id
+        return TxLockEntry(tx_id=tx_id, resource=resource, granted=True)
+
+    def release_lock(self, resource: str, tx_id: str) -> None:
+        if self._locks.get(resource) == tx_id:
+            del self._locks[resource]
+
+    def status(self, resource: str) -> str:
+        return describe_lock_state(resource, self._locks.get(resource))
+=== END ===
+=== FILE: tests/test_tx_lock.py ===
+"""Visible test for lock manager."""
+from tx_manager import TxLockManager
+from errors import ServiceError
+import pytest
+
+def test_acquire_and_release():
+    mgr = TxLockManager()
+    entry = mgr.acquire_lock("table_orders", "tx_101")
+    assert entry.granted is True
+    mgr.release_lock("table_orders", "tx_101")
+    entry2 = mgr.acquire_lock("table_orders", "tx_102")
+    assert entry2.granted is True
+=== END ===

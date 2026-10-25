@@ -1,0 +1,20 @@
+=== FILE: settlement_calculator.py ===
+"""Merchant settlement fee calculator."""
+from decimal import Decimal
+from money_helper import to_cents, is_positive_amount
+from settlement_model import parse_params
+
+def calculate_settlement_fee(amount_str: str, rate_str: str) -> str:
+    params = parse_params(amount_str, rate_str)
+    amt = Decimal(params.amount)
+    rate = Decimal(params.rate)
+    raw_fee = amt * rate
+    fee_cents = to_cents(raw_fee)
+    return str(fee_cents)
+
+def validate_and_compute(amount_str: str, rate_str: str) -> str:
+    amt = Decimal(amount_str)
+    if not is_positive_amount(amt):
+        raise ValueError("Amount must be positive")
+    return calculate_settlement_fee(amount_str, rate_str)
+=== END ===

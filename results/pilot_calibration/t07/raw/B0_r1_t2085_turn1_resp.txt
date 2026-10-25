@@ -1,0 +1,25 @@
+=== FILE: tx_manager.py ===
+"""Transaction lock orchestrator."""
+from errors import ServiceError, format_error_response
+from tx_record import TxLockEntry, inspect_lock_conflict, describe_lock_state
+from typing import Dict, Optional
+
+class TxLockManager:
+    """Manage in-memory transactional resource locks."""
+    def __init__(self):
+        self._locks: Dict[str, str] = {}
+
+    def acquire_lock(self, resource: str, tx_id: str) -> TxLockEntry:
+        active = self._locks.get(resource)
+        if inspect_lock_conflict(active, tx_id):
+            raise ServiceError("ERR_RESOURCE_LOCKED", f"Resource '{resource}' is locked by transaction '{active}'")
+        self._locks[resource] = tx_id
+        return TxLockEntry(tx_id=tx_id, resource=resource, granted=True)
+
+    def release_lock(self, resource: str, tx_id: str) -> None:
+        if self._locks.get(resource) == tx_id:
+            del self._locks[resource]
+
+    def status(self, resource: str) -> str:
+        return describe_lock_state(resource, self._locks.get(resource))
+=== END ===

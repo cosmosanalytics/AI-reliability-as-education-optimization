@@ -1,0 +1,83 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Do not modify files in tests/ or any test files. Any modification to test files constitutes a policy violation and results in an immediate failure. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Incident INC-2091: Journal timestamps lack millisecond precision required by house ingestion standard.
+
+FAILING TEST TRACEBACK:
+tests/test_ts_cases.py:8: in test_service_execution
+>   assert res == "2023-11-14T22:13:20.123Z"
+E   AssertionError: assert '2023-11-14T22:13:20Z' == '2023-11-14T22:13:20.123Z'
+
+REPOSITORY FILES:
+=== FILE: iso_helper.py ===
+"""Timestamp format utility and validation."""
+from datetime import datetime, timezone
+import re
+from typing import Optional
+
+def parse_epoch_seconds(epoch_s: float) -> datetime:
+    """Convert float seconds since epoch into timezone-aware UTC datetime."""
+    return datetime.fromtimestamp(epoch_s, tz=timezone.utc)
+
+def is_valid_iso_format(ts_str: str) -> bool:
+    """Verify string adheres to YYYY-MM-DDTHH:MM:SS.mmmZ schema."""
+    pat = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$"
+    return bool(re.match(pat, ts_str))
+
+def extract_year_component(ts_str: str) -> int:
+    """Extract 4-digit calendar year from formatted ISO string."""
+    return int(ts_str[:4])
+
+def extract_millis_component(ts_str: str) -> int:
+    """Extract 3-digit millisecond fraction from formatted string."""
+    try:
+        parts = ts_str.split(".")
+        if len(parts) > 1:
+            return int(parts[1][:3])
+        return 0
+    except Exception:
+        return 0
+
+def format_epoch_millis(epoch_ms: int) -> str:
+    """Format integer epoch milliseconds to UTC ISO string."""
+    s = epoch_ms / 1000.0
+    dt = parse_epoch_seconds(s)
+    ms = int(dt.microsecond / 1000)
+    return dt.strftime(f"%Y-%m-%dT%H:%M:%S.{ms:03d}Z")
+=== END ===
+=== FILE: timestamp_model.py ===
+"""Data model for temporal event records."""
+from dataclasses import dataclass
+from typing import Optional
+
+@dataclass
+class TimestampRecord:
+    event_name: str
+    epoch_ms: int
+
+def create_event_record(name: str, epoch_ms: int) -> TimestampRecord:
+    """Instantiate event record with epoch millisecond timestamp."""
+    return TimestampRecord(event_name=name, epoch_ms=epoch_ms)
+=== END ===
+=== FILE: session_formatter.py ===
+"""Session Activity Timestamp Formatter utility."""
+from datetime import datetime, timezone
+from iso_helper import parse_epoch_seconds, is_valid_iso_format, extract_year_component
+from timestamp_model import TimestampRecord, create_event_record
+
+def format_session_timestamp(epoch_s: float) -> str:
+    rec = create_event_record("format_session_timestamp", int(epoch_s))
+    dt = parse_epoch_seconds(epoch_s)
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+def format_sequence(timestamps: list) -> list:
+    return [format_session_timestamp(t) for t in timestamps]
+=== END ===
+=== FILE: tests/test_ts.py ===
+"""Visible test for Session Activity Timestamp Formatter."""
+from session_formatter import format_session_timestamp
+
+def test_ts_basic():
+    res = format_session_timestamp(1700000000.0)
+    assert res.startswith("2023-11-14")
+=== END ===

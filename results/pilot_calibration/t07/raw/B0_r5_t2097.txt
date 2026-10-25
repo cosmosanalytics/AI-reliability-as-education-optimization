@@ -1,0 +1,51 @@
+=== FILE: endpoint_evaluator.py ===
+"""API Endpoint Response Time Evaluator percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_endpoint_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_endpoint_percentile", samples)
+    s = validate_metric_samples(win.values)
+    n = len(s)
+    if n == 0:
+        raise ValueError("Cannot calculate percentile for an empty list of samples.")
+    
+    # The problem statement mentions "nearest-rank house standard".
+    # This typically implies a method where the percentile value is one of the samples,
+    # or derived directly from a specific rank.
+    # The standard formula for the rank (index) of the p-th percentile is often
+    # i = ceil(N * p / 100) - 1 for 0-based indexing.
+    # For a 50th percentile (median) in a list of 8 elements, this means:
+    # i = ceil(8 * 50 / 100) - 1 = ceil(4) - 1 = 4 - 1 = 3.
+    # The value at s[3] would be 40.0 if s = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0].
+    # This matches the expected output of 40.0 for the failing test case.
+    
+    # Calculate the rank (1-based index)
+    rank = math.ceil(n * p / 100.0)
+    
+    # Adjust to 0-based index
+    # If p is 0, rank will be 0, index will be -1, which is incorrect.
+    # The 0th percentile is typically the minimum value (s[0]).
+    # The 100th percentile is typically the maximum value (s[n-1]).
+    if p == 0.0:
+        return s[0]
+    if p == 100.0:
+        return s[n - 1]
+    
+    # For other percentiles, use the calculated rank
+    # The rank is 1-based, so subtract 1 for 0-based indexing.
+    idx = int(rank) - 1
+    
+    # Ensure the index is within bounds (should be handled by ceil and p boundary checks)
+    if idx < 0:
+        idx = 0
+    if idx >= n:
+        idx = n - 1
+        
+    return s[idx]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

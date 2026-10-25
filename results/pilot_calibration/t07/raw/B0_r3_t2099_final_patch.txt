@@ -1,0 +1,43 @@
+=== FILE: write_latency.py ===
+"""Database Write Latency Calculator percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_write_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_write_percentile", samples)
+    s = validate_metric_samples(win.values)
+    n = len(s)
+    if n == 0:
+        raise ValueError("Cannot calculate percentile for an empty list of samples.")
+    
+    # The "nearest-rank house standard" typically implies selecting an actual
+    # data point from the sorted samples, often based on a rounded index.
+    # The common formula for 0-indexed arrays for the Pth percentile (0 < P <= 100)
+    # is to find the index k = ceil((P/100) * n) - 1.
+    # This ensures that for P=100, we get the last element (index n-1).
+    
+    # Calculate the 1-based rank (position)
+    rank_1_based = (p / 100.0) * n
+    
+    # Round up to get the nearest rank according to the "nearest-rank" method
+    # (often referred to as C=1 method, equivalent to numpy's 'higher' or 'ceiling' interpolation for ranks)
+    # For 0-indexed arrays, this means index = ceil(rank_1_based) - 1
+    
+    # Handle edge case where p=0.0 or very small, rank_1_based might be 0, so ceil(0) is 0.
+    # We want at least the first element if p > 0.
+    if rank_1_based <= 0:
+        return s[0] # For p=0, return the minimum value
+    
+    # Calculate the 0-based index
+    idx = int(math.ceil(rank_1_based)) - 1
+    
+    # Ensure index is within bounds (0 to n-1)
+    idx = max(0, min(idx, n - 1))
+    
+    return s[idx]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

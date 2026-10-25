@@ -1,0 +1,45 @@
+=== FILE: endpoint_evaluator.py ===
+"""API Endpoint Response Time Evaluator percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_endpoint_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_endpoint_percentile", samples)
+    s = validate_metric_samples(win.values)
+    n = len(s)
+    if n == 0:
+        raise ValueError("Samples list cannot be empty for percentile calculation.")
+    
+    # Calculate percentile using the "nearest-rank" method (often R-1 or similar).
+    # This method computes the rank as ceil(p/100 * N) and takes the value at that rank.
+    # For 0-indexed arrays, this means s[k-1] where k is 1-indexed rank.
+    # The problem description and failing test suggest this specific interpretation
+    # where the 50th percentile of [10, 20, 30, 40, 50] is 40.0.
+    # This implies a 1-based rank definition where 50th percentile of 5 items is item 4.
+    # This aligns with k = floor(p/100 * N) + 1 for p > 0, and then s[k-1].
+    
+    # If p is 0, return the minimum value
+    if p == 0:
+        return s[0]
+    # If p is 100, return the maximum value
+    if p == 100:
+        return s[n-1]
+    
+    # Calculate the 1-based rank (k)
+    k_float = (p / 100.0) * n
+    k = math.ceil(k_float) # Use ceil for nearest-rank method
+
+    # Adjust k if it results in an out-of-bounds index (e.g., k_float was an integer)
+    if k == 0: # This can happen if p is very small and N is small, but p=0 is handled above.
+        k = 1
+    elif k > n: # This can happen if p is very close to 100.
+        k = n
+
+    # The percentile value is the element at 0-based index k-1
+    return s[int(k) - 1]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

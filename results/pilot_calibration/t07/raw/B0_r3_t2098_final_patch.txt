@@ -1,0 +1,25 @@
+=== FILE: duration_analyzer.py ===
+"""Worker Job Execution Duration Analyzer percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def compute_duration_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("compute_duration_percentile", samples)
+    s = validate_metric_samples(win.values)
+    n = len(s)
+    if n == 0:
+        raise ValueError("Cannot compute percentile for empty samples list.")
+
+    # Using the Nearest Rank method for percentile calculation (often referred to as R-1 or type 1 method)
+    # The rank 'r' is calculated as ceil((p/100) * n)
+    # The percentile value is then the element at index r-1 in the sorted list (0-indexed).
+    rank = math.ceil((p / 100.0) * n)
+    # Ensure rank is within bounds [1, n]
+    rank = max(1, min(int(rank), n))
+    return s[rank - 1]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

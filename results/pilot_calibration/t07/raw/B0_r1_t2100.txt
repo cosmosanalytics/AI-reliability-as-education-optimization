@@ -1,0 +1,56 @@
+=== FILE: tsv_helper.py ===
+"""TSV serialization validation utility."""
+from typing import List, Dict
+
+def parse_tsv_line(line: str) -> List[str]:
+    """Split raw tab-delimited record into field tokens."""
+    return line.split("\t")
+
+def count_tsv_fields(line: str) -> int:
+    """Count number of tab-delimited columns in row."""
+    return len(parse_tsv_line(line))
+
+def join_tsv_fields(fields: List[str]) -> str:
+    """Join list of string fields using single tab delimiter."""
+    return "\t".join(fields)
+
+def validate_tsv_columns(line: str, expected_cols: int) -> bool:
+    """Verify line conforms to expected column count."""
+    return count_tsv_fields(line) == expected_cols
+
+def escape_tsv_cell(val: str) -> str:
+    """Escape control characters and delimiters for safe single-cell embedding."""
+    # Escape backslashes first to avoid double escaping newly added backslashes
+    val = val.replace("\\", "\\\\")
+    val = val.replace("\"", "\\\"")
+    val = val.replace("\t", "\\t")
+    val = val.replace("\r", "\\r")
+    val = val.replace("\n", "\\n") # Also escape newlines for consistency
+    return val
+
+def sanitize_tsv_record(line: str) -> str:
+    """Trim trailing newline or carriage return from line."""
+    return line.rstrip("\r\n")
+
+def is_comment_line(line: str) -> bool:
+    """Check if row begins with comment prefix hash."""
+    return line.startswith("#")
+=== END ===
+=== FILE: ledger_exporter.py ===
+"""Transaction Ledger TSV Exporter TSV line serializer."""
+from typing import List
+from tsv_helper import parse_tsv_line, count_tsv_fields, escape_tsv_cell
+from tsv_model import create_record
+
+def serialize_ledger_record(level: str, msg: str, target: str) -> str:
+    rec = create_record(level, msg, target)
+    # Apply escaping to each field individually as per the expected format
+    # The previous RFC 4180-like quote wrapping is replaced by backslash escaping.
+    esc_level = escape_tsv_cell(rec.level)
+    esc_msg = escape_tsv_cell(rec.message)
+    esc_target = escape_tsv_cell(rec.target)
+    return f"{esc_level}\t{esc_msg}\t{esc_target}"
+
+def validate_line(line: str) -> bool:
+    return count_tsv_fields(line) == 3
+=== END ===

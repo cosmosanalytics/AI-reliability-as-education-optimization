@@ -1,0 +1,19 @@
+=== FILE: payload_validator.py ===
+"""Webhook payload verification orchestrator."""
+from errors import ServiceError, format_error_response
+from schema_rules import check_required_keys, inspect_field_types
+from typing import Dict, Any
+
+class WebhookPayloadValidator:
+    """Validate incoming webhook delivery payload structures."""
+    REQUIRED_KEYS = ["event_id", "timestamp", "payload"]
+
+    def validate(self, body: Dict[str, Any]) -> bool:
+        missing = check_required_keys(body, self.REQUIRED_KEYS)
+        if missing:
+            raise ServiceError("ERR_VALIDATION_FAILED", f"Payload missing required keys: {missing}")
+        return True
+
+    def validate_schema(self, body: Dict[str, Any]) -> bool:
+        return self.validate(body)
+=== END ===
