@@ -171,3 +171,12 @@ This is an append-only, timestamped log recording all operational decisions, har
      - Labels will be decided strictly by empirical baseline solvability before factorial screening begins, never by post-hoc handbook gains.
   3. **Deliverables Synchronized:** Re-generated `benchmarks/splits_e5.json`, `benchmarks/suite_e5.py`, and `benchmarks/FAIRNESS_e5.md`.
 - **Preflight Verification:** 146 / 146 tests passing in `tests/test_suite_e5_preflight.py`. Zero model calls made. Ready for Round 12 review.
+
+### [2026-10-25T02:00:00Z] Pilot Calibration: Approval & Runner Adaptation for Baseline B0
+- **Context:** Claude Round 12 review approved benchmark validation on `suite_e5` at commit `e812d88` and authorized Pilot Calibration under Baseline condition B0 (ticket + failing traceback excerpt + traceback file only, single call, standard envelope) across all 28 tasks x 5 runs (140 total attempts).
+- **Runner Adaptation (`runner/agent_runner.py`):**
+  - Updated prompt construction in `run_single_attempt` to respect Section 8.2 and Round 12 Scope: when `u_val == 0` and task metadata contains `traceback_files`, only the files listed in `traceback_files` are presented under `REPOSITORY FILES` (minimal context package), and `FAILING TEST TRACEBACK:\n{ticket['traceback_text']}` is included in the prompt.
+  - The complete repository is preserved for grading via `evaluate_patch(ticket['repo'], ...)`.
+  - Condition B0 executes as a single call: $s=0, p=0, u=0, r=0, k=0$ (no handbook, no placebo, no examples, no tools, no review, no retry).
+- **Execution Script:** Created `runner/run_pilot_calibration.py` orchestrating 140 attempts across 6 worker threads with thread-safe file locking.
+- **Cost Confirmation:** Projected token cost for 140 attempts: ~105k input tokens ($0.008) + ~140k output/thinking tokens ($0.042) = ~$0.05 total (well within budget).

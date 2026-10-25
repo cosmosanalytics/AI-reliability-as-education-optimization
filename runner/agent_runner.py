@@ -415,16 +415,31 @@ def run_single_attempt(
     tool_budget_exhausted = False
 
     # 1. Build standardized task prompt
+    # If traceback_files is defined in ticket and u_val == 0, present only traceback_files (minimal context package)
+    # and include the failing traceback excerpt per Section 8.2 & Round 12 protocol.
+    # When u_val == 1, supply whole repo and interactive tool instructions.
+    if u_val == 0 and "traceback_files" in ticket and ticket["traceback_files"]:
+        prompt_files = {
+            p: ticket["repo"][p] for p in ticket["traceback_files"] if p in ticket["repo"]
+        }
+    else:
+        prompt_files = ticket["repo"]
+
     repo_listing = "".join(
         f"=== FILE: {p} ===\n{c.rstrip()}\n=== END ===\n"
-        for p, c in ticket["repo"].items()
+        for p, c in prompt_files.items()
     )
     envelope_header = (
         TOOL_TASK_ENVELOPE_HEADER if u_val == 1 else STANDARD_TASK_ENVELOPE_HEADER
     )
+    tb_section = ""
+    if "traceback_text" in ticket and ticket["traceback_text"]:
+        tb_section = f"FAILING TEST TRACEBACK:\n{ticket['traceback_text']}\n\n"
+
     task_prompt = (
         f"{envelope_header}\n\n"
         f"TICKET ISSUE:\n{ticket['issue']}\n\n"
+        f"{tb_section}"
         f"REPOSITORY FILES:\n{repo_listing}"
     )
 
