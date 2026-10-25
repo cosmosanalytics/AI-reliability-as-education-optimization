@@ -1,8 +1,8 @@
 # Project Status & Execution Tracker (`STATUS.md`)
 
-**Current Phase:** Benchmark Validation (`suite_e5` Offline Suite, Invariants & Fairness Review — Awaiting Claude Round 10 Review)  
-**Phase State:** **Benchmark Validation Complete & Hermetically Verified (143/143 Preflight Tests Passing; Zero Model Calls Made)**  
-**Frozen SHA:** `915711b` (Baseline evaluation runner / pilot calibration) -> *Benchmark Validation Fixes Commit in Progress*  
+**Current Phase:** Benchmark Validation (`suite_e5` Offline Suite, Invariants & Fairness Review — Awaiting Claude Round 11 Review)  
+**Phase State:** **Benchmark Validation Complete & Hermetically Verified (146/146 Preflight Tests Passing; Zero Model Calls Made)**  
+**Frozen SHA:** `82d9d29` (Benchmark Validation Suite e5 Verified)  
 **Model Specifications:**  
 - **Model ID:** `gemini-2.5-flash` (for upcoming pilot calibration upon benchmark validation approval)  
 - **Sampling Settings:** `temperature=0.0`, `max_output_tokens=16384`, `thinking_budget=2048`  
@@ -27,17 +27,38 @@
 |:---|:---|:---:|:---:|:---|
 | **Phase 0** | Infrastructure & Protocol Setup | **Complete and Verified** | `c81d851` | Evaluation runner (`agent_runner.py`), grader (`grader.py`), 16 cell briefs (`briefs/DIFF.md`), exact token accounting, Resolution-V parity, interactive tool loop, standardized task envelope, audit trail, 10 hermetic unit tests. Live dry run verified on `gemini-2.5-flash`. |
 | **Pilot Calibration (suite_e4)** | Difficulty Calibration Only | **Complete (Difficulty Calibrated)** | `915711b` | 12 multi-module tasks (`suite_e4`), 120 live attempts ($C0000=56.7\%$, $C1111=61.7\%$, $p=0.8750$). Established as difficulty calibration only (ceiling broken); per-task effects did not replicate across runs. |
-| **Benchmark Validation (suite_e5)** | Modular Task Suite $e5$, Invariants & Preflight | **Complete (143/143 Verified)** | *Current Commit* | Strictly offline. 28 modular instances across 7 families (`benchmarks/suite_e5.py`), `HANDBOOK.md` vs `PLACEBO.md` token balance (761 vs 754, 0.920% diff $\le 3\%$), 2 worked examples (`briefs/P3.md`), per-assertion audit table (`benchmarks/FAIRNESS_e5.md`), tune/held-out split (`benchmarks/splits_e5.json`), 143/143 passing preflight tests (`tests/test_suite_e5_preflight.py`). S-1..S-6 resolved. |
+| **Benchmark Validation (suite_e5)** | Modular Task Suite $e5$, Invariants & Preflight | **Complete (146/146 Verified)** | `82d9d29` | Strictly offline. 28 modular instances across 7 families (`benchmarks/suite_e5.py`), `HANDBOOK.md` vs `PLACEBO.md` token balance (761 vs 754, 0.920% diff $\le 3\%$), 2 worked examples (`briefs/P3.md`), per-assertion audit table (`benchmarks/FAIRNESS_e5.md`), tune/held-out split (`benchmarks/splits_e5.json`), 146/146 passing preflight tests (`tests/test_suite_e5_preflight.py`). S-1..S-6 and B1..B4 resolved. |
 | **Pilot Calibration (suite_e5)** | Baseline B0 Calibration Run | **LOCKED (Pending Benchmark Validation Approval)** | — | Live B0 calibration on `suite_e5` (frozen runner config, $\ge 10$ runs per instance on tune split). Calibrates baseline difficulty without scaffolding bias. Zero model calls until validation passes. |
 | **Pre-Registration** | Formal Pre-Registration Document | **LOCKED (Pending Pilot Calibration)** | — | Primary hypothesis, instance-clustered permutation tests, $\theta^*$ selection rule, secondary metrics committed before screening experiment. |
-| **Screening Experiment** | Tune-Set Factorial ($2^{5-1}$) | **LOCKED (Pending Pre-Registration)** | — | 16 cells $\times \ge 5$ runs on the 12 tune tasks (`benchmarks/splits_e5.json`). |
-| **Confirmatory Study** | Held-Out Confirmation & Multi-Model Replication | **LOCKED** | — | Confirmatory evaluation on 16 held-out tasks and second-model replication as budget allows. |
+| **Screening Experiment** | Tune-Set Factorial ($2^{5-1}$) | **LOCKED (Pending Pre-Registration)** | — | 16 cells $\times \ge 5$ runs on the 18 tune tasks (`benchmarks/splits_e5.json`). |
+| **Confirmatory Study** | Held-Out Confirmation & Multi-Model Replication | **LOCKED** | — | Confirmatory evaluation on 10 held-out tasks (including 4 transfer tasks) and second-model replication as budget allows. |
 
 ---
 
-## 2. Benchmark Validation Resolution: S-1 through S-6 Fixes
+## 2. Benchmark Validation Resolution: S-1 through S-6 and B1 through B4 Fixes
 
-In response to Round 9 review, all six blocking construct-validity requirements have been fully addressed offline with zero model calls:
+In response to Round 9 and Round 10 reviews, all construct-validity requirements have been fully addressed offline with zero model calls:
+
+### B1: Design Word Leakage Elimination
+- Replaced all test IDs, function names, and filenames containing design tags (`taught`, `stated`, `distractor`, `transfer`, `visible_sensitive`, `_visible`, `_hidden`) with neutral domain-specific names (`test_case_1` style or domain-neutral function names such as `test_quote_escaping`, `test_sibling_path_boundary`).
+- Test filenames renamed from `*_hidden.py` to neutral `test_*_cases.py`.
+- Added automated preflight test `test_no_design_words_in_tests_or_traces` scanning visible tests, hidden tests, and failure traceback excerpts across all 28 tasks to ensure zero leakage of design vocabulary to the model.
+
+### B2: Symptom-Only Traceback Assertions & Solvability
+- Removed rule-revealing error messages (e.g. "embedded quote not escaped via RFC 4180 standard", "sibling path permitted by unsegmented prefix match", naming banker's rounding) from assertion statements and tracebacks.
+- All failure tracebacks strictly exhibit pure value mismatches (`AssertionError: assert actual == expected`), preventing any prompt leakage that would compromise the `TAUGHT` class construct validity.
+
+### B3: Tune / Held-Out Partition Rebalance (18 Tune / 10 Held-Out)
+- Rebalanced task partitioning from 12/16 to **18 Tune (64.3%) / 10 Held-Out (35.7%)** committed in `benchmarks/splits_e5.json`:
+  - **Tune Tasks (18):** 2001, 2002, 2004, 2005, 2006, 2008, 2009, 2010, 2012, 2013, 2014, 2016, 2017, 2018, 2020, 2021, 2022, 2024. Includes 2 `DISTRACTOR` tasks (2004, 2008) to ensure screening across all primary task modalities.
+  - **Held-Out Tasks (10):** 2003, 2007, 2011, 2015, 2019, 2023, 2025, 2026, 2027, 2028.
+  - Stratified across all 7 families: 100% of `TRANSFER` tasks (Family 7: `cache_ttl`, Tasks 2025–2028) are held out for confirmatory domain generalization evaluation.
+  - Preflight verification test `test_splits_e5_stratification` confirms exact counts and stratification rules.
+
+### B4: Root-Cause Reachability & Elimination of Decoy Files
+- Verified that all helper/support files in every task repository are actively imported and invoked along the real call graph (e.g. input validators, data models, formatters). Decoys = 0 across all 28 tasks.
+- For all 12 Hidden Root Cause tasks, the root-cause file is strictly imported by the traceback entrypoint file.
+- Added automated preflight tests `test_root_cause_reachability` and `test_zero_unimported_decoy_files` enforcing 100% import reachability.
 
 ### S-1: Hint Comment Elimination & Invariant Enforcement
 - Removed every `# BUG:`, `# FIX:`, `# TODO:`, and `# HACK:` comment across all 28 task repositories.
@@ -64,13 +85,10 @@ In response to Round 9 review, all six blocking construct-validity requirements 
   - Class Tag (`TAUGHT`, `STATED`, `DISTRACTOR`, `TRANSFER`)
   - Hidden Root Cause Flag
   - Root Cause Only With Exploration Flag
+  - Measured Baseline Pass Rate (Pilot Calibration) column (stamped `Pending Pilot Calibration`)
 
 ### S-5: Committed Tune / Held-Out Partition (`benchmarks/splits_e5.json`)
-- Partitioned the 28 tasks into:
-  - **12 Tune Tasks** (Screening Experiment): 2001, 2002, 2005, 2006, 2009, 2010, 2013, 2014, 2017, 2018, 2021, 2022.
-  - **16 Held-Out Tasks** (Confirmatory Study): 2003, 2004, 2007, 2008, 2011, 2012, 2015, 2016, 2019, 2020, 2023, 2024, 2025, 2026, 2027, 2028.
-- Partition is stratified by bug family and class tag, with 100% of `TRANSFER` tasks (2025–2028) held out for confirmatory testing.
-- Committed prior to any model execution.
+- Partitioned into 18 Tune / 10 Held-Out, committed prior to any model execution.
 
 ### S-6: Root-Cause Exploration & Factor $u$ Definition
 - For all 12 Hidden Root Cause tasks (42.9%), the defect resides outside the traceback file. A symptom-level patch in the traceback file fails core module assertions.
@@ -98,8 +116,11 @@ In response to Round 9 review, all six blocking construct-validity requirements 
   - `test_no_hint_comments_in_provided_files`: 28/28 PASSED (0 hint regex matches).
   - `test_handbook_placebo_token_balance`: PASSED (0.920% difference $\le 3.0\%$).
   - `test_e5_tag_distribution`: PASSED (all structural and class tag invariants satisfied).
-  - `test_tune_heldout_split_invariants`: PASSED (tune/held-out stratification and TRANSFER hold-out confirmed).
-  - **Total:** **143 / 143 passed (100%)**.
+  - `test_splits_e5_stratification`: PASSED (18 Tune / 10 Held-out stratification, $\ge 1$ DISTRACTOR in Tune, 100% TRANSFER hold-out confirmed).
+  - `test_no_design_words_in_tests_or_traces`: PASSED (zero design words in visible tests, hidden tests, or tracebacks).
+  - `test_root_cause_reachability`: PASSED (root cause file imported by entrypoint in all 12 HRC tasks).
+  - `test_zero_unimported_decoy_files`: PASSED (all non-test files actively called on execution path; decoys = 0).
+  - **Total:** **146 / 146 passed (100%)**.
 
 ---
 

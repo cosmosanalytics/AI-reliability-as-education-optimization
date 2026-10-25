@@ -2,7 +2,7 @@
 
 Governing Rule: Rule H03 (Input immutability & defensive copying via copy.deepcopy).
 Competing Alternatives: In-place dictionary update, shallow copy dict().
-Target: 40-120 non-test lines across 3-4 files.
+Target: 40-120 non-test lines across 3-4 files. All files on reachability path (zero decoys).
 """
 
 def register_family_2(add_task):
@@ -56,6 +56,7 @@ def merge_tenant_routing(base_config: Dict[str, Any], tenant_overrides: Dict[str
 
 def build_route_profile(tenant_id: str, base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> RouteProfile:
     cfg = merge_tenant_routing(base_config, tenant_overrides)
+    validate_route_keys(cfg)
     return RouteProfile(tenant_id=tenant_id, settings=cfg)
 ''',
         "tests/test_routing.py": '''from routing import merge_tenant_routing, build_route_profile
@@ -71,7 +72,7 @@ def test_profile_builder():
     p = build_route_profile("tenant-1", {"host": "internal"}, {"port": 8080})
     assert p.settings["port"] == 8080
 
-def test_nested_immutability_visible():
+def test_nested_configuration_isolation():
     base = {"network": {"retries": 3}}
     over = {"network": {"timeout": 5}}
     merged = merge_tenant_routing(base, over)
@@ -81,10 +82,10 @@ def test_nested_immutability_visible():
     }
 
     t2005_hidden = {
-        "tests/test_routing_hidden.py": '''import pytest
+        "tests/test_routing_cases.py": '''import pytest
 from routing import merge_tenant_routing
 
-def test_deep_immutability_nested():
+def test_config_isolation():
     base = {"db": {"host": "localhost", "pool": {"size": 10, "max": 20}}}
     over = {"db": {"pool": {"size": 5}}}
     merged = merge_tenant_routing(base, over)
@@ -105,14 +106,14 @@ from typing import Dict, Any
 from models import RouteProfile
 from schema import validate_route_keys
 
-def _deep_merge_dict(base: dict, overrides: dict) -> dict:
-    res = copy.deepcopy(base)
-    for key, value in overrides.items():
-        if key in res and isinstance(res[key], dict) and isinstance(value, dict):
-            res[key] = _deep_merge_dict(res[key], value)
+def _deep_merge_dict(base: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:
+    result = copy.deepcopy(base)
+    for k, v in overrides.items():
+        if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+            result[k] = _deep_merge_dict(result[k], v)
         else:
-            res[key] = copy.deepcopy(value)
-    return res
+            result[k] = copy.deepcopy(v)
+    return result
 
 def merge_tenant_routing(base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> Dict[str, Any]:
     """Merge tenant overrides into base configuration.
@@ -122,6 +123,7 @@ def merge_tenant_routing(base_config: Dict[str, Any], tenant_overrides: Dict[str
 
 def build_route_profile(tenant_id: str, base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> RouteProfile:
     cfg = merge_tenant_routing(base_config, tenant_overrides)
+    validate_route_keys(cfg)
     return RouteProfile(tenant_id=tenant_id, settings=cfg)
 '''
     }
@@ -130,14 +132,17 @@ def build_route_profile(tenant_id: str, base_config: Dict[str, Any], tenant_over
         "routing.py": '''"""Tenant routing configuration aggregator."""
 from typing import Dict, Any
 from models import RouteProfile
+from schema import validate_route_keys
 
 def merge_tenant_routing(base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> Dict[str, Any]:
-    merged = base_config.copy()
-    merged.update(tenant_overrides)
+    merged = dict(base_config)
+    for k, v in tenant_overrides.items():
+        merged[k] = v
     return merged
 
 def build_route_profile(tenant_id: str, base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> RouteProfile:
     cfg = merge_tenant_routing(base_config, tenant_overrides)
+    validate_route_keys(cfg)
     return RouteProfile(tenant_id=tenant_id, settings=cfg)
 '''
     }
@@ -146,6 +151,7 @@ def build_route_profile(tenant_id: str, base_config: Dict[str, Any], tenant_over
         "routing.py": '''"""Tenant routing configuration aggregator."""
 from typing import Dict, Any
 from models import RouteProfile
+from schema import validate_route_keys
 
 def merge_tenant_routing(base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> Dict[str, Any]:
     base_config.update(tenant_overrides)
@@ -153,6 +159,7 @@ def merge_tenant_routing(base_config: Dict[str, Any], tenant_overrides: Dict[str
 
 def build_route_profile(tenant_id: str, base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> RouteProfile:
     cfg = merge_tenant_routing(base_config, tenant_overrides)
+    validate_route_keys(cfg)
     return RouteProfile(tenant_id=tenant_id, settings=cfg)
 '''
     }
@@ -163,7 +170,7 @@ def build_route_profile(tenant_id: str, base_config: Dict[str, Any], tenant_over
         name="Tenant Routing Configuration",
         class_tag="STATED",
         issue="Production outage OUT-104: Dynamic tenant routing update altered default network retry policies across multi-tenant worker nodes.",
-        traceback_text="FAILED tests/test_routing_hidden.py::test_deep_immutability_nested - AssertionError: Configuration aliasing at routing.py:16: base configuration modified by downstream request handler",
+        traceback_text="FAILED tests/test_routing_cases.py::test_config_isolation - AssertionError: assert 999 == 20",
         traceback_files=["routing.py"],
         repo=t2005_repo,
         hidden=t2005_hidden,
@@ -175,7 +182,7 @@ def build_route_profile(tenant_id: str, base_config: Dict[str, Any], tenant_over
         root_cause_only_with_exploration=False,
         handbook_citations=["Rule H03"],
         assertions=[
-            ("test_deep_immutability_nested", "routing.py docstring: 'Inputs must remain strictly immutable'", "Yes", "STATED")
+            ("test_config_isolation", "routing.py docstring: 'Inputs must remain strictly immutable'", "Yes", "STATED")
         ]
     )
 
@@ -214,7 +221,9 @@ def configure_pool(base_template: Dict[str, Any], overrides: Dict[str, Any]) -> 
     """
     settings = merge_env_settings(base_template, overrides)
     dsn = settings.get("dsn", "sqlite:///:memory:")
-    return ConnectionOptions(dsn=dsn, pool_params=settings.get("pool", {}))
+    opts = ConnectionOptions(dsn=dsn, pool_params=settings.get("pool", {}))
+    _ = opts.summary()
+    return opts
 ''',
         "env_loader.py": '''"""Environment settings loader and merger."""
 from typing import Dict, Any
@@ -238,11 +247,11 @@ def test_basic_pool_config():
     }
 
     t2006_hidden = {
-        "tests/test_pool_hidden.py": '''import pytest
+        "tests/test_pool_cases.py": '''import pytest
 from pool import configure_pool
 from env_loader import merge_env_settings
 
-def test_pool_template_immutability():
+def test_pool_defaults_isolation():
     base = {"dsn": "pg://master", "pool": {"min": 2, "max": 10, "timeout": 30}}
     over = {"pool": {"max": 50}}
     opts = configure_pool(base, over)
@@ -253,7 +262,7 @@ def test_pool_template_immutability():
     opts.pool_params["min"] = 99
     assert base["pool"]["min"] == 2
 
-def test_env_loader_direct():
+def test_env_loader_contract():
     b = {"sub": {"k": 1}}
     o = {"sub": {"k2": 2}}
     m = merge_env_settings(b, o)
@@ -322,7 +331,7 @@ def merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[st
         name="Database Pool Settings",
         class_tag="TAUGHT",
         issue="Security ticket SEC-402: Shared database connection pool defaults corrupted across worker threads following tenant override.",
-        traceback_text="FAILED tests/test_pool_hidden.py::test_pool_template_immutability - AssertionError: Shared pool settings corrupted at pool.py:12: global template parameters mutated during pool configuration",
+        traceback_text="FAILED tests/test_pool_cases.py::test_pool_defaults_isolation - AssertionError: assert 99 == 2",
         traceback_files=["pool.py"],
         repo=t2006_repo,
         hidden=t2006_hidden,
@@ -334,8 +343,8 @@ def merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[st
         root_cause_only_with_exploration=True,
         handbook_citations=["Rule H03"],
         assertions=[
-            ("test_pool_template_immutability", "HANDBOOK.md Rule H03: Input immutability & defensive copying", "No", "TAUGHT"),
-            ("test_env_loader_direct", "HANDBOOK.md Rule H03: Input immutability & defensive copying", "No", "TAUGHT")
+            ("test_pool_defaults_isolation", "HANDBOOK.md Rule H03: Input immutability & defensive copying", "No", "TAUGHT"),
+            ("test_env_loader_contract", "HANDBOOK.md Rule H03: Input immutability & defensive copying", "No", "TAUGHT")
         ]
     )
 
@@ -382,7 +391,9 @@ def build_stage_spec(stage_name: str, step_overrides: Dict[str, Any]) -> Dict[st
     """Compile pipeline stage specification.
     Inputs must remain immutable and nested options must be defensively copied.
     """
-    return compile_step_config(stage_name, DEFAULT_PIPELINE_OPTS, step_overrides)
+    spec = compile_step_config(stage_name, DEFAULT_PIPELINE_OPTS, step_overrides)
+    _ = format_step_manifest(spec)
+    return spec
 
 def build_multi_stage_pipeline(stage_configs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return [build_stage_spec(f"stage-{i}", cfg) for i, cfg in enumerate(stage_configs)]
@@ -397,12 +408,12 @@ def test_stage_naming():
     }
 
     t2007_hidden = {
-        "tests/test_pipeline_hidden.py": '''import pytest
+        "tests/test_pipeline_cases.py": '''import pytest
 from pipeline import build_stage_spec
 from step_builder import compile_step_config
 from defaults import DEFAULT_PIPELINE_OPTS
 
-def test_pipeline_nested_immutability():
+def test_pipeline_defaults_isolation():
     spec = build_stage_spec("transform", {"retries": {"max": 10}})
     assert spec["retries"]["max"] == 10
     assert spec["retries"]["backoff"] == 1.5
@@ -410,7 +421,7 @@ def test_pipeline_nested_immutability():
     spec["retries"]["backoff"] = 99.0
     assert DEFAULT_PIPELINE_OPTS["retries"]["backoff"] == 1.5
 
-def test_step_builder_direct():
+def test_step_builder_contract():
     b = {"r": {"m": 1}}
     o = {"r": {"m": 2}}
     s = compile_step_config("test", b, o)
@@ -446,13 +457,14 @@ def format_step_manifest(spec: Dict[str, Any]) -> str:
         "pipeline.py": '''"""Pipeline stage configurator."""
 import copy
 from typing import Dict, Any
-from step_builder import compile_step_config
+from step_builder import compile_step_config, format_step_manifest
 from defaults import DEFAULT_PIPELINE_OPTS
 
 def build_stage_spec(stage_name: str, step_overrides: Dict[str, Any]) -> Dict[str, Any]:
     clean_base = copy.deepcopy(DEFAULT_PIPELINE_OPTS)
     clean_over = copy.deepcopy(step_overrides)
     res = compile_step_config(stage_name, clean_base, clean_over)
+    _ = format_step_manifest(res)
     return copy.deepcopy(res)
 '''
     }
@@ -480,7 +492,7 @@ def format_step_manifest(spec: Dict[str, Any]) -> str:
         name="Pipeline Step Definition",
         class_tag="STATED",
         issue="Workflow engine bug WFL-301: Stage retry policy overrides mutated global default execution parameters across sequential pipeline steps.",
-        traceback_text="FAILED tests/test_pipeline_hidden.py::test_pipeline_nested_immutability - AssertionError: Shared pipeline defaults mutated at pipeline.py:11: default parameters corrupted by previous step execution",
+        traceback_text="FAILED tests/test_pipeline_cases.py::test_pipeline_defaults_isolation - AssertionError: assert 99.0 == 1.5",
         traceback_files=["pipeline.py"],
         repo=t2007_repo,
         hidden=t2007_hidden,
@@ -492,8 +504,8 @@ def format_step_manifest(spec: Dict[str, Any]) -> str:
         root_cause_only_with_exploration=True,
         handbook_citations=["Rule H03"],
         assertions=[
-            ("test_pipeline_nested_immutability", "pipeline.py docstring: 'Inputs must remain immutable and nested options must be defensively copied'", "Yes", "STATED"),
-            ("test_step_builder_direct", "step_builder.py module contract", "Yes", "STATED")
+            ("test_pipeline_defaults_isolation", "pipeline.py docstring: 'Inputs must remain immutable and nested options must be defensively copied'", "Yes", "STATED"),
+            ("test_step_builder_contract", "step_builder.py module contract", "Yes", "STATED")
         ]
     )
 
@@ -522,20 +534,6 @@ class SessionEnvelope:
     def is_valid(self) -> bool:
         return bool(self.session_id and isinstance(self.data, dict))
 ''',
-        "session.py": '''"""Real-time live session accumulator."""
-from typing import Dict, Any
-from state import SessionEnvelope
-
-def update_live_session(accumulator: Dict[str, Any], deltas: Dict[str, Any]) -> Dict[str, Any]:
-    """Update high-throughput live session accumulator.
-    Performance critical: high-frequency live session state MUST mutate accumulator in-place
-    to avoid GC thrashing. Do NOT create deep copies.
-    """
-    return {**accumulator, **deltas}
-
-def wrap_session(session_id: str, accumulator: Dict[str, Any]) -> SessionEnvelope:
-    return SessionEnvelope(session_id=session_id, data=accumulator)
-''',
         "metrics.py": '''"""Session metric calculations."""
 from typing import Dict, Any
 
@@ -545,6 +543,22 @@ def count_active_keys(data: Dict[str, Any]) -> int:
 def calculate_checksum(data: Dict[str, Any]) -> int:
     return sum(len(str(k)) + len(str(v)) for k, v in data.items())
 ''',
+        "session.py": '''"""Real-time live session accumulator."""
+from typing import Dict, Any
+from state import SessionEnvelope
+from metrics import count_active_keys
+
+def update_live_session(accumulator: Dict[str, Any], deltas: Dict[str, Any]) -> Dict[str, Any]:
+    """Update high-throughput live session accumulator.
+    Performance critical: high-frequency live session state MUST mutate accumulator in-place
+    to avoid GC thrashing. Do NOT create deep copies.
+    """
+    return {**accumulator, **deltas}
+
+def wrap_session(session_id: str, accumulator: Dict[str, Any]) -> SessionEnvelope:
+    _ = count_active_keys(accumulator)
+    return SessionEnvelope(session_id=session_id, data=accumulator)
+''',
         "tests/test_session.py": '''from session import update_live_session, wrap_session
 
 def test_session_values():
@@ -553,7 +567,7 @@ def test_session_values():
     assert res["count"] == 1
     assert res["status"] == "active"
 
-def test_in_place_accumulator_performance_contract():
+def test_accumulator_object_identity():
     acc = {"session_hits": 10}
     res = update_live_session(acc, {"session_hits": 11})
     assert res is acc
@@ -562,10 +576,10 @@ def test_in_place_accumulator_performance_contract():
     }
 
     t2008_hidden = {
-        "tests/test_session_hidden.py": '''import pytest
+        "tests/test_session_cases.py": '''import pytest
 from session import update_live_session
 
-def test_in_place_nested_mutation_contract():
+def test_nested_accumulator_identity():
     acc = {"counters": {"page_views": 100, "errors": 0}}
     res = update_live_session(acc, {"counters": {"errors": 1}})
     assert res is acc
@@ -578,6 +592,7 @@ def test_in_place_nested_mutation_contract():
         "session.py": '''"""Real-time live session accumulator."""
 from typing import Dict, Any
 from state import SessionEnvelope
+from metrics import count_active_keys
 
 def update_live_session(accumulator: Dict[str, Any], deltas: Dict[str, Any]) -> Dict[str, Any]:
     """Update high-throughput live session accumulator.
@@ -592,6 +607,7 @@ def update_live_session(accumulator: Dict[str, Any], deltas: Dict[str, Any]) -> 
     return accumulator
 
 def wrap_session(session_id: str, accumulator: Dict[str, Any]) -> SessionEnvelope:
+    _ = count_active_keys(accumulator)
     return SessionEnvelope(session_id=session_id, data=accumulator)
 '''
     }
@@ -601,6 +617,7 @@ def wrap_session(session_id: str, accumulator: Dict[str, Any]) -> SessionEnvelop
 import copy
 from typing import Dict, Any
 from state import SessionEnvelope
+from metrics import count_active_keys
 
 def update_live_session(accumulator: Dict[str, Any], deltas: Dict[str, Any]) -> Dict[str, Any]:
     new_acc = copy.deepcopy(accumulator)
@@ -608,6 +625,7 @@ def update_live_session(accumulator: Dict[str, Any], deltas: Dict[str, Any]) -> 
     return new_acc
 
 def wrap_session(session_id: str, accumulator: Dict[str, Any]) -> SessionEnvelope:
+    _ = count_active_keys(accumulator)
     return SessionEnvelope(session_id=session_id, data=accumulator)
 '''
     }
@@ -616,12 +634,14 @@ def wrap_session(session_id: str, accumulator: Dict[str, Any]) -> SessionEnvelop
         "session.py": '''"""Real-time live session accumulator."""
 from typing import Dict, Any
 from state import SessionEnvelope
+from metrics import count_active_keys
 
 def update_live_session(accumulator: Dict[str, Any], deltas: Dict[str, Any]) -> Dict[str, Any]:
     accumulator.update(deltas)
     return accumulator
 
 def wrap_session(session_id: str, accumulator: Dict[str, Any]) -> SessionEnvelope:
+    _ = count_active_keys(accumulator)
     return SessionEnvelope(session_id=session_id, data=accumulator)
 '''
     }
@@ -632,7 +652,7 @@ def wrap_session(session_id: str, accumulator: Dict[str, Any]) -> SessionEnvelop
         name="Live Session State Accumulator",
         class_tag="DISTRACTOR",
         issue="Performance regression PERF-102: Memory telemetry detected excessive allocations and cache misses during live session state streaming.",
-        traceback_text="FAILED tests/test_session_hidden.py::test_in_place_nested_mutation_contract - AssertionError: In-place mutation failed at session.py:12: accumulator object identity changed during session update",
+        traceback_text="FAILED tests/test_session_cases.py::test_nested_accumulator_identity - AssertionError: assert False is True",
         traceback_files=["session.py"],
         repo=t2008_repo,
         hidden=t2008_hidden,
@@ -644,7 +664,7 @@ def wrap_session(session_id: str, accumulator: Dict[str, Any]) -> SessionEnvelop
         root_cause_only_with_exploration=False,
         handbook_citations=["Rule H03"],
         assertions=[
-            ("test_in_place_nested_mutation_contract", "session.py docstring: 'MUST mutate accumulator in-place ... Do NOT create deep copies'", "Yes", "DISTRACTOR")
+            ("test_nested_accumulator_identity", "session.py docstring: 'MUST mutate accumulator in-place ... Do NOT create deep copies'", "Yes", "DISTRACTOR")
         ]
     )
 

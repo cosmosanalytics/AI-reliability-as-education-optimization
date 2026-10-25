@@ -2,7 +2,7 @@
 
 Governing Rule: Rule H06 (Trailing slash and prefix normalization: /a matches /a and /a/b but NOT /ab).
 Competing Alternatives: Naive startswith() which falsely matches /ab, exact string equality ==.
-Target: 40-120 non-test lines across 3-4 files.
+Target: 40-120 non-test lines across 3-4 files. All files on reachability path (zero decoys).
 """
 
 def register_family_5(add_task):
@@ -30,8 +30,18 @@ class RoutePolicy:
     def summary(self) -> str:
         return f"Policy(role={self.role}, prefix={self.allowed_prefix})"
 ''',
+        "url_normalizer.py": '''"""URL string sanitizers."""
+def strip_protocol(url: str) -> str:
+    if "://" in url:
+        return url.split("://", 1)[1]
+    return url
+
+def remove_query_string(url: str) -> str:
+    return url.split("?", 1)[0]
+''',
         "guard.py": '''"""API gateway authorization guard."""
 from policy import RoutePolicy
+from url_normalizer import remove_query_string
 
 def is_route_permitted(policy: RoutePolicy, request_path: str) -> bool:
     """Check if request_path is authorized under policy.allowed_prefix.
@@ -39,7 +49,8 @@ def is_route_permitted(policy: RoutePolicy, request_path: str) -> bool:
     - Normalizes trailing slashes before matching.
     - Matches only full path segments (e.g. '/api' covers '/api' and '/api/v1', but NOT '/api-v2').
     """
-    return request_path.startswith(policy.allowed_prefix)
+    clean_path = remove_query_string(request_path)
+    return clean_path.startswith(policy.allowed_prefix)
 
 def evaluate_request(policies: list, role: str, path: str) -> bool:
     for p in policies:
@@ -50,15 +61,6 @@ def evaluate_request(policies: list, role: str, path: str) -> bool:
 def count_permitted_routes(policy: RoutePolicy, paths: list) -> int:
     return sum(1 for p in paths if is_route_permitted(policy, p))
 ''',
-        "url_normalizer.py": '''"""URL string sanitizers."""
-def strip_protocol(url: str) -> str:
-    if "://" in url:
-        return url.split("://", 1)[1]
-    return url
-
-def remove_query_string(url: str) -> str:
-    return url.split("?", 1)[0]
-''',
         "tests/test_guard.py": '''from policy import RoutePolicy
 from guard import is_route_permitted
 
@@ -67,14 +69,14 @@ def test_nominal_match():
     assert is_route_permitted(p, "/api/v1/users") is True
     assert is_route_permitted(p, "/other") is False
 
-def test_boundary_visible_sensitive():
+def test_sibling_path_boundary():
     p = RoutePolicy("analyst", "/reports")
     assert is_route_permitted(p, "/reports-secret") is False
 '''
     }
 
     t2017_hidden = {
-        "tests/test_guard_hidden.py": '''from policy import RoutePolicy
+        "tests/test_guard_cases.py": '''from policy import RoutePolicy
 from guard import is_route_permitted
 
 def test_trailing_slash_normalization():
@@ -90,6 +92,7 @@ def test_trailing_slash_normalization():
     t2017_ref = {
         "guard.py": '''"""API gateway authorization guard."""
 from policy import RoutePolicy
+from url_normalizer import remove_query_string
 
 def is_route_permitted(policy: RoutePolicy, request_path: str) -> bool:
     """Check if request_path is authorized under policy.allowed_prefix.
@@ -97,8 +100,9 @@ def is_route_permitted(policy: RoutePolicy, request_path: str) -> bool:
     - Normalizes trailing slashes before matching.
     - Matches only full path segments (e.g. '/api' covers '/api' and '/api/v1', but NOT '/api-v2').
     """
+    clean_path = remove_query_string(request_path)
     prefix = policy.allowed_prefix.rstrip("/")
-    path = request_path.rstrip("/")
+    path = clean_path.rstrip("/")
     if path == prefix:
         return True
     return path.startswith(prefix + "/")
@@ -114,9 +118,11 @@ def evaluate_request(policies: list, role: str, path: str) -> bool:
     t2017_m1 = {
         "guard.py": '''"""API gateway authorization guard."""
 from policy import RoutePolicy
+from url_normalizer import remove_query_string
 
 def is_route_permitted(policy: RoutePolicy, request_path: str) -> bool:
-    return request_path.startswith(policy.allowed_prefix)
+    clean_path = remove_query_string(request_path)
+    return clean_path.startswith(policy.allowed_prefix)
 
 def evaluate_request(policies: list, role: str, path: str) -> bool:
     for p in policies:
@@ -129,9 +135,11 @@ def evaluate_request(policies: list, role: str, path: str) -> bool:
     t2017_m2 = {
         "guard.py": '''"""API gateway authorization guard."""
 from policy import RoutePolicy
+from url_normalizer import remove_query_string
 
 def is_route_permitted(policy: RoutePolicy, request_path: str) -> bool:
-    return policy.allowed_prefix.rstrip("/") == request_path.rstrip("/")
+    clean_path = remove_query_string(request_path)
+    return policy.allowed_prefix.rstrip("/") == clean_path.rstrip("/")
 
 def evaluate_request(policies: list, role: str, path: str) -> bool:
     for p in policies:
@@ -147,7 +155,7 @@ def evaluate_request(policies: list, role: str, path: str) -> bool:
         name="API Route Authorization Guard",
         class_tag="STATED",
         issue="Security vulnerability SEC-810: Gateway allowed unauthorized access to /reports-confidential under standard /reports policy.",
-        traceback_text="FAILED tests/test_guard.py::test_boundary_visible_sensitive - AssertionError: Authorization leak at guard.py:12: unpermitted sibling path allowed by naive prefix match",
+        traceback_text="FAILED tests/test_guard.py::test_sibling_path_boundary - AssertionError: assert True is False",
         traceback_files=["guard.py"],
         repo=t2017_repo,
         hidden=t2017_hidden,
@@ -189,19 +197,6 @@ def is_root_path(path_str: str) -> bool:
 def count_segments(path_str: str) -> int:
     return len(split_path_segments(path_str))
 ''',
-        "rbac.py": '''"""Document access RBAC filter."""
-from path_resolver import clean_path, split_path_segments
-
-def check_document_access(allowed_folder: str, requested_doc_path: str) -> bool:
-    """Verify if document path is permitted within the designated folder scope."""
-    return clean_path(requested_doc_path).startswith(clean_path(allowed_folder))
-
-def filter_accessible_docs(allowed_folder: str, doc_paths: list) -> list:
-    return [p for p in doc_paths if check_document_access(allowed_folder, p)]
-
-def can_access_all_docs(allowed_folder: str, doc_paths: list) -> bool:
-    return all(check_document_access(allowed_folder, p) for p in doc_paths)
-''',
         "audit_logger.py": '''"""Access attempt logger."""
 def format_access_attempt(folder: str, path: str, allowed: bool) -> str:
     status = "ALLOWED" if allowed else "DENIED"
@@ -213,21 +208,37 @@ def is_security_audit_enabled() -> bool:
 def get_audit_channel() -> str:
     return "security-audit-stream"
 ''',
+        "rbac.py": '''"""Document access RBAC filter."""
+from path_resolver import clean_path, split_path_segments
+from audit_logger import format_access_attempt
+
+def check_document_access(allowed_folder: str, requested_doc_path: str) -> bool:
+    """Verify if document path is permitted within the designated folder scope."""
+    allowed = clean_path(requested_doc_path).startswith(clean_path(allowed_folder))
+    _ = format_access_attempt(allowed_folder, requested_doc_path, allowed)
+    return allowed
+
+def filter_accessible_docs(allowed_folder: str, doc_paths: list) -> list:
+    return [p for p in doc_paths if check_document_access(allowed_folder, p)]
+
+def can_access_all_docs(allowed_folder: str, doc_paths: list) -> bool:
+    return all(check_document_access(allowed_folder, p) for p in doc_paths)
+''',
         "tests/test_rbac.py": '''from rbac import check_document_access
 
 def test_nominal_folder_access():
     assert check_document_access("/public", "/public/index.html") is True
     assert check_document_access("/public", "/private/index.html") is False
 
-def test_boundary_visible_sensitive():
+def test_directory_prefix_boundary():
     assert check_document_access("/public", "/public-internal/secret.pdf") is False
 '''
     }
 
     t2018_hidden = {
-        "tests/test_rbac_hidden.py": '''from rbac import check_document_access
+        "tests/test_rbac_cases.py": '''from rbac import check_document_access
 
-def test_taught_segment_and_slash():
+def test_path_normalization():
     assert check_document_access("/docs/", "/docs") is True
     assert check_document_access("/docs", "/docs/") is True
     assert check_document_access("/docs", "/docs/report.pdf") is True
@@ -238,14 +249,19 @@ def test_taught_segment_and_slash():
     t2018_ref = {
         "rbac.py": '''"""Document access RBAC filter."""
 from path_resolver import clean_path
+from audit_logger import format_access_attempt
 
 def check_document_access(allowed_folder: str, requested_doc_path: str) -> bool:
     """Verify if document path is permitted within the designated folder scope."""
     folder = clean_path(allowed_folder)
     target = clean_path(requested_doc_path)
+    allowed = False
     if target == folder:
-        return True
-    return target.startswith(folder + "/")
+        allowed = True
+    elif target.startswith(folder + "/"):
+        allowed = True
+    _ = format_access_attempt(allowed_folder, requested_doc_path, allowed)
+    return allowed
 
 def filter_accessible_docs(allowed_folder: str, doc_paths: list) -> list:
     return [p for p in doc_paths if check_document_access(allowed_folder, p)]
@@ -255,9 +271,12 @@ def filter_accessible_docs(allowed_folder: str, doc_paths: list) -> list:
     t2018_m1 = {
         "rbac.py": '''"""Document access RBAC filter."""
 from path_resolver import clean_path
+from audit_logger import format_access_attempt
 
 def check_document_access(allowed_folder: str, requested_doc_path: str) -> bool:
-    return clean_path(requested_doc_path).startswith(clean_path(allowed_folder))
+    allowed = clean_path(requested_doc_path).startswith(clean_path(allowed_folder))
+    _ = format_access_attempt(allowed_folder, requested_doc_path, allowed)
+    return allowed
 
 def filter_accessible_docs(allowed_folder: str, doc_paths: list) -> list:
     return [p for p in doc_paths if check_document_access(allowed_folder, p)]
@@ -267,9 +286,12 @@ def filter_accessible_docs(allowed_folder: str, doc_paths: list) -> list:
     t2018_m2 = {
         "rbac.py": '''"""Document access RBAC filter."""
 from path_resolver import clean_path
+from audit_logger import format_access_attempt
 
 def check_document_access(allowed_folder: str, requested_doc_path: str) -> bool:
-    return clean_path(allowed_folder) == clean_path(requested_doc_path)
+    allowed = (clean_path(allowed_folder) == clean_path(requested_doc_path))
+    _ = format_access_attempt(allowed_folder, requested_doc_path, allowed)
+    return allowed
 
 def filter_accessible_docs(allowed_folder: str, doc_paths: list) -> list:
     return [p for p in doc_paths if check_document_access(allowed_folder, p)]
@@ -282,7 +304,7 @@ def filter_accessible_docs(allowed_folder: str, doc_paths: list) -> list:
         name="Document Store RBAC Filter",
         class_tag="TAUGHT",
         issue="Audit finding SEC-903: File storage permissions granted access to unauthorized sibling directory /docsextra under /docs permission.",
-        traceback_text="FAILED tests/test_rbac.py::test_boundary_visible_sensitive - AssertionError: Access leak at rbac.py:8: sibling path permitted by unsegmented prefix match",
+        traceback_text="FAILED tests/test_rbac.py::test_directory_prefix_boundary - AssertionError: assert True is False",
         traceback_files=["rbac.py"],
         repo=t2018_repo,
         hidden=t2018_hidden,
@@ -294,7 +316,7 @@ def filter_accessible_docs(allowed_folder: str, doc_paths: list) -> list:
         root_cause_only_with_exploration=False,
         handbook_citations=["Rule H06"],
         assertions=[
-            ("test_taught_segment_and_slash", "HANDBOOK.md Rule H06: Trailing slash and path prefix normalization", "No", "TAUGHT")
+            ("test_path_normalization", "HANDBOOK.md Rule H06: Trailing slash and path prefix normalization", "No", "TAUGHT")
         ]
     )
 
@@ -329,6 +351,16 @@ class StorageAsset:
             "ext": self.extension(),
         }
 ''',
+        "path_normalizer.py": '''"""Storage path normalization engine."""
+def validate_prefix_match(scope_prefix: str, asset_path: str) -> bool:
+    return asset_path.startswith(scope_prefix)
+
+def get_scope_depth(path: str) -> int:
+    return len([seg for seg in path.split("/") if seg])
+
+def normalize_bucket_path(path: str) -> str:
+    return "/" + path.strip("/")
+''',
         "asset_service.py": '''"""Asset bucket retrieval service."""
 from path_normalizer import validate_prefix_match, get_scope_depth
 from models import StorageAsset
@@ -345,16 +377,6 @@ def filter_accessible_assets(assets: list, required_scope: str) -> list:
 def get_asset_hierarchy_level(asset: StorageAsset) -> int:
     return get_scope_depth(asset.path)
 ''',
-        "path_normalizer.py": '''"""Storage path normalization engine."""
-def validate_prefix_match(scope_prefix: str, asset_path: str) -> bool:
-    return asset_path.startswith(scope_prefix)
-
-def get_scope_depth(path: str) -> int:
-    return len([seg for seg in path.split("/") if seg])
-
-def normalize_bucket_path(path: str) -> str:
-    return "/" + path.strip("/")
-''',
         "tests/test_asset.py": '''from models import StorageAsset
 from asset_service import can_access_asset
 
@@ -366,18 +388,18 @@ def test_nominal_asset():
     }
 
     t2019_hidden = {
-        "tests/test_asset_hidden.py": '''from models import StorageAsset
+        "tests/test_asset_cases.py": '''from models import StorageAsset
 from asset_service import can_access_asset
 from path_normalizer import validate_prefix_match
 
-def test_segment_boundary_stated():
+def test_resource_isolation():
     a1 = StorageAsset("A2", "/assets-private/secret.key")
     assert can_access_asset(a1, "/assets") is False
     
     a2 = StorageAsset("A3", "/assets")
     assert can_access_asset(a2, "/assets/") is True
 
-def test_path_normalizer_direct():
+def test_path_normalizer_contract():
     assert validate_prefix_match("/assets", "/assets-private") is False
     assert validate_prefix_match("/assets/", "/assets") is True
 '''
@@ -430,7 +452,7 @@ def get_scope_depth(path: str) -> int:
         name="Asset Storage Prefix Validator",
         class_tag="STATED",
         issue="Cloud storage incident CLD-512: Private asset directory /assets-private was exposed to users granted standard /assets access.",
-        traceback_text="FAILED tests/test_asset_hidden.py::test_segment_boundary_stated - AssertionError: Access boundary violation at asset_service.py:10: unsegmented prefix match allowed private sibling bucket",
+        traceback_text="FAILED tests/test_asset_cases.py::test_resource_isolation - AssertionError: assert True is False",
         traceback_files=["asset_service.py"],
         repo=t2019_repo,
         hidden=t2019_hidden,
@@ -442,8 +464,8 @@ def get_scope_depth(path: str) -> int:
         root_cause_only_with_exploration=True,
         handbook_citations=["Rule H06"],
         assertions=[
-            ("test_segment_boundary_stated", "asset_service.py docstring: 'matches full directory segment boundaries and normalizes trailing slashes'", "Yes", "STATED"),
-            ("test_path_normalizer_direct", "path_normalizer.py module contract", "Yes", "STATED")
+            ("test_resource_isolation", "asset_service.py docstring: 'matches full directory segment boundaries and normalizes trailing slashes'", "Yes", "STATED"),
+            ("test_path_normalizer_contract", "path_normalizer.py module contract", "Yes", "STATED")
         ]
     )
 
@@ -476,6 +498,16 @@ class WebhookEvent:
             "retries": self.retry_count,
         }
 ''',
+        "prefix_validator.py": '''"""Topic path subscription matcher."""
+def is_topic_subscribed(subscribed_pattern: str, event_topic: str) -> bool:
+    return event_topic.startswith(subscribed_pattern)
+
+def clean_topic_segment(topic: str) -> str:
+    return topic.strip().lower()
+
+def is_wildcard_subscription(pattern: str) -> bool:
+    return pattern.strip() in ("*", "#", "/")
+''',
         "scope_checker.py": '''"""Webhook scope dispatch checker."""
 from prefix_validator import is_topic_subscribed, clean_topic_segment
 from webhook import WebhookEvent
@@ -493,16 +525,6 @@ def batch_topic_summary(events: list) -> dict:
         summary[e.topic_path] = summary.get(e.topic_path, 0) + 1
     return summary
 ''',
-        "prefix_validator.py": '''"""Topic path subscription matcher."""
-def is_topic_subscribed(subscribed_pattern: str, event_topic: str) -> bool:
-    return event_topic.startswith(subscribed_pattern)
-
-def clean_topic_segment(topic: str) -> str:
-    return topic.strip().lower()
-
-def is_wildcard_subscription(pattern: str) -> bool:
-    return pattern.strip() in ("*", "#", "/")
-''',
         "tests/test_scope.py": '''from webhook import WebhookEvent
 from scope_checker import should_dispatch_webhook
 
@@ -514,18 +536,18 @@ def test_nominal_topic():
     }
 
     t2020_hidden = {
-        "tests/test_scope_hidden.py": '''from webhook import WebhookEvent
+        "tests/test_scope_cases.py": '''from webhook import WebhookEvent
 from scope_checker import should_dispatch_webhook
 from prefix_validator import is_topic_subscribed
 
-def test_scope_taught_boundaries():
+def test_channel_routing():
     evt_sibling = WebhookEvent("orders_admin/reindex", "{}")
     assert should_dispatch_webhook("orders", evt_sibling) is False
     
     evt_exact = WebhookEvent("orders", "{}")
     assert should_dispatch_webhook("orders/", evt_exact) is True
 
-def test_prefix_validator_direct():
+def test_prefix_validator_contract():
     assert is_topic_subscribed("orders", "orders_admin") is False
     assert is_topic_subscribed("orders/", "orders") is True
 '''
@@ -578,7 +600,7 @@ def clean_topic_segment(topic: str) -> str:
         name="Webhook Subscription Scope Enforcer",
         class_tag="TAUGHT",
         issue="Event bus leak EVT-918: Consumer subscribed to 'orders' topic received internal administrative events from 'orders_admin'.",
-        traceback_text="FAILED tests/test_scope_hidden.py::test_scope_taught_boundaries - AssertionError: Topic leak at scope_checker.py:9: unsegmented prefix match dispatched unauthorized administrative topic",
+        traceback_text="FAILED tests/test_scope_cases.py::test_channel_routing - AssertionError: assert True is False",
         traceback_files=["scope_checker.py"],
         repo=t2020_repo,
         hidden=t2020_hidden,
@@ -590,8 +612,8 @@ def clean_topic_segment(topic: str) -> str:
         root_cause_only_with_exploration=True,
         handbook_citations=["Rule H06"],
         assertions=[
-            ("test_scope_taught_boundaries", "HANDBOOK.md Rule H06: Trailing slash and path prefix normalization", "No", "TAUGHT"),
-            ("test_prefix_validator_direct", "HANDBOOK.md Rule H06: Trailing slash and path prefix normalization", "No", "TAUGHT")
+            ("test_channel_routing", "HANDBOOK.md Rule H06: Trailing slash and path prefix normalization", "No", "TAUGHT"),
+            ("test_prefix_validator_contract", "HANDBOOK.md Rule H06: Trailing slash and path prefix normalization", "No", "TAUGHT")
         ]
     )
 

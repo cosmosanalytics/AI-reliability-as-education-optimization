@@ -134,3 +134,24 @@ This is an append-only, timestamped log recording all operational decisions, har
   6. **S-6 (Root Cause & Factor u Exploration):** All 12 Hidden Root Cause tasks (42.9%) are tagged `root_cause_only_with_exploration = True`. Documented that symptom patches in traceback files cannot pass helper assertions, requiring Factor $u$ ("repository exploration + test running").
   7. **Modular Generator Architecture:** Decomposed generation into dedicated modules in `runner/`: `family1_money.py` through `family7_cache.py`, orchestrated deterministically by `build_complete_suite_e5.py`.
 - **Preflight Verification:** All 143 unit tests in `tests/test_suite_e5_preflight.py` passing (28 unpatched fail, 28 gold pass, 28 mutant1 fail, 28 mutant2 fail, 28 no hints, token balance pass, tag distribution pass, split invariants pass). Zero model calls made.
+
+### [2026-10-25T00:03:00Z] Benchmark Validation Round 2: Resolution of B1 through B4 Blocking Issues
+- **Context:** Claude Round 10 review of commit `b79a4ad` accepted S-1..S-6 progress but raised four blocking construct-validity issues (B1: design words in visible tests and tracebacks; B2: assertion messages giving away rules; B3: tune/held-out split inverted with 0 distractors/transfers in tune; B4: unimported decoy files).
+- **Action & Resolution:**
+  1. **B1 (Design Word Leakage Elimination):**
+     - Replaced all test function names and filenames carrying design vocabulary (`taught`, `stated`, `distractor`, `transfer`, `visible_sensitive`, `_visible`, `_hidden`) with neutral domain identifiers (e.g. `test_case_1`, `test_quote_escaping`, `test_sibling_path_boundary`, `test_*_cases.py`).
+     - Added CI preflight test `test_no_design_words_in_tests_or_traces` scanning test IDs, function names, assertion messages, filenames, and tracebacks across all 28 tasks.
+  2. **B2 (Symptom-Only Traceback Assertions):**
+     - Purged explanatory error strings (e.g. "embedded quote not escaped via RFC 4180 standard", "sibling path permitted by unsegmented prefix match", banker's rounding mentions) from assertion statements.
+     - All failure tracebacks strictly display raw value mismatches (`AssertionError: assert actual == expected`).
+     - Rewrote Task 2002 ticket to purge rounding triggers.
+  3. **B3 (Tune / Held-Out Partition Rebalance):**
+     - Rebalanced the partition from 12 Tune / 16 Held-out to **18 Tune (64.3%) / 10 Held-out (35.7%)** committed in `benchmarks/splits_e5.json`.
+     - Tune partition includes 2 `DISTRACTOR` tasks (2004, 2008), 8 `TAUGHT`, and 8 `STATED`.
+     - 100% of `TRANSFER` tasks (Family 7: Tasks 2025–2028) are held out for domain generalization confirmatory evaluation.
+     - Preflight test `test_splits_e5_stratification` validates partition properties and stratification.
+  4. **B4 (Reachability & Elimination of Decoys):**
+     - Ensured all helper files in each repository are directly imported and invoked on the execution path by repo modules (input validation, models, logging, formatters). Decoys = 0 across all 28 tasks.
+     - For all 12 Hidden Root Cause tasks, verified the root-cause module is directly imported by the entrypoint file.
+     - Added automated preflight tests `test_root_cause_reachability` and `test_zero_unimported_decoy_files`.
+- **Preflight Verification:** 146 / 146 tests passing in `tests/test_suite_e5_preflight.py`. Zero model inference calls made. Phase remains locked pending Round 11 review approval.

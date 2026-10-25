@@ -2,7 +2,7 @@
 
 Governing Rule: Rule H10 (RFC 4180 CSV Serialization: double quotes escaped with \"\", fields with delimiters quoted).
 Competing Alternatives: Backslash escaping \\", unquoted raw split.
-Target: 40-120 non-test lines across 3-4 files.
+Target: 40-120 non-test lines across 3-4 files. All files on reachability path (zero decoys).
 """
 
 def register_family_4(add_task):
@@ -32,9 +32,20 @@ class CustomerProfile:
     def has_embedded_delimiters(self) -> bool:
         return any(c in self.notes for c in (",", "\\n", '"'))
 ''',
+        "io_helpers.py": '''"""CSV stream and buffer helpers."""
+from typing import List
+
+def join_csv_lines(header: str, rows: List[str]) -> str:
+    return "\\n".join([header] + rows)
+
+def validate_csv_header(header: str, expected_cols: List[str]) -> bool:
+    cols = [c.strip() for c in header.split(",")]
+    return cols == expected_cols
+''',
         "csv_writer.py": '''"""CSV serialization utilities."""
 from typing import List
 from schema import CustomerProfile
+from io_helpers import validate_csv_header
 
 def escape_csv_field(val: str) -> str:
     """Escape CSV field per RFC 4180:
@@ -46,7 +57,10 @@ def escape_csv_field(val: str) -> str:
     return val
 
 def export_profiles_csv(profiles: List[CustomerProfile]) -> str:
-    lines = ["cust_id,name,notes"]
+    header = "cust_id,name,notes"
+    if not validate_csv_header(header, ["cust_id", "name", "notes"]):
+        raise ValueError("Invalid header")
+    lines = [header]
     for p in profiles:
         f_name = escape_csv_field(p.name)
         f_notes = escape_csv_field(p.notes)
@@ -57,16 +71,6 @@ def count_records(csv_payload: str) -> int:
     lines = [l for l in csv_payload.splitlines() if l.strip()]
     return max(0, len(lines) - 1)
 ''',
-        "io_helpers.py": '''"""CSV stream and buffer helpers."""
-from typing import List
-
-def join_csv_lines(header: str, rows: List[str]) -> str:
-    return "\\n".join([header] + rows)
-
-def validate_csv_header(header: str, expected_cols: List[str]) -> bool:
-    cols = [c.strip() for c in header.split(",")]
-    return cols == expected_cols
-''',
         "tests/test_profile.py": '''from schema import CustomerProfile
 from csv_writer import export_profiles_csv, escape_csv_field
 
@@ -74,16 +78,16 @@ def test_simple_csv():
     p = [CustomerProfile(1, "Alice", "Normal")]
     assert export_profiles_csv(p) == "cust_id,name,notes\\n1,Alice,Normal"
 
-def test_comma_escaping_visible():
+def test_comma_escaping():
     assert escape_csv_field("Hello, World") == '"Hello, World"'
 '''
     }
 
     t2013_hidden = {
-        "tests/test_profile_hidden.py": '''from csv_writer import escape_csv_field, export_profiles_csv
+        "tests/test_profile_cases.py": '''from csv_writer import escape_csv_field, export_profiles_csv
 from schema import CustomerProfile
 
-def test_rfc4180_quote_doubling():
+def test_quote_escaping():
     assert escape_csv_field('Alice "Ace" Smith') == '"Alice ""Ace"" Smith"'
     assert escape_csv_field('"Quotes"') == '"""Quotes"""'
 
@@ -98,6 +102,7 @@ def test_multiline_csv():
         "csv_writer.py": '''"""CSV serialization utilities."""
 from typing import List
 from schema import CustomerProfile
+from io_helpers import validate_csv_header
 
 def escape_csv_field(val: str) -> str:
     """Escape CSV field per RFC 4180:
@@ -109,12 +114,19 @@ def escape_csv_field(val: str) -> str:
     return val
 
 def export_profiles_csv(profiles: List[CustomerProfile]) -> str:
-    lines = ["cust_id,name,notes"]
+    header = "cust_id,name,notes"
+    if not validate_csv_header(header, ["cust_id", "name", "notes"]):
+        raise ValueError("Invalid header")
+    lines = [header]
     for p in profiles:
         f_name = escape_csv_field(p.name)
         f_notes = escape_csv_field(p.notes)
         lines.append(f"{p.cust_id},{f_name},{f_notes}")
     return "\\n".join(lines)
+
+def count_records(csv_payload: str) -> int:
+    lines = [l for l in csv_payload.splitlines() if l.strip()]
+    return max(0, len(lines) - 1)
 '''
     }
 
@@ -122,14 +134,18 @@ def export_profiles_csv(profiles: List[CustomerProfile]) -> str:
         "csv_writer.py": '''"""CSV serialization utilities."""
 from typing import List
 from schema import CustomerProfile
+from io_helpers import validate_csv_header
 
 def escape_csv_field(val: str) -> str:
+    # Mutant 1: Double backslash
     if any(c in val for c in [",", "\\n", '"']):
-        return f'"{val.replace(chr(34), chr(92) + chr(34))}"'
+        escaped = val.replace('"', '\\\\\\"')
+        return f'"{escaped}"'
     return val
 
 def export_profiles_csv(profiles: List[CustomerProfile]) -> str:
-    lines = ["cust_id,name,notes"]
+    header = "cust_id,name,notes"
+    lines = [header]
     for p in profiles:
         lines.append(f"{p.cust_id},{escape_csv_field(p.name)},{escape_csv_field(p.notes)}")
     return "\\n".join(lines)
@@ -140,12 +156,17 @@ def export_profiles_csv(profiles: List[CustomerProfile]) -> str:
         "csv_writer.py": '''"""CSV serialization utilities."""
 from typing import List
 from schema import CustomerProfile
+from io_helpers import validate_csv_header
 
 def escape_csv_field(val: str) -> str:
-    return f'"{val}"'
+    # Mutant 2: Simple wrap without escaping
+    if any(c in val for c in [",", "\\n", '"']):
+        return f'"{val}"'
+    return val
 
 def export_profiles_csv(profiles: List[CustomerProfile]) -> str:
-    lines = ["cust_id,name,notes"]
+    header = "cust_id,name,notes"
+    lines = [header]
     for p in profiles:
         lines.append(f"{p.cust_id},{escape_csv_field(p.name)},{escape_csv_field(p.notes)}")
     return "\\n".join(lines)
@@ -158,7 +179,7 @@ def export_profiles_csv(profiles: List[CustomerProfile]) -> str:
         name="Customer Profile CSV Exporter",
         class_tag="STATED",
         issue="Customer support ticket SUP-303: Data export file failed to import into standard spreadsheet software when customer company name contained quotes.",
-        traceback_text="FAILED tests/test_profile_hidden.py::test_rfc4180_quote_doubling - AssertionError: RFC 4180 parsing failure at csv_writer.py:12: embedded quote was backslash escaped instead of doubled",
+        traceback_text="FAILED tests/test_profile_cases.py::test_quote_escaping - AssertionError: assert '\"Alice \\\\\"Ace\\\\\" Smith\"' == '\"Alice \"\"Ace\"\" Smith\"'",
         traceback_files=["csv_writer.py"],
         repo=t2013_repo,
         hidden=t2013_hidden,
@@ -170,7 +191,7 @@ def export_profiles_csv(profiles: List[CustomerProfile]) -> str:
         root_cause_only_with_exploration=False,
         handbook_citations=["Rule H10"],
         assertions=[
-            ("test_rfc4180_quote_doubling", "csv_writer.py docstring: 'wrap in double quotes and escape internal quotes by doubling (\"\")'", "Yes", "STATED"),
+            ("test_quote_escaping", "csv_writer.py docstring: 'wrap in double quotes and escape internal quotes by doubling (\"\")'", "Yes", "STATED"),
             ("test_multiline_csv", "csv_writer.py docstring: 'If field contains comma, newline, or double quote'", "Yes", "STATED")
         ]
     )
@@ -199,20 +220,6 @@ class OrderItem:
     def formatted_label(self) -> str:
         return f"[{self.category.upper()}] {self.description}"
 ''',
-        "serializer.py": '''"""Order item CSV row serializer."""
-from typing import List
-from item import OrderItem
-
-def serialize_item_row(item: OrderItem) -> str:
-    """Serialize OrderItem into a CSV formatted line."""
-    return f"{item.item_id},{item.description}"
-
-def serialize_catalog(items: List[OrderItem]) -> str:
-    return "\\n".join(serialize_item_row(i) for i in items)
-
-def count_serialized_items(catalog_str: str) -> int:
-    return len([line for line in catalog_str.splitlines() if line.strip()])
-''',
         "catalog_validator.py": '''"""Catalog export validator."""
 from typing import List
 from item import OrderItem
@@ -222,6 +229,23 @@ def validate_catalog(items: List[OrderItem]) -> bool:
 
 def filter_by_category(items: List[OrderItem], category: str) -> List[OrderItem]:
     return [i for i in items if i.category == category]
+''',
+        "serializer.py": '''"""Order item CSV row serializer."""
+from typing import List
+from item import OrderItem
+from catalog_validator import validate_catalog
+
+def serialize_item_row(item: OrderItem) -> str:
+    """Serialize OrderItem into a CSV formatted line."""
+    return f"{item.item_id},{item.description}"
+
+def serialize_catalog(items: List[OrderItem]) -> str:
+    if not validate_catalog(items):
+        raise ValueError("Invalid catalog items")
+    return "\\n".join(serialize_item_row(i) for i in items)
+
+def count_serialized_items(catalog_str: str) -> int:
+    return len([line for line in catalog_str.splitlines() if line.strip()])
 ''',
         "tests/test_item.py": '''from item import OrderItem
 from serializer import serialize_item_row
@@ -233,10 +257,10 @@ def test_simple_item():
     }
 
     t2014_hidden = {
-        "tests/test_item_hidden.py": '''from item import OrderItem
+        "tests/test_item_cases.py": '''from item import OrderItem
 from serializer import serialize_item_row
 
-def test_rfc4180_embedded_quotes_taught():
+def test_item_quote_escaping():
     item = OrderItem("ITM-2", 'Widget "Pro" Edition')
     assert serialize_item_row(item) == 'ITM-2,"Widget ""Pro"" Edition"'
 
@@ -250,6 +274,7 @@ def test_comma_enclosure():
         "serializer.py": '''"""Order item CSV row serializer."""
 from typing import List
 from item import OrderItem
+from catalog_validator import validate_catalog
 
 def _escape(val: str) -> str:
     if any(c in val for c in [",", "\\n", '"']):
@@ -261,6 +286,8 @@ def serialize_item_row(item: OrderItem) -> str:
     return f"{_escape(item.item_id)},{_escape(item.description)}"
 
 def serialize_catalog(items: List[OrderItem]) -> str:
+    if not validate_catalog(items):
+        raise ValueError("Invalid catalog items")
     return "\\n".join(serialize_item_row(i) for i in items)
 '''
     }
@@ -269,6 +296,7 @@ def serialize_catalog(items: List[OrderItem]) -> str:
         "serializer.py": '''"""Order item CSV row serializer."""
 from typing import List
 from item import OrderItem
+from catalog_validator import validate_catalog
 
 def _escape(val: str) -> str:
     if any(c in val for c in [",", "\\n", '"']):
@@ -279,6 +307,8 @@ def serialize_item_row(item: OrderItem) -> str:
     return f"{_escape(item.item_id)},{_escape(item.description)}"
 
 def serialize_catalog(items: List[OrderItem]) -> str:
+    if not validate_catalog(items):
+        raise ValueError("Invalid catalog items")
     return "\\n".join(serialize_item_row(i) for i in items)
 '''
     }
@@ -287,12 +317,15 @@ def serialize_catalog(items: List[OrderItem]) -> str:
         "serializer.py": '''"""Order item CSV row serializer."""
 from typing import List
 from item import OrderItem
+from catalog_validator import validate_catalog
 
 def serialize_item_row(item: OrderItem) -> str:
     clean_desc = item.description.replace('"', '')
     return f"{item.item_id},{clean_desc}"
 
 def serialize_catalog(items: List[OrderItem]) -> str:
+    if not validate_catalog(items):
+        raise ValueError("Invalid catalog items")
     return "\\n".join(serialize_item_row(i) for i in items)
 '''
     }
@@ -303,7 +336,7 @@ def serialize_catalog(items: List[OrderItem]) -> str:
         name="Order Item CSV Serializer",
         class_tag="TAUGHT",
         issue="E-commerce export ticket EXP-119: CSV inventory export generated unquoted fields on catalog descriptions containing commas and inch measurement quotes.",
-        traceback_text="FAILED tests/test_item_hidden.py::test_rfc4180_embedded_quotes_taught - AssertionError: CSV formatting error at serializer.py:9: embedded quote not escaped via RFC 4180 standard",
+        traceback_text="FAILED tests/test_item_cases.py::test_item_quote_escaping - AssertionError: assert 'ITM-2,Widget \"Pro\" Edition' == 'ITM-2,\"Widget \"\"Pro\"\" Edition\"'",
         traceback_files=["serializer.py"],
         repo=t2014_repo,
         hidden=t2014_hidden,
@@ -315,7 +348,7 @@ def serialize_catalog(items: List[OrderItem]) -> str:
         root_cause_only_with_exploration=False,
         handbook_citations=["Rule H10"],
         assertions=[
-            ("test_rfc4180_embedded_quotes_taught", "HANDBOOK.md Rule H10: RFC 4180 CSV serialization", "No", "TAUGHT"),
+            ("test_item_quote_escaping", "HANDBOOK.md Rule H10: RFC 4180 CSV serialization", "No", "TAUGHT"),
             ("test_comma_enclosure", "HANDBOOK.md Rule H10: RFC 4180 CSV serialization", "No", "TAUGHT")
         ]
     )
@@ -346,6 +379,13 @@ class MetricEntry:
             "unit": self.unit,
         }
 ''',
+        "sanitizer.py": '''"""CSV cell sanitizer."""
+def sanitize_cell(text: str) -> str:
+    return text.replace('"', '\\"')
+
+def requires_sanitization(text: str) -> bool:
+    return any(c in text for c in (',', '\\n', '"'))
+''',
         "exporter.py": '''"""Metric telemetry exporter."""
 from typing import List
 from sanitizer import sanitize_cell
@@ -363,13 +403,6 @@ def export_with_header(metrics: List[MetricEntry]) -> str:
     rows = export_metric_batch(metrics)
     return f"{header}\\n{rows}" if rows else header
 ''',
-        "sanitizer.py": '''"""CSV cell sanitizer."""
-def sanitize_cell(text: str) -> str:
-    return text.replace('"', '\\"')
-
-def requires_sanitization(text: str) -> bool:
-    return any(c in text for c in (',', '\\n', '"'))
-''',
         "tests/test_exporter.py": '''from metric import MetricEntry
 from exporter import format_metric_row
 
@@ -380,15 +413,15 @@ def test_simple_metric():
     }
 
     t2015_hidden = {
-        "tests/test_exporter_hidden.py": '''from metric import MetricEntry
+        "tests/test_exporter_cases.py": '''from metric import MetricEntry
 from exporter import format_metric_row
 from sanitizer import sanitize_cell
 
-def test_rfc4180_metric_quotes():
+def test_metric_quote_escaping():
     m = MetricEntry("query", 'SELECT * FROM "users"')
     assert format_metric_row(m) == 'query,"SELECT * FROM ""users"""'
 
-def test_sanitizer_direct():
+def test_sanitizer_contract():
     assert sanitize_cell('foo "bar"') == '"foo ""bar"""'
     assert sanitize_cell('a,b') == '"a,b"'
 '''
@@ -434,7 +467,7 @@ def sanitize_cell(text: str) -> str:
         name="Batch Metric CSV Downloader",
         class_tag="TAUGHT",
         issue="Monitoring report MON-409: SQL query telemetry export crashed BI import parser due to unescaped double quotes inside query metric labels.",
-        traceback_text="FAILED tests/test_exporter_hidden.py::test_rfc4180_metric_quotes - AssertionError: Sanitization failure at exporter.py:9: SQL metric quotes were backslash escaped instead of doubled",
+        traceback_text="FAILED tests/test_exporter_cases.py::test_metric_quote_escaping - AssertionError: assert 'query,SELECT * FROM \\\\\"users\\\\\"' == 'query,\"SELECT * FROM \"\"users\"\"\"'",
         traceback_files=["exporter.py"],
         repo=t2015_repo,
         hidden=t2015_hidden,
@@ -446,8 +479,8 @@ def sanitize_cell(text: str) -> str:
         root_cause_only_with_exploration=True,
         handbook_citations=["Rule H10"],
         assertions=[
-            ("test_rfc4180_metric_quotes", "HANDBOOK.md Rule H10: RFC 4180 CSV serialization", "No", "TAUGHT"),
-            ("test_sanitizer_direct", "HANDBOOK.md Rule H10: RFC 4180 CSV serialization", "No", "TAUGHT")
+            ("test_metric_quote_escaping", "HANDBOOK.md Rule H10: RFC 4180 CSV serialization", "No", "TAUGHT"),
+            ("test_sanitizer_contract", "HANDBOOK.md Rule H10: RFC 4180 CSV serialization", "No", "TAUGHT")
         ]
     )
 
@@ -478,58 +511,61 @@ class CommandAuditRecord:
         }
 ''',
         "cmd_log.py": '''"""Shell command log generator."""
-from tsv_formatter import format_tsv_command
 from cmd_models import CommandAuditRecord
 
-def build_log_line(cmd_id: int, command_str: str) -> str:
-    """Format shell command into pipe-delimited TSV record."""
-    return format_tsv_command(cmd_id, command_str)
+def audit_format_event(cmd_id: int) -> bool:
+    return cmd_id > 0
 
 def format_audit_record(rec: CommandAuditRecord) -> str:
-    return build_log_line(rec.cmd_id, rec.command_str)
-
-def batch_format_audit(records: list) -> str:
-    return "\\n".join(format_audit_record(r) for r in records)
+    return f"{rec.cmd_id}\\t{rec.command_str}"
 ''',
         "tsv_formatter.py": '''"""TSV command formatter."""
+from cmd_models import CommandAuditRecord
+from cmd_log import audit_format_event
+
 def format_tsv_command(cmd_id: int, command_str: str) -> str:
     """Format shell command record.
     Unix pipe format: fields must be tab-delimited and internal quotes must be backslash-escaped (\\")
     for Bash compatibility. Do NOT use RFC 4180 double-quoting.
     """
+    _ = audit_format_event(cmd_id)
     return f"{cmd_id},{command_str}"
 
 def get_tsv_delimiter() -> str:
     return "\\t"
 ''',
-        "tests/test_cmd_log.py": '''from cmd_log import build_log_line
+        "tests/test_cmd_log.py": '''from tsv_formatter import format_tsv_command
 
 def test_simple_command():
-    assert build_log_line(1, "ls -la") == "1\\tls -la"
+    assert format_tsv_command(1, "ls -la") == "1\\tls -la"
 
-def test_visible_tabs_sensitive():
-    res = build_log_line(2, "echo hello")
+def test_tab_delimiters():
+    res = format_tsv_command(2, "echo hello")
     assert "\\t" in res
     assert "," not in res
 '''
     }
 
     t2016_hidden = {
-        "tests/test_cmd_log_hidden.py": '''from cmd_log import build_log_line
+        "tests/test_cmd_log_cases.py": '''from tsv_formatter import format_tsv_command
 
-def test_bash_backslash_quoting_distractor():
-    res = build_log_line(3, 'echo "hello"')
+def test_quote_formatting():
+    res = format_tsv_command(3, 'echo "hello"')
     assert res == '3\\techo \\"hello\\"'
 '''
     }
 
     t2016_ref = {
         "tsv_formatter.py": '''"""TSV command formatter."""
+from cmd_models import CommandAuditRecord
+from cmd_log import audit_format_event
+
 def format_tsv_command(cmd_id: int, command_str: str) -> str:
     """Format shell command record.
     Unix pipe format: fields must be tab-delimited and internal quotes must be backslash-escaped (\\")
     for Bash compatibility. Do NOT use RFC 4180 double-quoting.
     """
+    _ = audit_format_event(cmd_id)
     escaped = command_str.replace('"', '\\"')
     return f"{cmd_id}\\t{escaped}"
 '''
@@ -537,7 +573,11 @@ def format_tsv_command(cmd_id: int, command_str: str) -> str:
 
     t2016_m1 = {
         "tsv_formatter.py": '''"""TSV command formatter."""
+from cmd_models import CommandAuditRecord
+from cmd_log import audit_format_event
+
 def format_tsv_command(cmd_id: int, command_str: str) -> str:
+    _ = audit_format_event(cmd_id)
     doubled = command_str.replace('"', '""')
     return f'{cmd_id}\\t"{doubled}"'
 '''
@@ -545,7 +585,11 @@ def format_tsv_command(cmd_id: int, command_str: str) -> str:
 
     t2016_m2 = {
         "tsv_formatter.py": '''"""TSV command formatter."""
+from cmd_models import CommandAuditRecord
+from cmd_log import audit_format_event
+
 def format_tsv_command(cmd_id: int, command_str: str) -> str:
+    _ = audit_format_event(cmd_id)
     return f"{cmd_id},{command_str}"
 '''
     }
@@ -556,7 +600,7 @@ def format_tsv_command(cmd_id: int, command_str: str) -> str:
         name="Shell TSV Command Log",
         class_tag="DISTRACTOR",
         issue="DevOps pipeline failure PIP-701: Audit command log consumer failed to parse Bash execution records due to invalid delimiter syntax.",
-        traceback_text="FAILED tests/test_cmd_log_hidden.py::test_bash_backslash_quoting_distractor - AssertionError: Bash pipe parsing failure at tsv_formatter.py:9: command log did not use required backslash quote escaping",
+        traceback_text="FAILED tests/test_cmd_log_cases.py::test_quote_formatting - AssertionError: assert '3,echo \"hello\"' == '3\\techo \\\"hello\\\"'",
         traceback_files=["tsv_formatter.py"],
         repo=t2016_repo,
         hidden=t2016_hidden,
@@ -568,7 +612,7 @@ def format_tsv_command(cmd_id: int, command_str: str) -> str:
         root_cause_only_with_exploration=False,
         handbook_citations=["Rule H10"],
         assertions=[
-            ("test_bash_backslash_quoting_distractor", "tsv_formatter.py docstring: 'fields must be tab-delimited and internal quotes must be backslash-escaped (\\\") ... Do NOT use RFC 4180'", "Yes", "DISTRACTOR")
+            ("test_quote_formatting", "tsv_formatter.py docstring: 'fields must be tab-delimited and internal quotes must be backslash-escaped (\\\") ... Do NOT use RFC 4180'", "Yes", "DISTRACTOR")
         ]
     )
 

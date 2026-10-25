@@ -167,7 +167,7 @@ def test_e5_tag_distribution():
 
 
 def test_splits_e5_stratification():
-    """Assert splits_e5.json exists and partitions tasks into 12 Tune and 16 Held-out."""
+    """Assert splits_e5.json partitions tasks into 18 Tune (64.3%) and 10 Held-out (35.7%)."""
     splits_path = os.path.join(_repo_root, "benchmarks", "splits_e5.json")
     assert os.path.exists(splits_path), "splits_e5.json missing"
     
@@ -177,11 +177,74 @@ def test_splits_e5_stratification():
     tune = splits["tune"]
     held_out = splits["held_out"]
     
-    assert len(tune) == 12, f"Expected 12 tune tasks, found {len(tune)}"
-    assert len(held_out) == 16, f"Expected 16 held-out tasks, found {len(held_out)}"
+    assert len(tune) == 18, f"Expected 18 tune tasks, found {len(tune)}"
+    assert len(held_out) == 10, f"Expected 10 held-out tasks, found {len(held_out)}"
     assert set(tune).isdisjoint(set(held_out)), "Tune and held-out sets must be disjoint"
     assert len(set(tune) | set(held_out)) == 28, "Split must cover all 28 tasks"
     
     task_map = {t["id"]: t for t in suite_e5.T}
+    distractor_in_tune = [tid for tid in tune if task_map[tid]["class_tag"] == "DISTRACTOR"]
+    assert len(distractor_in_tune) >= 1, f"Expected >= 1 DISTRACTOR in tune, found {len(distractor_in_tune)}"
+    
     transfer_in_tune = [tid for tid in tune if task_map[tid]["class_tag"] == "TRANSFER"]
     assert len(transfer_in_tune) == 0, f"TRANSFER tasks cannot be in tune set: {transfer_in_tune}"
+    transfer_in_held_out = [tid for tid in held_out if task_map[tid]["class_tag"] == "TRANSFER"]
+    assert len(transfer_in_held_out) == 4, f"All 4 TRANSFER tasks must be in held-out, found {len(transfer_in_held_out)}"
+
+
+def test_no_design_words_in_tests_or_traces():
+    """Enforce B1 & B2: zero design labels or giveaways in test IDs, filenames, or tracebacks."""
+    forbidden = re.compile(r"(taught|stated|distractor|transfer|visible_sensitive|_visible|_hidden)", re.IGNORECASE)
+    for t in suite_e5.T:
+        tb = t["traceback_text"]
+        m = forbidden.search(tb)
+        assert m is None, f"Task {t['id']} traceback contains design word: {m.group(0)} in '{tb}'"
+        
+        # Check hidden test overlay
+        for variant in t["key"]["variants"]:
+            overlay = variant.get("overlay", {})
+            for fn, content in overlay.items():
+                assert "hidden" not in fn.lower(), f"Task {t['id']} test file '{fn}' contains 'hidden'"
+                for tf in re.findall(r"def (test_[a-zA-Z0-9_]+)", content):
+                    m = forbidden.search(tf)
+                    assert m is None, f"Task {t['id']} test '{tf}' contains design word: {m.group(0)}"
+                    
+        # Check visible tests in repo
+        for fn, content in t["repo"].items():
+            if fn.startswith("tests/"):
+                for tf in re.findall(r"def (test_[a-zA-Z0-9_]+)", content):
+                    m = forbidden.search(tf)
+                    assert m is None, f"Task {t['id']} visible test '{tf}' contains design word: {m.group(0)}"
+
+
+def test_root_cause_reachability():
+    """Enforce B4 & Smaller Items: For all 12 HRC tasks, root-cause file is imported by traceback file."""
+    for t in suite_e5.T:
+        if t.get("hidden_root_cause"):
+            tb_file = t["traceback_files"][0]
+            tb_content = t["repo"][tb_file]
+            rc_files = [f for f in t["ref"] if f != tb_file and not f.startswith("tests/")]
+            for rc in rc_files:
+                mod_name = rc[:-3]
+                assert re.search(r"\b" + mod_name + r"\b", tb_content), (
+                    f"Task {t['id']}: HRC root-cause file '{rc}' is not imported by traceback file '{tb_file}'"
+                )
+
+
+def test_zero_unimported_decoy_files():
+    """Enforce B4: every non-test file in repo is on reachability path (zero unimported filler files)."""
+    for t in suite_e5.T:
+        tb_file = t["traceback_files"][0]
+        test_code = "\n".join(c for path, c in t["repo"].items() if path.startswith("tests/"))
+        non_test_files = [p for p in t["repo"] if not p.startswith("tests/")]
+        for p in non_test_files:
+            mod_name = p[:-3]
+            if p == tb_file:
+                assert re.search(r"\b" + mod_name + r"\b", test_code), (
+                    f"Task {t['id']}: Entrypoint file '{p}' is not imported by tests"
+                )
+            else:
+                non_test_code = "\n".join(c for path, c in t["repo"].items() if not path.startswith("tests/") and path != p)
+                assert re.search(r"\b" + mod_name + r"\b", non_test_code), (
+                    f"Task {t['id']}: Helper file '{p}' is not referenced/imported by any repo code"
+                )

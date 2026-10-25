@@ -2,7 +2,7 @@
 
 Governing Rule: Rule H02 (Banker's Rounding: round half to even on cents).
 Competing Alternatives: Round half up, truncation, ceil.
-Target: 40-120 non-test lines across 3-4 files.
+Target: 40-120 non-test lines across 3-4 files. All files on reachability path (zero decoys).
 """
 
 def register_family_1(add_task):
@@ -88,17 +88,17 @@ def test_multi_item():
     }
 
     t2001_hidden = {
-        "tests/test_pricing_hidden.py": '''import pytest
+        "tests/test_pricing_cases.py": '''import pytest
 from pricing import calculate_order_total
 from tax_engine import calculate_vat
 
-def test_bankers_rounding_half_cents():
+def test_vat_rate_calculation():
     assert calculate_order_total([(135, 1)], vat_rate=0.10).tax_cents == 14
     assert calculate_order_total([(145, 1)], vat_rate=0.10).tax_cents == 14
     assert calculate_order_total([(155, 1)], vat_rate=0.10).tax_cents == 16
     assert calculate_order_total([(165, 1)], vat_rate=0.10).tax_cents == 16
 
-def test_tax_engine_direct():
+def test_tax_engine_contract():
     assert calculate_vat(135, 0.10) == 14
     assert calculate_vat(145, 0.10) == 14
 '''
@@ -136,7 +136,6 @@ from decimal import Decimal, ROUND_HALF_EVEN
 def calculate_order_total(items: List[Tuple[int, int]], vat_rate: float = 0.20, order_id: str = "ORD-001") -> OrderSummary:
     line_objs = [LineItem(sku=f"SKU-{i+1}", price_cents=p, quantity=q) for i, (p, q) in enumerate(items)]
     net = sum(item.subtotal() for item in line_objs)
-    # Workaround in pricing.py without fixing tax_engine.py
     tax = int((Decimal(str(net)) * Decimal(str(vat_rate))).quantize(Decimal("1"), rounding=ROUND_HALF_EVEN))
     return OrderSummary(order_id=order_id, items=line_objs, net_cents=net, tax_cents=tax, gross_cents=net + tax)
 '''
@@ -167,7 +166,7 @@ def calculate_vat(net_cents: int, vat_rate: float) -> int:
         name="Order Tax Calculation",
         class_tag="STATED",
         issue="Incident INC-8401: Itemized billing batch reconciliation failed for customer order line items under variable VAT rates.",
-        traceback_text="FAILED tests/test_pricing_hidden.py::test_bankers_rounding_half_cents - AssertionError: Reconciliation error at pricing.py:16: calculated invoice tax line failed to match expected settlement total",
+        traceback_text="FAILED tests/test_pricing_cases.py::test_vat_rate_calculation - AssertionError: assert 13 == 14",
         traceback_files=["pricing.py"],
         repo=t2001_repo,
         hidden=t2001_hidden,
@@ -179,8 +178,8 @@ def calculate_vat(net_cents: int, vat_rate: float) -> int:
         root_cause_only_with_exploration=True,
         handbook_citations=["Rule H02"],
         assertions=[
-            ("test_bankers_rounding_half_cents", "pricing.py docstring: 'Tax calculation must use banker's rounding (round half to even)'", "Yes", "STATED"),
-            ("test_tax_engine_direct", "tax_engine.py module contract", "Yes", "STATED")
+            ("test_vat_rate_calculation", "pricing.py docstring: 'Tax calculation must use banker's rounding (round half to even)'", "Yes", "STATED"),
+            ("test_tax_engine_contract", "tax_engine.py module contract", "Yes", "STATED")
         ]
     )
 
@@ -210,15 +209,27 @@ class AllocationResult:
             "is_fully_allocated": self.is_fully_allocated,
         }
 ''',
+        "utils.py": '''"""Invoice discount validation helpers."""
+from typing import List
+
+def validate_line_totals(lines: List[int]) -> bool:
+    return all(isinstance(x, int) and x >= 0 for x in lines)
+
+def compute_total_cents(lines: List[int]) -> int:
+    return sum(lines)
+''',
         "discount.py": '''"""Invoice discount allocation module."""
 from typing import List
 from models import AllocationResult
+from utils import validate_line_totals
 
 def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
     """Prorate discount across lines proportionally to their value.
     line_totals: list of integer cents.
     Returns list of discount cents per line.
     """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
     total = sum(line_totals)
     if total == 0:
         return [0] * len(line_totals)
@@ -229,15 +240,6 @@ def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> All
     allocs = prorate_discount(line_totals, total_discount_cents)
     tot = sum(allocs)
     return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
-''',
-        "utils.py": '''"""Invoice discount validation helpers."""
-from typing import List
-
-def validate_line_totals(lines: List[int]) -> bool:
-    return all(isinstance(x, int) and x >= 0 for x in lines)
-
-def compute_total_cents(lines: List[int]) -> int:
-    return sum(lines)
 ''',
         "tests/test_discount.py": '''from discount import prorate_discount, allocate_discounts
 
@@ -257,15 +259,15 @@ def test_proportional_distribution():
     }
 
     t2002_hidden = {
-        "tests/test_discount_hidden.py": '''import pytest
+        "tests/test_discount_cases.py": '''import pytest
 from discount import prorate_discount
 
-def test_half_cent_bankers_rounding():
+def test_fractional_split():
     assert prorate_discount([100, 100], 25) == [12, 12]
     assert prorate_discount([100, 100], 35) == [18, 18]
     assert prorate_discount([100, 100], 45) == [22, 22]
 
-def test_three_line_unallocated():
+def test_multi_line_allocation():
     assert sum(prorate_discount([100, 100, 100], 30)) == 30
 '''
     }
@@ -275,12 +277,15 @@ def test_three_line_unallocated():
 from typing import List
 from decimal import Decimal, ROUND_HALF_EVEN
 from models import AllocationResult
+from utils import validate_line_totals
 
 def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
     """Prorate discount across lines proportionally to their value.
     line_totals: list of integer cents.
     Returns list of discount cents per line.
     """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
     total = sum(line_totals)
     if total == 0:
         return [0] * len(line_totals)
@@ -305,8 +310,11 @@ def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> All
 from typing import List
 from decimal import Decimal, ROUND_HALF_UP
 from models import AllocationResult
+from utils import validate_line_totals
 
 def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
     total = sum(line_totals)
     if total == 0:
         return [0] * len(line_totals)
@@ -325,8 +333,11 @@ def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> All
         "discount.py": '''"""Invoice discount allocation module."""
 from typing import List
 from models import AllocationResult
+from utils import validate_line_totals
 
 def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
     total = sum(line_totals)
     if total == 0:
         return [0] * len(line_totals)
@@ -344,8 +355,8 @@ def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> All
         family="money_rounding",
         name="Invoice Discount Allocation",
         class_tag="TAUGHT",
-        issue="Audit finding AUD-209: Promotional discount proration across invoice line items leaves unallocated pennies on half-cent boundary splits.",
-        traceback_text="FAILED tests/test_discount_hidden.py::test_half_cent_bankers_rounding - AssertionError: Discount proration check failed at discount.py:24: allocated discount sum does not match target pool",
+        issue="Incident INC-3902: Promotional discount allocation across invoice line items results in an unallocated penny mismatch during checkout settlement.",
+        traceback_text="FAILED tests/test_discount_cases.py::test_fractional_split - AssertionError: assert [17, 17] == [18, 18]",
         traceback_files=["discount.py"],
         repo=t2002_repo,
         hidden=t2002_hidden,
@@ -357,8 +368,8 @@ def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> All
         root_cause_only_with_exploration=False,
         handbook_citations=["Rule H02"],
         assertions=[
-            ("test_half_cent_bankers_rounding", "HANDBOOK.md Rule H02: Banker's rounding on half-cent boundaries", "No", "TAUGHT"),
-            ("test_three_line_unallocated", "HANDBOOK.md Rule H02: Banker's rounding on half-cent boundaries", "No", "TAUGHT")
+            ("test_fractional_split", "HANDBOOK.md Rule H02: Banker's rounding on half-cent boundaries", "No", "TAUGHT"),
+            ("test_multi_line_allocation", "HANDBOOK.md Rule H02: Banker's rounding on half-cent boundaries", "No", "TAUGHT")
         ]
     )
 
@@ -427,16 +438,16 @@ def test_summary_builder():
     }
 
     t2003_hidden = {
-        "tests/test_fx_hidden.py": '''from converter import convert_currency_amount
+        "tests/test_fx_cases.py": '''from converter import convert_currency_amount
 from rates import FxQuote
 from fx_engine import apply_fx_rate
 
-def test_bankers_rounding_fx():
+def test_fx_conversion():
     quote = FxQuote("USD", "JPY", 1.5)
     assert convert_currency_amount(135, quote) == 202
     assert convert_currency_amount(145, quote) == 218
 
-def test_fx_engine_direct():
+def test_fx_engine_contract():
     assert apply_fx_rate(135, 1.5) == 202
     assert apply_fx_rate(145, 1.5) == 218
 '''
@@ -498,7 +509,7 @@ def compute_spread(cents: int, base_rate: float, spread_bps: int = 10) -> Tuple[
         name="Multi-Currency Fee Conversion",
         class_tag="TAUGHT",
         issue="Payment gateway ticket PAY-501: Cross-border clearing failed settlement reconciliation on fractional cent conversion batches.",
-        traceback_text="FAILED tests/test_fx_hidden.py::test_bankers_rounding_fx - AssertionError: Conversion error at converter.py:12: target currency amount failed ledger balance check",
+        traceback_text="FAILED tests/test_fx_cases.py::test_fx_conversion - AssertionError: assert 201 == 202",
         traceback_files=["converter.py"],
         repo=t2003_repo,
         hidden=t2003_hidden,
@@ -510,8 +521,8 @@ def compute_spread(cents: int, base_rate: float, spread_bps: int = 10) -> Tuple[
         root_cause_only_with_exploration=True,
         handbook_citations=["Rule H02"],
         assertions=[
-            ("test_bankers_rounding_fx", "HANDBOOK.md Rule H02: Banker's rounding on half-cents", "No", "TAUGHT"),
-            ("test_fx_engine_direct", "HANDBOOK.md Rule H02: Banker's rounding on half-cents", "No", "TAUGHT")
+            ("test_fx_conversion", "HANDBOOK.md Rule H02: Banker's rounding on half-cents", "No", "TAUGHT"),
+            ("test_fx_engine_contract", "HANDBOOK.md Rule H02: Banker's rounding on half-cents", "No", "TAUGHT")
         ]
     )
 
@@ -543,9 +554,16 @@ class WithholdingRecord:
             "state_code": self.state_code,
         }
 ''',
+        "validator.py": '''"""Payroll audit validators."""
+from models import WithholdingRecord
+
+def verify_withholding(record: WithholdingRecord, minimum_cents: int = 0) -> bool:
+    return record.tax_cents >= minimum_cents
+''',
         "payroll.py": '''"""Payroll statutory tax calculation."""
 import math
 from models import WithholdingRecord
+from validator import verify_withholding
 
 def compute_payroll_withholding(gross_cents: int, tax_rate: float) -> int:
     """Compute statutory payroll tax withholding.
@@ -556,15 +574,13 @@ def compute_payroll_withholding(gross_cents: int, tax_rate: float) -> int:
 
 def build_withholding_record(employee_id: int, gross_cents: int, tax_rate: float, exempt: bool = False) -> WithholdingRecord:
     if exempt:
-        return WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=0, exempt=True)
-    tax = compute_payroll_withholding(gross_cents, tax_rate)
-    return WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=tax)
-''',
-        "validator.py": '''"""Payroll audit validators."""
-from models import WithholdingRecord
-
-def verify_withholding(record: WithholdingRecord, minimum_cents: int) -> bool:
-    return record.tax_cents >= minimum_cents
+        rec = WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=0, exempt=True)
+    else:
+        tax = compute_payroll_withholding(gross_cents, tax_rate)
+        rec = WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=tax)
+    if not verify_withholding(rec, 0):
+        raise ValueError("Negative withholding calculated")
+    return rec
 ''',
         "tests/test_payroll.py": '''from payroll import compute_payroll_withholding, build_withholding_record
 
@@ -573,16 +589,16 @@ def test_integer_withholding():
     rec = build_withholding_record(101, 2000, 0.05)
     assert rec.tax_cents == 100
 
-def test_fractional_withholding_visible():
+def test_fractional_withholding():
     assert compute_payroll_withholding(105, 0.10) == 11
 '''
     }
 
     t2004_hidden = {
-        "tests/test_payroll_hidden.py": '''import pytest
+        "tests/test_payroll_cases.py": '''import pytest
 from payroll import compute_payroll_withholding
 
-def test_statutory_ceiling_withholding():
+def test_payroll_deduction_rate():
     assert compute_payroll_withholding(125, 0.10) == 13
     assert compute_payroll_withholding(145, 0.10) == 15
     assert compute_payroll_withholding(101, 0.10) == 11
@@ -593,6 +609,7 @@ def test_statutory_ceiling_withholding():
         "payroll.py": '''"""Payroll statutory tax calculation."""
 import math
 from models import WithholdingRecord
+from validator import verify_withholding
 
 def compute_payroll_withholding(gross_cents: int, tax_rate: float) -> int:
     """Compute statutory payroll tax withholding.
@@ -603,9 +620,13 @@ def compute_payroll_withholding(gross_cents: int, tax_rate: float) -> int:
 
 def build_withholding_record(employee_id: int, gross_cents: int, tax_rate: float, exempt: bool = False) -> WithholdingRecord:
     if exempt:
-        return WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=0, exempt=True)
-    tax = compute_payroll_withholding(gross_cents, tax_rate)
-    return WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=tax)
+        rec = WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=0, exempt=True)
+    else:
+        tax = compute_payroll_withholding(gross_cents, tax_rate)
+        rec = WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=tax)
+    if not verify_withholding(rec, 0):
+        raise ValueError("Negative withholding calculated")
+    return rec
 '''
     }
 
@@ -613,6 +634,7 @@ def build_withholding_record(employee_id: int, gross_cents: int, tax_rate: float
         "payroll.py": '''"""Payroll statutory tax calculation."""
 from decimal import Decimal, ROUND_HALF_EVEN
 from models import WithholdingRecord
+from validator import verify_withholding
 
 def compute_payroll_withholding(gross_cents: int, tax_rate: float) -> int:
     # Mutant 1: Blindly applies Banker's rounding
@@ -622,15 +644,20 @@ def compute_payroll_withholding(gross_cents: int, tax_rate: float) -> int:
 
 def build_withholding_record(employee_id: int, gross_cents: int, tax_rate: float, exempt: bool = False) -> WithholdingRecord:
     if exempt:
-        return WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=0, exempt=True)
-    tax = compute_payroll_withholding(gross_cents, tax_rate)
-    return WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=tax)
+        rec = WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=0, exempt=True)
+    else:
+        tax = compute_payroll_withholding(gross_cents, tax_rate)
+        rec = WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=tax)
+    if not verify_withholding(rec, 0):
+        raise ValueError("Negative withholding calculated")
+    return rec
 '''
     }
 
     t2004_m2 = {
         "payroll.py": '''"""Payroll statutory tax calculation."""
 from models import WithholdingRecord
+from validator import verify_withholding
 
 def compute_payroll_withholding(gross_cents: int, tax_rate: float) -> int:
     # Mutant 2: Truncation
@@ -638,9 +665,13 @@ def compute_payroll_withholding(gross_cents: int, tax_rate: float) -> int:
 
 def build_withholding_record(employee_id: int, gross_cents: int, tax_rate: float, exempt: bool = False) -> WithholdingRecord:
     if exempt:
-        return WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=0, exempt=True)
-    tax = compute_payroll_withholding(gross_cents, tax_rate)
-    return WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=tax)
+        rec = WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=0, exempt=True)
+    else:
+        tax = compute_payroll_withholding(gross_cents, tax_rate)
+        rec = WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=tax)
+    if not verify_withholding(rec, 0):
+        raise ValueError("Negative withholding calculated")
+    return rec
 '''
     }
 
@@ -650,7 +681,7 @@ def build_withholding_record(employee_id: int, gross_cents: int, tax_rate: float
         name="Legacy Payroll Tax Ceiling",
         class_tag="DISTRACTOR",
         issue="Compliance alert PAY-89: Statutory state tax withholding calculation is under-withholding on payroll processing batches.",
-        traceback_text="FAILED tests/test_payroll_hidden.py::test_statutory_ceiling_withholding - AssertionError: Compliance error at payroll.py:12: calculated withholding failed statutory minimum threshold check",
+        traceback_text="FAILED tests/test_payroll_cases.py::test_payroll_deduction_rate - AssertionError: assert 12 == 13",
         traceback_files=["payroll.py"],
         repo=t2004_repo,
         hidden=t2004_hidden,
@@ -662,7 +693,7 @@ def build_withholding_record(employee_id: int, gross_cents: int, tax_rate: float
         root_cause_only_with_exploration=False,
         handbook_citations=["Rule H02"],
         assertions=[
-            ("test_statutory_ceiling_withholding", "payroll.py docstring: 'MUST round fractional cents UP (ceiling)'", "Yes", "DISTRACTOR")
+            ("test_payroll_deduction_rate", "payroll.py docstring: 'MUST round fractional cents UP (ceiling)'", "Yes", "DISTRACTOR")
         ]
     )
 
