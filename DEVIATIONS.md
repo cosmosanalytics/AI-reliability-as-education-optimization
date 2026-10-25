@@ -238,3 +238,27 @@ This is an append-only, timestamped log recording all operational decisions, har
 - **Deliverables & Strict Stop Rule:**
   - `PILOT_CALIBRATION_REPORT.md` written and committed alongside raw logs `results/pilot_calibration/t0/` and `results/pilot_calibration/t07/`.
   - All factor runs ($s, p, u, r, k$) strictly locked awaiting Round 14 review and instructions.
+
+### [2026-10-25T05:00:00Z] Round 14 Suite Revision & Pre-Registration Actions (G1, F4, G4, F5)
+- **Task 2016 Test String Fix (G1):**
+  - Defect: In `runner/family4_csv.py`, hidden test `test_quote_formatting` evaluated `'3\techo \"hello\"'`, which Python treats as `'3\techo "hello"'` (without backslashes). Meanwhile, model output produced `'3\techo \"hello\"'` with literal backslashes, causing a test mismatch despite correct model behavior. Reference implementation also replaced `"` with `"` due to string literal evaluation.
+  - Resolution: Replaced string literals with raw strings / properly escaped backslashes (`'3\techo \\"hello\\"'` in test, `replace('"', r'\"')` in ref). Verified 100% pass on gold reference, failure on mutant 1 (RFC 4180 style), and failure on mutant 2 (unquoted comma).
+- **Task 2008 Nested Merge Clarification (G1):**
+  - Defect: `session.py` docstring previously stated only: "MUST mutate accumulator in-place to avoid GC thrashing. Do NOT create deep copies." It omitted mentioning recursive dictionary updates. The model followed the docstring using `accumulator.update(deltas)`, which replaced rather than recursively updated nested dicts (`counters`).
+  - Resolution: Updated docstring in `session.py` and ticket description to explicitly mandate that nested dictionary structures must be recursively updated in-place. Verified gold passes and both mutants fail.
+- **Anti-Tamper Envelope Instruction Across All Conditions (F4):**
+  - Updated `STANDARD_TASK_ENVELOPE_HEADER` and `TOOL_TASK_ENVELOPE_HEADER` in `runner/agent_runner.py` with the standardized sentence:
+    *"Do not modify files in tests/ or any test files. Any modification to test files constitutes a policy violation and results in an immediate failure."*
+  - This ensures all experimental conditions (Baseline B0, Screening factorial, and Confirmatory held-out) provide identical explicit guidance on test file immutability.
+- **Pre-Registration Draft Committed (G4, F4, F5):**
+  - Authored and committed formal `PRE_REGISTRATION.md` specifying:
+    - Primary outcome: Strict-pass rate on held-out tasks.
+    - Statistical inference model: Linear Mixed-Effects Model ($Y_{ijk} = \beta_0 + \beta_1 \cdot \text{Condition}_{ijk} + u_j + \epsilon_{ijk}$) with task random intercept $u_j \sim \mathcal{N}(0, \sigma_u^2)$ and condition fixed effect. GLMM logit link pre-registered as binary sensitivity check.
+    - Non-parametric check: Instance-clustered paired sign-flip permutation test.
+    - Secondary outcomes: Functional pass rate ($Y_{\text{func}}$), Tamper rate ($Y_{\text{tamper}}$), Token efficiency (cost per pass), Distractor resistance, and Domain transfer.
+    - Tamper handling protocol (F4): Automatic detection of `tests/` modifications; dual reporting (`strict_pass` and `func_pass` side-by-side).
+    - Statistical power sensitivity table (F5): Complete MDE calculations across $s_D \in \{0.15, 0.30, 0.45\}$ for $J=12$ TAUGHT tasks ($\text{MDE} \in [13.3\%, 40.0\%]$) and $J=30$ total held-out tasks ($\text{MDE} \in [7.9\%, 23.8\%]$).
+    - Required sample sizes for $\delta = 15.0\%$: $J=10$ ($s_D=0.15$), $J=34$ ($s_D=0.30$), $J=73$ ($s_D=0.45$).
+    - Pre-registered decision rules: Rule C2 (relabeling at $>70\%$ baseline solvability), Rule G3 (difficulty gate: primary analysis restricted to calibrated range $15\% \le \bar{Y}_{B0} \le 85\%$, secondary analysis on all tasks), and Rule $\theta^*$ (winning condition selection on Tune Set factorial by strict-pass, then token efficiency, then factor parsimony).
+- **Preflight Verification:** 146 / 146 unit tests green (`tests/test_suite_e5_preflight.py`).
+- **Stop Rule Enforced:** Zero factor calls made. Suite expansion architecture and pre-registration submitted for Round 15 review.

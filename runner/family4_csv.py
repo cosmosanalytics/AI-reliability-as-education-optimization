@@ -547,27 +547,27 @@ def test_tab_delimiters():
     }
 
     t2016_hidden = {
-        "tests/test_cmd_log_cases.py": '''from tsv_formatter import format_tsv_command
+        "tests/test_cmd_log_cases.py": r'''from tsv_formatter import format_tsv_command
 
 def test_quote_formatting():
     res = format_tsv_command(3, 'echo "hello"')
-    assert res == '3\\techo \\"hello\\"'
+    assert res == '3\techo \\"hello\\"'
 '''
     }
 
     t2016_ref = {
-        "tsv_formatter.py": '''"""TSV command formatter."""
+        "tsv_formatter.py": r'''"""TSV command formatter."""
 from cmd_models import CommandAuditRecord
 from cmd_log import audit_format_event
 
 def format_tsv_command(cmd_id: int, command_str: str) -> str:
     """Format shell command record.
-    Unix pipe format: fields must be tab-delimited and internal quotes must be backslash-escaped (\\")
+    Unix pipe format: fields must be tab-delimited and internal quotes must be backslash-escaped (\")
     for Bash compatibility. Do NOT use RFC 4180 double-quoting.
     """
     _ = audit_format_event(cmd_id)
-    escaped = command_str.replace('"', '\\"')
-    return f"{cmd_id}\\t{escaped}"
+    escaped = command_str.replace('"', r'\"')
+    return f"{cmd_id}\t{escaped}"
 '''
     }
 

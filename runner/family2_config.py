@@ -551,7 +551,8 @@ from metrics import count_active_keys
 def update_live_session(accumulator: Dict[str, Any], deltas: Dict[str, Any]) -> Dict[str, Any]:
     """Update high-throughput live session accumulator.
     Performance critical: high-frequency live session state MUST mutate accumulator in-place
-    to avoid GC thrashing. Do NOT create deep copies.
+    to avoid GC thrashing (do NOT create deep copies), and nested dictionary entries MUST be
+    recursively updated in-place rather than overwritten.
     """
     return {**accumulator, **deltas}
 
@@ -597,7 +598,8 @@ from metrics import count_active_keys
 def update_live_session(accumulator: Dict[str, Any], deltas: Dict[str, Any]) -> Dict[str, Any]:
     """Update high-throughput live session accumulator.
     Performance critical: high-frequency live session state MUST mutate accumulator in-place
-    to avoid GC thrashing. Do NOT create deep copies.
+    to avoid GC thrashing (do NOT create deep copies), and nested dictionary entries MUST be
+    recursively updated in-place rather than overwritten.
     """
     for k, v in deltas.items():
         if k in accumulator and isinstance(accumulator[k], dict) and isinstance(v, dict):
@@ -651,7 +653,7 @@ def wrap_session(session_id: str, accumulator: Dict[str, Any]) -> SessionEnvelop
         family="config_merge",
         name="Live Session State Accumulator",
         class_tag="DISTRACTOR",
-        issue="Performance regression PERF-102: Memory telemetry detected excessive allocations and cache misses during live session state streaming.",
+        issue="Performance regression PERF-102: Memory telemetry detected excessive allocations and cache misses during live session state streaming, and nested metrics were overwritten instead of updated in-place.",
         traceback_text="FAILED tests/test_session_cases.py::test_nested_accumulator_identity - AssertionError: assert False is True",
         traceback_files=["session.py"],
         repo=t2008_repo,
