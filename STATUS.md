@@ -2,7 +2,7 @@
 
 **Current Phase:** Suite Revision & Pre-Registration (Round 14 Specification)  
 **Phase State:** **Pre-Registration Drafted (`PRE_REGISTRATION.md`), Suite Fixes Applied (2016, 2008, envelopes), Zero Factor Runs (Stop Rule Enforced)**  
-**Frozen SHA:** *Submitting for Round 15 Review*  
+**Frozen SHA:** `86a2e36`  
 **Model Specifications:**  
 - **Model ID:** `gemini-2.5-flash` (for upcoming pilot calibration upon benchmark validation approval)  
 - **Sampling Settings:** `temperature=0.0`, `max_output_tokens=16384`, `thinking_budget=2048`  
