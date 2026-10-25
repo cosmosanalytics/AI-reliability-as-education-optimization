@@ -2,7 +2,7 @@
 
 **Current Phase:** Benchmark Validation (`suite_e5` Offline Suite, Invariants & Fairness Review — Awaiting Claude Round 11 Review)  
 **Phase State:** **Benchmark Validation Complete & Hermetically Verified (146/146 Preflight Tests Passing; Zero Model Calls Made)**  
-**Frozen SHA:** `16441f2` (Benchmark Validation Suite e5 Verified)  
+**Frozen SHA:** `04c886e` (Benchmark Validation Suite e5 Verified)  
 **Model Specifications:**  
 - **Model ID:** `gemini-2.5-flash` (for upcoming pilot calibration upon benchmark validation approval)  
 - **Sampling Settings:** `temperature=0.0`, `max_output_tokens=16384`, `thinking_budget=2048`  
@@ -27,7 +27,7 @@
 |:---|:---|:---:|:---:|:---|
 | **Phase 0** | Infrastructure & Protocol Setup | **Complete and Verified** | `c81d851` | Evaluation runner (`agent_runner.py`), grader (`grader.py`), 16 cell briefs (`briefs/DIFF.md`), exact token accounting, Resolution-V parity, interactive tool loop, standardized task envelope, audit trail, 10 hermetic unit tests. Live dry run verified on `gemini-2.5-flash`. |
 | **Pilot Calibration (suite_e4)** | Difficulty Calibration Only | **Complete (Difficulty Calibrated)** | `915711b` | 12 multi-module tasks (`suite_e4`), 120 live attempts ($C0000=56.7\%$, $C1111=61.7\%$, $p=0.8750$). Established as difficulty calibration only (ceiling broken); per-task effects did not replicate across runs. |
-| **Benchmark Validation (suite_e5)** | Modular Task Suite $e5$, Invariants & Preflight | **Complete (146/146 Verified)** | `16441f2` | Strictly offline. 28 modular instances across 7 families (`benchmarks/suite_e5.py`), `HANDBOOK.md` vs `PLACEBO.md` token balance (761 vs 754, 0.920% diff $\le 3\%$), 2 worked examples (`briefs/P3.md`), per-assertion audit table (`benchmarks/FAIRNESS_e5.md`), tune/held-out split (`benchmarks/splits_e5.json`), 146/146 passing preflight tests (`tests/test_suite_e5_preflight.py`). S-1..S-6 and B1..B4 resolved. |
+| **Benchmark Validation (suite_e5)** | Modular Task Suite $e5$, Invariants & Preflight | **Complete (146/146 Verified)** | `04c886e` | Strictly offline. 28 modular instances across 7 families (`benchmarks/suite_e5.py`), `HANDBOOK.md` vs `PLACEBO.md` token balance (761 vs 754, 0.920% diff $\le 3\%$), 2 worked examples (`briefs/P3.md`), per-assertion audit table (`benchmarks/FAIRNESS_e5.md`), tune/held-out split (`benchmarks/splits_e5.json`), 146/146 passing preflight tests (`tests/test_suite_e5_preflight.py`). S-1..S-6 and B1..B4 resolved. |
 | **Pilot Calibration (suite_e5)** | Baseline B0 Calibration Run | **LOCKED (Pending Benchmark Validation Approval)** | — | Live B0 calibration on `suite_e5` (frozen runner config, $\ge 10$ runs per instance on tune split). Calibrates baseline difficulty without scaffolding bias. Zero model calls until validation passes. |
 | **Pre-Registration** | Formal Pre-Registration Document | **LOCKED (Pending Pilot Calibration)** | — | Primary hypothesis, instance-clustered permutation tests, $\theta^*$ selection rule, secondary metrics committed before screening experiment. |
 | **Screening Experiment** | Tune-Set Factorial ($2^{5-1}$) | **LOCKED (Pending Pre-Registration)** | — | 16 cells $\times \ge 5$ runs on the 18 tune tasks (`benchmarks/splits_e5.json`). |
