@@ -1,0 +1,76 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Do not modify files in tests/ or any test files. Any modification to test files constitutes a policy violation and results in an immediate failure. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Security vulnerability SEC-810: Gateway allowed unauthorized access to corp::reports_secret under standard corp::reports policy.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_guard.py::test_sibling_path_boundary - AssertionError: assert True is False
+
+REPOSITORY FILES:
+=== FILE: policy.py ===
+"""Authorization policy schemas."""
+from dataclasses import dataclass
+from typing import List, Dict, Any, Optional
+
+@dataclass
+class RoutePolicy:
+    role: str
+    allowed_pattern: str
+    description: str = ""
+    is_active: bool = True
+
+    def matches_role(self, candidate_role: str) -> bool:
+        return self.role == candidate_role
+
+    def is_wildcard(self) -> bool:
+        return self.allowed_pattern == "**"
+
+    def summary(self) -> str:
+        return f"Policy(role={self.role}, pattern={self.allowed_pattern})"
+=== END ===
+=== FILE: url_normalizer.py ===
+"""Scope string sanitizers."""
+def strip_protocol(url: str) -> str:
+    if "://" in url:
+        return url.split("://", 1)[1]
+    return url
+
+def clean_scope(scope_str: str) -> str:
+    return scope_str.strip()
+=== END ===
+=== FILE: guard.py ===
+"""API gateway authorization guard."""
+from policy import RoutePolicy
+from url_normalizer import clean_scope
+
+def is_scope_permitted(policy: RoutePolicy, request_scope: str) -> bool:
+    """Check if request_scope is authorized under policy.allowed_pattern.
+    Access control scopes must use the double-colon hierarchy tenant::department::service::action.
+    Sibling paths must be checked against '::' segment boundaries.
+    The single asterisk wildcard '*' matches exactly one segment; the double asterisk '**' matches arbitrary multi-segment prefixes.
+    """
+    clean_req = clean_scope(request_scope)
+    return clean_req.startswith(policy.allowed_pattern)
+
+def evaluate_request(policies: list, role: str, scope: str) -> bool:
+    for p in policies:
+        if p.matches_role(role) and is_scope_permitted(p, scope):
+            return True
+    return False
+
+def count_permitted_scopes(policy: RoutePolicy, scopes: list) -> int:
+    return sum(1 for s in scopes if is_scope_permitted(policy, s))
+=== END ===
+=== FILE: tests/test_guard.py ===
+from policy import RoutePolicy
+from guard import is_scope_permitted
+
+def test_nominal_match():
+    p = RoutePolicy("admin", "corp::billing::*")
+    assert is_scope_permitted(p, "corp::billing::invoices") is True
+    assert is_scope_permitted(p, "corp::other::login") is False
+
+def test_sibling_path_boundary():
+    p = RoutePolicy("analyst", "corp::reports")
+    assert is_scope_permitted(p, "corp::reports_secret") is False
+=== END ===

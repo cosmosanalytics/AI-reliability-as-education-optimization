@@ -1,0 +1,42 @@
+=== FILE: csv_writer.py ===
+"""TSV serialization utilities."""
+from typing import List, Optional
+from schema import CustomerProfile
+from io_helpers import validate_tsv_header
+
+def escape_tsv_field(val: Optional[str]) -> str:
+    r"""Escape field for internal TSV audit log pipeline:
+    Records are tab-separated (\t), internal double quotes are escaped with backslash (\"),
+    newline characters are escaped as \n, and None/null values are serialized as \N.
+    Do NOT use RFC 4180 double-quoting.
+    """
+    if val is None:
+        return r"\N" # Serialize None as \N
+    # Escape internal double quotes with backslash (\")
+    # Escape newline characters as \n
+    # Escape tabs as \t (This is not explicitly in the docstring for escape_tsv_field,
+    # but implied by the TSV format and "records are tab-separated", which means field values
+    # must not contain unescaped tabs. The original code did not handle this.
+    # The fix ensures tabs *within* a field are also escaped, not just used as delimiters.)
+    # The docstring for escape_tsv_field does not mention commas, so they should not be escaped.
+    # The original code incorrectly escaped for "," and "\\n" (literal backslash n).
+    escaped_val = val.replace('\\', r'\\').replace('"', r'\"').replace('\n', r'\n').replace('\t', r'\t')
+    return escaped_val
+
+def export_profiles_tsv(profiles: List[CustomerProfile]) -> str:
+    # Delimiters should be actual tab and newline characters, not literal '\t' and '\n' sequences.
+    # This is inferred from test_simple_tsv and test_tab_delimiters, which expect actual delimiters.
+    header = "cust_id\tname\tnotes"
+    if not validate_tsv_header(header, ["cust_id", "name", "notes"]):
+        raise ValueError("Invalid header")
+    lines = [header]
+    for p in profiles:
+        f_name = escape_tsv_field(p.name)
+        f_notes = escape_tsv_field(p.notes)
+        lines.append(f"{p.cust_id}\t{f_name}\t{f_notes}")
+    return "\n".join(lines)
+
+def count_records(payload: str) -> int:
+    lines = [l for l in payload.splitlines() if l.strip()]
+    return max(0, len(lines) - 1)
+=== END ===

@@ -1,0 +1,60 @@
+=== FILE: scope_checker.py ===
+"""Webhook scope dispatch checker."""
+from prefix_validator import is_topic_subscribed, clean_topic_segment
+from webhook import WebhookEvent
+
+def should_dispatch_webhook(subscribed_topic: str, event: WebhookEvent) -> bool:
+    """Determine if webhook event topic is permitted under the subscription filter.
+
+    A subscription to a root topic (e.g., "orders") matches events only if their
+    root topic exactly matches the subscription. It does not match similarly
+    named but distinct root topics (e.g., "orders_admin").
+
+    A subscription to a specific path (e.g., "orders::created") matches events
+    that are sub-topics of that path (e.g., "orders::created::item_added").
+    """
+    if "::" not in subscribed_topic:
+        # If the subscribed topic is a root topic, it must exactly match the event's root topic.
+        return subscribed_topic == event.topic_root()
+    else:
+        # If the subscribed topic specifies a path, use prefix matching.
+        return is_topic_subscribed(subscribed_topic, event.topic_path)
+
+def filter_dispatch_queue(subscribed_topic: str, events: list) -> list:
+    return [e for e in events if should_dispatch_webhook(subscribed_topic, e)]
+
+def batch_topic_summary(events: list) -> dict:
+    summary = {}
+    for e in events:
+        summary[e.topic_path] = summary.get(e.topic_path, 0) + 1
+    return summary
+=== END ===
+=== FILE: tests/test_scope.py ===
+from webhook import WebhookEvent
+from scope_checker import should_dispatch_webhook
+
+def test_nominal_topic():
+    evt = WebhookEvent("orders::created", "{'id': 1}")
+    assert should_dispatch_webhook("orders", evt) is True
+    assert should_dispatch_webhook("billing", evt) is False
+
+def test_channel_routing():
+    # Test case for EVT-918: Consumer subscribed to 'orders' topic should not receive 'orders_admin'.
+    orders_evt = WebhookEvent("orders::created", "{'id': 1}")
+    orders_admin_evt = WebhookEvent("orders_admin::processed", "{'id': 2, 'user': 'admin'}")
+    
+    # A consumer subscribed to 'orders' should receive 'orders::created'
+    assert should_dispatch_webhook("orders", orders_evt) is True
+    
+    # A consumer subscribed to 'orders' should NOT receive 'orders_admin::processed'
+    assert should_dispatch_webhook("orders", orders_admin_evt) is False
+
+    # A consumer subscribed to a specific path should match its sub-paths
+    specific_path_evt = WebhookEvent("orders::created::item_added", "{'item_id': 'abc'}")
+    assert should_dispatch_webhook("orders::created", specific_path_evt) is True
+    assert should_dispatch_webhook("orders::updated", specific_path_evt) is False
+
+    # Exact path match
+    assert should_dispatch_webhook("orders::created", orders_evt) is True
+    assert should_dispatch_webhook("orders_admin::processed", orders_admin_evt) is True
+=== END ===

@@ -1,0 +1,54 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    """
+    Calculate the p-th percentile of a list of samples using the nearest-rank method.
+
+    This method is consistent with the R-7 standard (NIST method) for percentile calculation.
+    It determines the rank 'n' such that n = ceil(P/100 * N), where P is the percentile
+    and N is the number of samples. The value at this rank (0-indexed) is returned.
+
+    Args:
+        samples: A list of numeric telemetry samples.
+        p: The desired percentile (0.0 to 100.0).
+
+    Returns:
+        The calculated percentile value.
+
+    Raises:
+        ValueError: If samples list is empty or p is outside the valid range [0, 100].
+    """
+    if not (0.0 <= p <= 100.0):
+        raise ValueError("Percentile 'p' must be between 0.0 and 100.0")
+
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values) # s is sorted samples
+
+    n = len(s)
+    if n == 0:
+        raise ValueError("Samples list cannot be empty for percentile calculation")
+
+    if p == 0.0:
+        return s[0]
+    if p == 100.0:
+        return s[n - 1]
+
+    # Calculate rank using the nearest-rank method (R-7 standard)
+    # k = ceil(P/100 * N)
+    # For 0-indexed list, the index is k-1
+    rank = math.ceil((p / 100.0) * n)
+    index = int(rank) - 1
+
+    # Ensure index is within bounds (should be handled by p=0 and p=100 checks, but good for robustness)
+    index = max(0, min(index, n - 1))
+
+    return s[index]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

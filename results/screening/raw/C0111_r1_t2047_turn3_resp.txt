@@ -1,0 +1,19 @@
+=== FILE: webhook_sender.py ===
+"""Webhook delivery payload construction."""
+from datetime import datetime, timezone
+from typing import Dict, Any
+from envelope_schema import WebhookEnvelope
+from signature_utils import generate_delivery_headers
+
+def build_webhook_payload(topic: str, data: Dict[str, Any], dt: datetime) -> WebhookEnvelope:
+    hdrs = generate_delivery_headers(topic)
+    # Incident INC-9103: Subscriber gateways expect milliseconds (3 digits) not microseconds (6 digits).
+    # Format the timestamp to include milliseconds, ensuring 3 decimal places.
+    # The original `%f` specifier produces microseconds (6 digits).
+    # We need to truncate microseconds to milliseconds and format to 3 digits.
+    ts = dt.strftime("%Y-%m-%dT%H:%M:%S") + f".{dt.microsecond // 1000:03d}Z"
+    env = WebhookEnvelope(topic=topic, body=data, sent_at=ts, headers=hdrs)
+    if not env.is_dispatched():
+        raise ValueError("Invalid envelope state")
+    return env
+=== END ===

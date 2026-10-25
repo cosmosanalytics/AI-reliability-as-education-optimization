@@ -1,0 +1,81 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values)
+    # The incident report specifies "nearest-rank house standard".
+    # This implies using a percentile definition that returns an actual sample
+    # from the sorted list, rather than interpolating between samples.
+    # A common "nearest rank" method calculates the rank index as
+    # ceil(p/100 * N) or round(p/100 * N + 0.5).
+    # The standard "nearest-rank" definition (Type 1 in NIST) is
+    # R = ceil(p/100 * N), then return S[R-1] (0-indexed).
+    # Since the failing test expects 40.0 for 50th percentile where 45.0 was returned,
+    # and 45.0 would be an interpolation of 40.0 and 50.0, it suggests that
+    # the expected value is one of the samples, likely the lower one in such a case.
+    # For example, if samples are [10, 20, 30, 40, 50, 60], N=6.
+    # 50th percentile: current code (Type 7) gives 35.0.
+    # Nearest rank (Type 1) for 50th percentile: R = ceil(0.5 * 6) = 3. S[3-1] = S[2] = 30.0.
+    # Another common nearest-rank method (often called "empirical distribution function" or Type 3)
+    # uses R = floor(p/100 * N + 0.5).
+    # For N=6, p=50: R = floor(0.5 * 6 + 0.5) = floor(3.5) = 3. S[3-1] = S[2] = 30.0.
+    #
+    # The traceback `assert 45.0 == 40.0` indicates that the original data `d1`
+    # likely had 40.0 and 50.0 as adjacent values around the 50th percentile.
+    # If `d1` were `[10, 20, 30, 40, 50, 60, 70, 80]`, N=8.
+    # 50th percentile:
+    # Current code (Type 7): idx = 0.5 * (8-1) = 3.5. low=3, high=4.
+    # s[3] = 40, s[4] = 50. Result: 40 + 0.5 * (50-40) = 45.0.
+    # Expected result: 40.0.
+    #
+    # This implies that when interpolation would occur between `s[k]` and `s[k+1]`,
+    # the "nearest-rank house standard" requires returning `s[k]`.
+    # This matches the definition of `idx = (p / 100.0) * N - 1` and taking `s[floor(idx)]`
+    # or similar, which for `p=50` and N=8 would select `s[3]`.
+    #
+    # Let's adjust the index calculation to align with a common "nearest-rank" standard
+    # that results in the lower of the two interpolated values when `idx` is not an integer.
+    # The "nearest-rank" definition often involves `k = ceil(p/100 * N)` and then taking `s[k-1]`.
+    # Or, to match the specific behavior of returning `40.0` when `45.0` (interpolation of `40.0` and `50.0`)
+    # was previously returned, we need an index that points to the lower value.
+    # This means `idx` should be calculated such that `floor(idx)` points to the desired element.
+    # A common method is `k = int(math.ceil(p / 100.0 * len(s)))`. Then return `s[max(0, k-1)]`.
+    # Let's test with `d1 = [10, 20, 30, 40, 50, 60, 70, 80]`, p=50. N=8.
+    # k = ceil(0.5 * 8) = 4. Return s[4-1] = s[3] = 40.0. This matches the expectation.
+    #
+    # Test with `d1 = [10.0, 20.0, 30.0]`, p=100. N=3.
+    # k = ceil(1.0 * 3) = 3. Return s[3-1] = s[2] = 30.0. This matches existing test.
+    #
+    # Test with `d1 = [10.0, 20.0, 30.0]`, p=50. N=3.
+    # k = ceil(0.5 * 3) = ceil(1.5) = 2. Return s[2-1] = s[1] = 20.0.
+    # Original code: idx = 0.5 * (3-1) = 1.0. low=1, high=1. Return s[1] = 20.0.
+    # This behavior is preserved for integer indices.
+
+    n = len(s)
+    if n == 0:
+        # validate_metric_samples already handles this, but defensive check
+        raise ValueError("Samples list cannot be empty")
+
+    # Calculate rank using the nearest-rank method: k = ceil(p/100 * N)
+    # The index in a 0-indexed list will be k-1.
+    # Ensure the index is within bounds [0, n-1].
+    rank_k = math.ceil((p / 100.0) * n)
+    # Ensure rank_k is at least 1, so index is at least 0.
+    # For p=0, rank_k would be 0, resulting in index -1. We should return the first element.
+    # For p=100, rank_k would be N, resulting in index N-1.
+    # Python list indexing handles negative indices differently, so clamp to 0.
+    index = max(0, int(rank_k) - 1)
+    # Also ensure index does not exceed n-1 for p values slightly above 100
+    # or floating point inaccuracies.
+    index = min(index, n - 1)
+
+    return s[index]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

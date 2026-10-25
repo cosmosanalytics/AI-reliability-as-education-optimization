@@ -1,0 +1,43 @@
+=== FILE: routing.py ===
+"""Tenant routing configuration aggregator."""
+import copy
+from typing import Dict, Any
+from models import RouteProfile
+from schema import validate_route_keys
+
+def merge_tenant_routing(base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge tenant overrides into base configuration.
+    Inputs must remain strictly immutable; the function must return a newly allocated deep copy.
+    """
+    merged = copy.deepcopy(base_config)
+    
+    for key, value in tenant_overrides.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            # If both base and override have a dict for this key, deep merge them recursively
+            merged[key] = merge_tenant_routing(merged[key], value)
+        else:
+            # Otherwise, override or add the value. Ensure deep copy for new values.
+            merged[key] = copy.deepcopy(value)
+            
+    return merged
+
+def build_route_profile(tenant_id: str, base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> RouteProfile:
+    cfg = merge_tenant_routing(base_config, tenant_overrides)
+    # The original implementation called validate_route_keys(cfg) here.
+    # The ticket mentions "Dynamic tenant routing update altered default network retry policies across multi-tenant worker nodes."
+    # and the failing test traceback is "FAILED tests/test_routing_cases.py::test_config_isolation - AssertionError: assert 999 == 20".
+    # This implies that the base_config should provide defaults, and overrides should merge into them,
+    # and that the final `cfg` might be missing required keys if the base doesn't provide them and overrides don't.
+    # The `validate_route_keys` function checks for existence of "retries" and "timeout".
+    # The `schema.py` provides `get_default_network_settings`.
+    # To ensure required keys are always present, the base should be initialized with defaults if not already present.
+    # However, the `build_route_profile` signature does not allow for injecting defaults directly here without modifying it.
+    # The immediate problem is the merge logic itself. The `validate_route_keys` call is part of existing behavior.
+    # We are fixing the merge, not the validation flow, unless the merge fix makes validation fail.
+    # Given the prompt is about fixing the outage related to "altered default network retry policies",
+    # the merge logic for nested dicts is the primary suspect.
+    # The `validate_route_keys` ensures the *final* config has the keys, which is correct.
+    # The fix to `merge_tenant_routing` ensures that the merge itself is deep and correct.
+    validate_route_keys(cfg) # Keep existing validation call
+    return RouteProfile(tenant_id=tenant_id, settings=cfg)
+=== END ===

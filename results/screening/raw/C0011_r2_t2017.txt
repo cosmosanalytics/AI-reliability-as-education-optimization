@@ -1,0 +1,82 @@
+=== FILE: guard.py ===
+"""API gateway authorization guard."""
+from policy import RoutePolicy
+from url_normalizer import clean_scope
+
+def _match_segments(policy_segments: list, request_segments: list) -> bool:
+    """Helper function to perform the actual segment matching."""
+    len_p = len(policy_segments)
+    len_r = len(request_segments)
+
+    # Use dynamic programming or backtracking for robust wildcard matching.
+    # dp[i][j] is True if policy_segments[:i] matches request_segments[:j]
+    dp = [[False] * (len_r + 1) for _ in range(len_p + 1)]
+
+    # Base case: empty policy and empty request match
+    dp[0][0] = True
+
+    # Handle policy starting with '**' (matches empty request prefix)
+    for i in range(1, len_p + 1):
+        if policy_segments[i-1] == "**":
+            dp[i][0] = dp[i-1][0]
+
+    for i in range(1, len_p + 1):
+        for j in range(1, len_r + 1):
+            policy_segment = policy_segments[i-1]
+            request_segment = request_segments[j-1]
+
+            if policy_segment == "**":
+                # '**' can match zero segments (dp[i-1][j]) or one or more segments (dp[i][j-1])
+                dp[i][j] = dp[i-1][j] or dp[i][j-1]
+            elif policy_segment == "*":
+                # '*' matches exactly one segment
+                dp[i][j] = dp[i-1][j-1]
+            else:
+                # Exact match
+                dp[i][j] = (policy_segment == request_segment) and dp[i-1][j-1]
+    
+    return dp[len_p][len_r]
+
+
+def is_scope_permitted(policy: RoutePolicy, request_scope: str) -> bool:
+    """Check if request_scope is authorized under policy.allowed_pattern.
+    Access control scopes must use the double-colon hierarchy tenant::department::service::action.
+    Sibling paths must be checked against '::' segment boundaries.
+    The single asterisk wildcard '*' matches exactly one segment; the double asterisk '**' matches arbitrary multi-segment prefixes.
+    """
+    clean_req = clean_scope(request_scope)
+
+    # Handle empty string cases
+    # An empty pattern "" should only match an empty scope "".
+    # A non-empty pattern should not match an empty scope, unless it's "**"
+    # An empty scope "" should not match a non-empty pattern, unless it's "**"
+
+    if not policy.allowed_pattern and not clean_req:
+        return True
+    if not policy.allowed_pattern and clean_req:
+        return False # Empty pattern only matches empty scope
+    if policy.allowed_pattern and not clean_req:
+        # Only "**" pattern can match an empty request scope
+        return policy.allowed_pattern == "**"
+
+    policy_segments = policy.allowed_pattern.split('::')
+    request_segments = clean_req.split('::')
+
+    # Special handling for "::" split on empty string: split("::") gives ['']
+    # We want empty string to be treated as 0 segments for matching.
+    if len(policy_segments) == 1 and policy_segments[0] == '':
+        policy_segments = []
+    if len(request_segments) == 1 and request_segments[0] == '':
+        request_segments = []
+
+    return _match_segments(policy_segments, request_segments)
+
+def evaluate_request(policies: list, role: str, scope: str) -> bool:
+    for p in policies:
+        if p.matches_role(role) and is_scope_permitted(p, scope):
+            return True
+    return False
+
+def count_permitted_scopes(policy: RoutePolicy, scopes: list) -> int:
+    return sum(1 for s in scopes if is_scope_permitted(policy, s))
+=== END ===

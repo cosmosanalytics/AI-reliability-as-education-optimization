@@ -1,0 +1,30 @@
+=== FILE: telemetry_codec.py ===
+"""Timestamp serialization codec for telemetry records."""
+from datetime import datetime, timezone
+
+def encode_iso_timestamp(dt: datetime) -> str:
+    """Encode timestamp into standard format (ISO 8601 with milliseconds and 'Z' for UTC)."""
+    # Use isoformat with milliseconds precision
+    # This will produce 'YYYY-MM-DDTHH:MM:SS.mmm+HH:MM' or 'YYYY-MM-DDTHH:MM:SS.mmm' for naive datetimes.
+    iso_str = dt.isoformat(timespec='milliseconds')
+
+    # If the datetime object has UTC timezone, replace the offset with 'Z'
+    if dt.tzinfo == timezone.utc:
+        # isoformat for UTC datetime objects typically ends with '+00:00' or '-00:00'
+        # or 'Z' depending on Python version/context.
+        # We ensure it ends with 'Z'.
+        if iso_str.endswith('+00:00'):
+            return iso_str[:-6] + 'Z'
+        elif iso_str.endswith('-00:00'): # Handle potential -00:00 for UTC
+            return iso_str[:-6] + 'Z'
+        elif iso_str.endswith('Z'): # Already in desired format
+            return iso_str
+        # If it's UTC but doesn't have an offset (e.g., naive then assigned UTC tzinfo, which is not the case here),
+        # or if it's already in the desired 'Z' format from isoformat, just return it.
+        # For the specific test case (datetime.utc), isoformat usually yields '+00:00'.
+        return iso_str # Fallback in case of unexpected suffix, though unlikely for timezone.utc
+    return iso_str
+
+def validate_timestamp_range(dt: datetime) -> bool:
+    return dt.year >= 2020
+=== END ===

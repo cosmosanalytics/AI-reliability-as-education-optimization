@@ -1,0 +1,123 @@
+=== FILE: rpc_calc.py ===
+"""Microservice RPC duration percentile calculator."""
+import math
+from typing import List, Dict, Any
+from rpc_data import RpcSeries, RpcSample
+from rpc_formatter import format_rpc_stat
+
+def compute_rpc_percentile(series: RpcSeries, p: float) -> float:
+    """Calculates SLA percentile for RPC responses."""
+    vals = series.durations()
+    if not vals:
+        raise ValueError("No RPC samples available")
+    s = sorted(vals)
+    n = len(s)
+    
+    # The index calculation for percentiles can vary.
+    # The current formula `int(round((p / 100.0) * (n - 1)))`
+    # corresponds to one of the common definitions (e.g., NIST method, or
+    # TYPE 7 in R and NumPy's default for `percentile` interpolation='linear'
+    # when n is large enough, but rounded to nearest rank).
+    #
+    # The issue's failing test `assert 20.0 == 30.0` implies that the
+    # current calculation might be off by one rank for certain data distributions
+    # or specific percentile definitions.
+    #
+    # A common alternative for "nearest rank" or "discrete" percentiles,
+    # often used in simpler implementations or for small N, is to use
+    # `math.ceil((p / 100.0) * n) - 1` for the 0-indexed position.
+    # This aligns more closely with expecting the k-th smallest value
+    # for the p-th percentile when p*n/100 is rounded up.
+    #
+    # Let's consider a series `[10, 20, 30, 40, 50]` (n=5).
+    # For p=50:
+    # Current: `round(0.5 * (5-1)) = round(2) = 2`. `s[2]` is `30`.
+    # Proposed: `ceil(0.5 * 5) - 1 = ceil(2.5) - 1 = 3 - 1 = 2`. `s[2]` is `30`.
+    #
+    # For p=90:
+    # Current: `round(0.9 * (5-1)) = round(3.6) = 4`. `s[4]` is `50`.
+    # Proposed: `ceil(0.9 * 5) - 1 = ceil(4.5) - 1 = 5 - 1 = 4`. `s[4]` is `50`.
+    #
+    # The issue suggests that for a specific set of values, 20.0 was expected but 30.0 was returned.
+    # This implies that the calculated index was one position too high.
+    #
+    # Let's consider `n=3` and `s=[10, 20, 30]`.
+    # p=50:
+    # Current: `round(0.5 * (3-1)) = round(1) = 1`. `s[1]` is `20`.
+    # Proposed: `ceil(0.5 * 3) - 1 = ceil(1.5) - 1 = 2 - 1 = 1`. `s[1]` is `20`.
+    #
+    # p=90:
+    # Current: `round(0.9 * (3-1)) = round(1.8) = 2`. `s[2]` is `30`.
+    # Proposed: `ceil(0.9 * 3) - 1 = ceil(2.7) - 1 = 3 - 1 = 2`. `s[2]` is `30`.
+    #
+    # The issue might stem from the specific rounding behavior or the definition of the percentile.
+    # The most commonly accepted definition for percentile computation (e.g., NumPy's default `interpolation='linear'`)
+    # calculates a rank `R = (p / 100.0) * (n - 1)`. If `R` is an integer, it's `s[R]`.
+    # If `R` is not an integer, it interpolates between `s[floor(R)]` and `s[ceil(R)]`.
+    # However, the current code rounds `R` to the nearest integer.
+    #
+    # If the goal is a "discrete" percentile (picking an actual data point), a common approach
+    # is the "nearest rank" method which can be implemented as `math.ceil((p / 100.0) * n) - 1`
+    # for 0-indexed arrays, or `math.floor((p / 100.0) * n)` for 1-indexed.
+    # The `round((p / 100.0) * (n - 1))` formula also targets a discrete point.
+    #
+    # Let's consider the edge case `n=1`, `s=[15]`, `p=90`.
+    # Current: `round(0.9 * (1-1)) = round(0) = 0`. `s[0]` is `15`. This is correct.
+    # Proposed `ceil` formula: `ceil(0.9 * 1) - 1 = ceil(0.9) - 1 = 1 - 1 = 0`. `s[0]` is `15`. This is also correct.
+    #
+    # The issue `assert 20.0 == 30.0` (expected 20, got 30) suggests the index was too high.
+    # This could happen if `round` biases upwards in a specific case, or if `n-1` is not the correct factor.
+    # A robust and widely used definition that avoids such off-by-one issues for discrete values
+    # when the percentile falls exactly on a data point (or between them) is to use
+    # `(n * p / 100.0) - 1` as the base index, and then take the `floor` or `ceil` depending on exact definition.
+    #
+    # Python's `statistics.quantiles` and `numpy.percentile` use more sophisticated interpolation.
+    # For a simple discrete percentile, often `idx = math.ceil(p / 100.0 * n) - 1` is used.
+    # Let's re-evaluate the original formula against a common pitfall.
+    # If p=0, `idx = round(0) = 0`. Correct.
+    # If p=100, `idx = round(n-1) = n-1`. Correct.
+    #
+    # The problem might be in the behavior of `round` for `X.5` values. Python 3's `round` rounds to the nearest
+    # even integer for `X.5`. E.g., `round(2.5)` is `2`, `round(3.5)` is `4`.
+    #
+    # Let's test `round(X.5)` for `n-1` scenarios.
+    # If `n=4`, `n-1=3`.
+    # `p=50`: `round(0.5 * 3) = round(1.5) = 2`. `s[2]`.
+    # If `s = [10, 20, 30, 40]`, `s[2]` is `30`.
+    # For `n=4`, the 50th percentile (median) is usually `(20+30)/2 = 25`.
+    # If we are looking for a discrete value, `20` or `30` could be expected.
+    # If `20` was expected and `30` was returned for `p=50`, then `idx` should have been `1` instead of `2`.
+    # This means `round(1.5)` should have been `1`.
+    #
+    # A common alternative for `idx` is `math.ceil(p / 100.0 * n) - 1`.
+    # For `n=4, p=50`: `ceil(0.5 * 4) - 1 = ceil(2) - 1 = 2 - 1 = 1`. `s[1]` is `20`.
+    # This aligns with the expected `20.0` if the test implies this definition for `p=50`.
+    #
+    # Let's adopt this more robust index calculation:
+    # For `n=1`, `s=[15]`, `p=90`: `ceil(0.9 * 1) - 1 = 0`. `s[0]` is `15`. Correct.
+    # For `n=2`, `s=[20, 20]`, `p=50`: `ceil(0.5 * 2) - 1 = 1`. `s[1]` is `20`. Correct.
+    #
+    # This change seems to address the potential off-by-one issues that could lead to `20.0 == 30.0`
+    # by shifting the index for certain inputs.
+    # The `round` function's "round half to even" behavior can sometimes be unexpected for percentile calculations.
+    # Using `math.ceil` combined with `n` (not `n-1`) is a more common approach for discrete percentiles.
+
+    # Calculate the rank (1-indexed)
+    rank = (p / 100.0) * n
+    # Convert to 0-indexed position by taking the ceiling and subtracting 1
+    # This method is often referred to as the "nearest rank" method, where
+    # the rank is rounded up to the nearest integer.
+    idx = math.ceil(rank) - 1
+
+    # Ensure the index is within valid bounds [0, n-1]
+    # For p=0, rank=0, idx=-1. This should be 0.
+    # For p=100, rank=n, idx=n-1. Correct.
+    idx = max(0, idx)
+    idx = min(n - 1, idx) # Ensure it doesn't exceed the last element
+
+    return float(s[idx])
+
+def build_rpc_report(service_name: str, series: RpcSeries, p: float) -> Dict[str, Any]:
+    val = compute_rpc_percentile(series, p)
+    return format_rpc_stat(service_name, series.count(), val)
+=== END ===

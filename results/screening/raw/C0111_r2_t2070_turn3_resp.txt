@@ -1,0 +1,41 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values.
+
+    Uses the nearest-rank method (NIST method) for percentile calculation,
+    which is commonly used for SLA monitoring.
+    """
+    if not values:
+        raise ValueError("Empty values")
+    s = sorted(values)
+    n = len(s)
+    # The problem description and failing test suggest that the definition of
+    # percentile used for SLA calculation is different from the linear
+    # interpolation between closest ranks (R-7) method.
+    # A common alternative for SLA is the nearest-rank method (NIST method),
+    # where the index is 1-based and rounded up.
+    # This translates to using (p / 100.0) * n, and then taking the value
+    # at the ceiling of this index (adjusted for 0-based indexing).
+    if p == 0:
+        return s[0]
+    if p == 100:
+        return s[n - 1]
+
+    # Calculate 1-based rank
+    rank = math.ceil((p / 100.0) * n)
+
+    # Adjust to 0-based index
+    idx = int(rank) - 1
+
+    # Ensure index is within bounds (should be handled by rank calculation for p in [0, 100])
+    if idx < 0:
+        idx = 0
+    if idx >= n:
+        idx = n - 1
+
+    return float(s[idx])
+=== END ===

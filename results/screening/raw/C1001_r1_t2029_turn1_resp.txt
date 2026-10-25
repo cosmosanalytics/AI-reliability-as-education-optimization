@@ -1,0 +1,19 @@
+=== FILE: auth_service.py ===
+"""Authentication and permission verification service."""
+from errors import ServiceError
+from auth_context import AuthContext
+
+def check_permission(context: AuthContext, required_scope: str) -> None:
+    """Check if caller possesses the required scope.
+    
+    If required scope is missing, raise ServiceError(code='ERR_AUTH_SCOPE_DENIED', message='Access scope denied').
+    """
+    if not context.has_scope(required_scope):
+        raise ServiceError(code='ERR_AUTH_SCOPE_DENIED', message='Access scope denied')
+    # If the scope is present, the function implicitly returns None,
+    # acting as a guard.
+
+def execute_user_action(context: AuthContext, action_scope: str) -> str:
+    check_permission(context, action_scope)
+    return "SUCCESS"
+=== END ===

@@ -1,0 +1,34 @@
+=== FILE: pricing.py ===
+"""Order pricing calculation with itemized taxes."""
+import math
+from typing import List, Tuple, Optional
+from models import LineItem, OrderSummary
+from tax_engine import calculate_vat, get_rate_for_jurisdiction
+
+def calculate_order_total(items: List[Tuple[int, int]], vat_rate: float = 0.20, order_id: str = "ORD-001") -> OrderSummary:
+    """Calculate order total including tax.
+    items: list of (price_cents, quantity).
+    Returns OrderSummary.
+    Tax calculation must use half-up rounding (ROUND_HALF_UP: ties broken towards positive infinity) on exact half-cents.
+    """
+    line_objs = [LineItem(sku=f"SKU-{i+1}", price_cents=p, quantity=q) for i, (p, q) in enumerate(items)]
+    
+    total_tax_cents = 0
+    total_net_cents = 0
+    for item in line_objs:
+        item_subtotal = item.subtotal()
+        total_net_cents += item_subtotal
+        
+        # Calculate tax for each item's subtotal with half-up rounding.
+        # The docstring specifies "half-up rounding (ROUND_HALF_UP: ties broken towards positive infinity)".
+        # For any number 'x', math.floor(x + 0.5) correctly implements this rounding rule,
+        # handling both positive and negative values where ties (e.g., 10.5, -10.5) are rounded
+        # towards positive infinity (11, -10 respectively).
+        tax_float = item_subtotal * vat_rate
+        rounded_tax = math.floor(tax_float + 0.5)
+        total_tax_cents += int(rounded_tax)
+
+    gross = total_net_cents + total_tax_cents
+    
+    return OrderSummary(order_id=order_id, items=line_objs, net_cents=total_net_cents, tax_cents=total_tax_cents, gross_cents=gross)
+=== END ===

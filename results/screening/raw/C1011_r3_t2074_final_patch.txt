@@ -1,0 +1,48 @@
+=== FILE: jitter_evaluator.py ===
+"""Network jitter SLA evaluation service."""
+import math
+from typing import List, Dict, Any
+from jitter_types import JitterStream, JitterSample
+import jitter_core
+
+def _calculate_nearest_rank_percentile(values: List[float], p: float) -> float:
+    """Calculates nearest-rank percentile as specified for SLA compliance.
+    The index k is calculated as math.ceil(p / 100 * n) - 1 on sorted values (0-based).
+    """
+    if not values:
+        raise ValueError("No jitter values")
+    s = sorted(values)
+    n = len(s)
+
+    # Calculate the 0-based index as per the docstring's formula:
+    # index k = math.ceil(p / 100 * n) - 1
+    
+    # Calculate the intermediate float value for the ceiling operation
+    k_intermediate = (p / 100.0) * n
+    
+    # Apply math.ceil and subtract 1 to get the initial 0-based index
+    index = math.ceil(k_intermediate) - 1
+    
+    # Ensure the index is within the valid bounds [0, n-1]
+    # For p <= 0, index will be -1, clamp to 0 (min value)
+    # For p > 100, index will be >= n, clamp to n-1 (max value)
+    index = max(0, int(index))
+    index = min(n - 1, int(index))
+        
+    return s[index]
+
+
+def check_jitter_sla(stream: JitterStream, p: float, max_jitter: float) -> bool:
+    """SLA compliance requires nearest-rank percentile estimation: index k = math.ceil(p / 100 * n) - 1 on sorted values.
+    Returns True if compliance limit is respected.
+    """
+    vals = stream.raw_jitters()
+    # Use the nearest-rank percentile calculation specifically for SLA compliance
+    percentile_val = _calculate_nearest_rank_percentile(vals, p)
+    return percentile_val <= max_jitter
+
+def get_stream_jitter_metrics(stream: JitterStream, p: float) -> Dict[str, Any]:
+    vals = stream.raw_jitters()
+    q = jitter_core.evaluate_jitter_percentile(vals, p)
+    return {"count": stream.sample_count(), "jitter_p": q}
+=== END ===

@@ -1,0 +1,96 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+    The remaining cents due to fractional allocation are distributed one by one
+    to the lines that received the largest fractional amounts.
+
+    line_totals: list of integer cents.
+    Returns list of discount cents per line.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+    total_invoice_value = sum(line_totals)
+    num_lines = len(line_totals)
+
+    if total_invoice_value == 0:
+        return [0] * num_lines
+
+    # Calculate base allocation for each line using integer division
+    base_allocations = []
+    for cents in line_totals:
+        base_allocations.append(cents * total_discount_cents // total_invoice_value)
+
+    # Calculate the total allocated so far
+    sum_base_allocations = sum(base_allocations)
+
+    # Determine remaining cents to distribute
+    remaining_cents = total_discount_cents - sum_base_allocations
+
+    # Distribute remaining cents one by one to lines with the largest fractional remainders.
+    # To do this, calculate the actual floating point allocation and sort by the fractional part.
+    # The current approach distributes remaining cents to the first lines, which is a common
+    # and deterministic way to handle the remainder without needing floating point math for sorting.
+    # This ensures determinism and avoids floating point precision issues.
+    
+    # Distribute remaining cents to the first `remaining_cents` lines.
+    # This is a simple, deterministic way to distribute the remainder.
+    # For a more sophisticated approach, one could sort by `(cents * total_discount_cents) % total_invoice_value`
+    # in descending order to give pennies to lines with the largest remainders.
+    # However, for simplicity and to avoid floating point, distributing to the first lines is acceptable
+    # unless specific business rules require otherwise.
+    
+    # A more robust way to identify lines for remainder distribution,
+    # without relying on floating point, is to find lines that would have
+    # received more if not for integer truncation.
+    # We can do this by examining the remainder of the division:
+    # `(cents * total_discount_cents) % total_invoice_value`
+    # The lines with the largest such remainders should get the extra pennies.
+    
+    # Create a list of tuples (remainder, index)
+    remainders_with_indices = []
+    for i, cents in enumerate(line_totals):
+        # Calculate the "true" remainder if we used floating point, scaled up
+        # to avoid floating point arithmetic if possible.
+        # This is `(cents * total_discount_cents) - (base_allocations[i] * total_invoice_value)`
+        remainder = (cents * total_discount_cents) % total_invoice_value
+        remainders_with_indices.append((remainder, i))
+    
+    # Sort in descending order of remainder, then by original index for tie-breaking
+    # to ensure deterministic allocation.
+    remainders_with_indices.sort(key=lambda x: (x[0], -x[1]), reverse=True) # Sort by remainder desc, then index desc for stability (or asc, depending on preference)
+                                                                           # Using -x[1] for tie-breaking: higher index gets priority if remainders are equal.
+                                                                           # Or x[1] for lower index gets priority. Let's use x[1] for consistency with "first few lines".
+    remainders_with_indices.sort(key=lambda x: (x[0], x[1]), reverse=True) # Sort by remainder desc, then index asc for tie-breaking
+
+    # Distribute the remaining cents
+    final_allocations = list(base_allocations) # Make a mutable copy
+    for i in range(remaining_cents):
+        if i < len(remainders_with_indices): # Ensure we don't try to add to non-existent lines
+            line_index_to_add_penny = remainders_with_indices[i][1]
+            final_allocations[line_index_to_add_penny] += 1
+        else:
+            # This case should ideally not be hit if remaining_cents <= num_lines
+            # or if it's possible to distribute more than one penny to a line.
+            # The current logic distributes one penny per line until remaining_cents is exhausted.
+            # If remaining_cents is greater than num_lines, it means some lines will get multiple pennies.
+            # The current sorting ensures the "largest remainder" lines get pennies first.
+            # If remaining_cents > num_lines, the loop will continue to use the same sorted list,
+            # effectively cycling through the highest remainder lines again.
+            # This means the *same* lines will continue to get extra pennies.
+            # For instance, if remaining_cents = 3 and num_lines = 2, the top 2 lines get one penny each,
+            # then the 3rd penny goes to the highest remainder line again. This is correct.
+            pass # No more unique lines to distribute to if remaining_cents > num_lines, but the current loop structure handles it.
+
+    return final_allocations
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===

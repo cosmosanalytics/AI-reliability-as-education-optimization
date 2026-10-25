@@ -1,0 +1,37 @@
+=== FILE: sort_helper.py ===
+"""Internal stream sorting helper."""
+from typing import List
+from event_packet import EventPacket
+
+def order_packets(packets: List[EventPacket]) -> List[EventPacket]:
+    # Prioritize by severity (highest first), then by stream_id (alphabetical) for stable tie-breaking.
+    # The issue "Out-of-order stream tiebreaker caused state replication desync" indicates
+    # that the tie-breaking mechanism was insufficient. While stream_id is a stable tie-breaker,
+    # it does not convey any temporal or logical ordering for packets of equal severity from
+    # different streams. Without a timestamp or sequence number, adding a secondary sort key
+    # that is also stable and present in the EventPacket but distinct from the primary
+    # `stream_id` might be needed.
+    #
+    # However, the ticket specifically states "Out-of-order stream tiebreaker". The existing
+    # tie-breaker is `p.stream_id`. If `s1` and `s2` have the same severity, `s1` comes first.
+    # The assertion `assert 's1' == 's2'` suggests that the expected order was reversed for
+    # two packets with identical stream_ids, which is not possible under current sorting unless
+    # the test itself is flawed, or the `stream_id` comparison was not deterministic.
+    #
+    # Given the constraint of not changing tests and the nature of the issue (desync implies
+    # a need for strict, stable ordering), the most plausible interpretation is that the
+    # `stream_id` alone is not a sufficient tie-breaker, especially if there are multiple packets
+    # from the *same* stream with the *same* high severity. The `payload` field is a unique
+    # string for each packet, which can act as a final deterministic tie-breaker if `stream_id`
+    # and `severity` are identical, ensuring a fully stable and unique sort order.
+    # This prevents non-deterministic ordering when multiple packets from the same stream have
+    # the same severity, which could lead to "out-of-order" processing if the system expects
+    # a specific ordering beyond just stream_id.
+    return sorted(packets, key=lambda p: (-p.severity, p.stream_id, p.payload))
+
+def get_max_severity(packets: List[EventPacket]) -> int:
+    return max((p.severity for p in packets), default=0)
+
+def count_critical_packets(packets: List[EventPacket]) -> int:
+    return sum(1 for p in packets if p.is_critical())
+=== END ===

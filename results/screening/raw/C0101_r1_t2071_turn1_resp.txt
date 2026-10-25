@@ -1,0 +1,74 @@
+=== FILE: rpc_calc.py ===
+"""Microservice RPC duration percentile calculator."""
+import math
+from typing import List, Dict, Any
+from rpc_data import RpcSeries, RpcSample
+from rpc_formatter import format_rpc_stat
+
+def compute_rpc_percentile(series: RpcSeries, p: float) -> float:
+    """Calculates SLA percentile for RPC responses."""
+    vals = series.durations()
+    if not vals:
+        raise ValueError("No RPC samples available")
+    s = sorted(vals)
+    n = len(s)
+    # The common definition for percentile index (nearest rank method, 0-indexed)
+    # is (P/100) * N - 1, then rounded or floored/ceiled.
+    # The current formula `(p / 100.0) * (n - 1)` is sometimes used for inclusive quantiles,
+    # but can lead to off-by-one errors for certain datasets and percentiles.
+    # A robust and widely accepted method for percentile calculation (e.g., NumPy's
+    # 'linear' interpolation or similar to `scipy.stats.percentileofscore` when
+    # data points are distinct) implies an index based on `p * N`.
+    # For a simple nearest-rank approach, using `(p / 100.0) * n` and
+    # adjusting for 0-indexing and rounding is more consistent with expectations
+    # for common statistical percentiles, especially for the 0th and 100th percentiles.
+    # If P=0, index should be 0. If P=100, index should be N-1.
+    # `max(0, min(n - 1, int(math.ceil((p / 100.0) * n)) - 1))`
+    # is a common approach that ensures 0th percentile is the min and 100th is the max.
+    # However, the problem statement implies a direct lookup from sorted values,
+    # suggesting a nearest-rank method. The original formula `(p / 100.0) * (n - 1)`
+    # is correct for certain interpretations of quantiles (e.g., linear interpolation
+    # of the ECDF), but for discrete values, `(p / 100.0) * n` is more intuitive
+    # for the "k-th element" interpretation.
+    #
+    # The issue states "inconsistent RPC duration percentiles" and a traceback
+    # `assert 20.0 == 30.0`. This suggests that for a given series, the value at
+    # `idx` was 20.0 but 30.0 was expected. This typically means `idx` was off by one.
+    #
+    # Let's consider the definition used by many statistical packages for the
+    # "nearest rank" method: the smallest observation greater than or equal to
+    # the p-th percentile is returned. This usually implies
+    # `index = ceil(p * N / 100) - 1` (0-indexed).
+    #
+    # Example: [10, 20, 30, 40], N=4
+    # p=25: ceil(0.25 * 4) - 1 = ceil(1) - 1 = 0. s[0]=10.
+    # p=50: ceil(0.50 * 4) - 1 = ceil(2) - 1 = 1. s[1]=20.
+    # p=75: ceil(0.75 * 4) - 1 = ceil(3) - 1 = 2. s[2]=30.
+    # p=100: ceil(1.00 * 4) - 1 = ceil(4) - 1 = 3. s[3]=40.
+    #
+    # The original formula `int(round((p / 100.0) * (n - 1)))` for N=4:
+    # p=25: int(round(0.25 * 3)) = int(round(0.75)) = 1. s[1]=20. (expected 10)
+    # p=50: int(round(0.50 * 3)) = int(round(1.5)) = 2. s[2]=30. (expected 20)
+    # p=75: int(round(0.75 * 3)) = int(round(2.25)) = 2. s[2]=30. (expected 30)
+    # p=100: int(round(1.00 * 3)) = int(round(3)) = 3. s[3]=40. (expected 40)
+    #
+    # The `(N-1)` factor can cause the index to be shifted, especially for smaller N.
+    # The `ceil((p / 100.0) * n) - 1` approach is more robust for "nearest rank"
+    # and ensures that the 0th percentile is the minimum and the 100th percentile
+    # is the maximum, without needing `max(0, min(n-1, ...))` if p is within [0, 100].
+    #
+    # To fix the "inconsistent" behavior, we switch to this widely accepted method
+    # for discrete percentiles.
+    
+    # Calculate the 1-based rank (r)
+    r = (p / 100.0) * n
+    # Convert to 0-based index by ceiling r and subtracting 1
+    # Ensure index is within valid bounds [0, n-1]
+    idx = max(0, min(n - 1, math.ceil(r) - 1))
+
+    return float(s[idx])
+
+def build_rpc_report(service_name: str, series: RpcSeries, p: float) -> Dict[str, Any]:
+    val = compute_rpc_percentile(series, p)
+    return format_rpc_stat(service_name, series.count(), val)
+=== END ===

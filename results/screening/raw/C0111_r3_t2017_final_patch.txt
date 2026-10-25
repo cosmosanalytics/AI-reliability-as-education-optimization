@@ -1,0 +1,76 @@
+=== FILE: guard.py ===
+"""API gateway authorization guard."""
+from policy import RoutePolicy
+from url_normalizer import clean_scope
+
+def is_scope_permitted(policy: RoutePolicy, request_scope: str) -> bool:
+    """Check if request_scope is authorized under policy.allowed_pattern.
+    Access control scopes must use the double-colon hierarchy tenant::department::service::action.
+    Sibling paths must be checked against '::' segment boundaries.
+    The single asterisk wildcard '*' matches exactly one segment; the double asterisk '**' matches arbitrary multi-segment prefixes.
+    """
+    clean_req = clean_scope(request_scope)
+    allowed_pattern = policy.allowed_pattern
+
+    if not clean_req:
+        # An empty request scope cannot be permitted unless the pattern itself is empty or just "**".
+        # An empty pattern is not explicitly handled but would result in empty segments.
+        # Given the examples, patterns like "corp::billing::*" imply non-empty segments.
+        # Let's assume an empty request scope never matches.
+        return False
+
+    pattern_segments = allowed_pattern.split('::')
+    request_segments = clean_req.split('::')
+
+    p_idx = 0
+    r_idx = 0
+
+    while p_idx < len(pattern_segments) and r_idx < len(request_segments):
+        p_seg = pattern_segments[p_idx]
+        r_seg = request_segments[r_idx]
+
+        if p_seg == '**':
+            # If '**' is the last segment in the pattern, it matches any remaining request segments.
+            if p_idx == len(pattern_segments) - 1:
+                return True
+            else:
+                # If '**' is in the middle of the pattern, it matches zero or more segments.
+                # We need to find the next literal segment from the pattern in the request.
+                next_p_seg = pattern_segments[p_idx + 1]
+                found_next = False
+                for i in range(r_idx, len(request_segments)):
+                    if request_segments[i] == next_p_seg:
+                        # Found a potential match for the segment after '**'.
+                        # Advance request index to this point, and pattern index past '**' and the matched segment.
+                        r_idx = i + 1
+                        p_idx += 2 # Skip '**' and the segment it matched to.
+                        found_next = True
+                        break
+                if not found_next:
+                    return False # Next pattern segment after '**' not found in request.
+        elif p_seg == '*':
+            # '*' matches exactly one segment.
+            # The request segment must exist (which it does if r_idx < len(request_segments))
+            # and not be empty (which split('::') ensures if the original string is valid).
+            p_idx += 1
+            r_idx += 1
+        elif p_seg == r_seg:
+            # Exact segment match
+            p_idx += 1
+            r_idx += 1
+        else:
+            # Mismatch, and not a wildcard.
+            return False
+
+    # A match is successful only if both pattern and request segments are fully consumed.
+    return p_idx == len(pattern_segments) and r_idx == len(request_segments)
+
+def evaluate_request(policies: list, role: str, scope: str) -> bool:
+    for p in policies:
+        if p.matches_role(role) and is_scope_permitted(p, scope):
+            return True
+    return False
+
+def count_permitted_scopes(policy: RoutePolicy, scopes: list) -> int:
+    return sum(1 for s in scopes if is_scope_permitted(policy, s))
+=== END ===

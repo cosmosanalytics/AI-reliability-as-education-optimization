@@ -1,0 +1,50 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values.
+
+    This implementation uses the Nearest Rank method (or method R-1 in NIST
+    standardization), which finds the smallest value in the dataset that is
+    greater than or equal to the p-th percentile.
+
+    For example, for values [10, 20, 30, 40, 50]:
+    - 50th percentile (p=50) would be 30.0
+    - 90th percentile (p=90) would be 50.0 (if index rounds up to 5)
+    - 90th percentile (p=90) would be 40.0 (if index is 4)
+    """
+    if not values:
+        raise ValueError("Empty values")
+    s = sorted(values)
+    n = len(s)
+    if p < 0 or p > 100:
+        raise ValueError("Percentile must be between 0 and 100 inclusive")
+
+    # The problem description and failing test output (assert 45.0 == 40.0)
+    # strongly suggest that the previous interpolation method was not desired,
+    # and a simpler, discrete percentile calculation is expected.
+    # The 'Nearest Rank' method (equivalent to numpy.percentile(..., interpolation='lower')
+    # for p > 0 and p <= 100) or a similar discrete method is a common
+    # alternative when dealing with SLA monitoring where exact data points
+    # rather than interpolated values are often preferred for thresholds.
+    # Given the failure `assert 45.0 == 40.0`, if the input was, for example,
+    # [10, 20, 30, 40, 50] and p=80, the previous method would yield 40.0,
+    # but if p=90, it would yield 46.0.
+    # The most common interpretation for a discrete percentile when 40.0 is
+    # expected instead of 45.0 for a value within the sorted list is that
+    # the index should be rounded up or down to an existing data point,
+    # rather than interpolated.
+    # A common formula for the 1-indexed rank 'r' is ceil(p/100 * n).
+    # If p=0, it should return the minimum value.
+    if p == 0:
+        return s[0]
+    # Calculate 1-indexed rank
+    rank = math.ceil((p / 100.0) * n)
+    # Convert to 0-indexed and return the value
+    # rank is 1-indexed, so we subtract 1 for 0-indexed list access.
+    # The rank will be at least 1 (for p > 0) and at most n.
+    # So rank - 1 will be between 0 and n-1, inclusive.
+    return float(s[int(rank) - 1])
+=== END ===

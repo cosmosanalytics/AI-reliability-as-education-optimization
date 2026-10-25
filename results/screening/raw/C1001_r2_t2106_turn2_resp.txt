@@ -1,0 +1,59 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    """
+    Calculate the p-th percentile of a list of samples using the nearest-rank method.
+
+    The nearest-rank method calculates the rank `r = ceil(p/100 * N)` for a list
+    of N samples, and returns the sample at that rank (1-indexed).
+    For 0-indexed lists, this corresponds to `samples[r-1]`.
+
+    Args:
+        samples: A list of numeric telemetry samples. Must not be empty.
+        p: The percentile to calculate, must be between 0 and 100, inclusive.
+
+    Returns:
+        The calculated percentile value.
+
+    Raises:
+        ValueError: If samples list is empty or p is outside the [0, 100] range.
+    """
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values) # This call handles empty list and sorts.
+    n = len(s)
+
+    if not (0 <= p <= 100):
+        raise ValueError("Percentile must be between 0 and 100, inclusive.")
+
+    # Special handling for 0th and 100th percentiles to match common conventions
+    # and avoid potential edge cases with ceil(0) or index calculations.
+    if p == 0:
+        return s[0]
+    if p == 100:
+        return s[n - 1]
+
+    # Calculate the rank using the nearest-rank method: r = ceil(p/100 * N)
+    # Then convert to 0-indexed position: index = r - 1
+    # Note: p/100.0 * n will be 0 when p=0, leading to ceil(0)=0.
+    # The explicit p=0 check handles this, ensuring index is not -1.
+    rank_0_indexed = math.ceil(p / 100.0 * n) - 1
+
+    # The calculated rank_0_indexed should naturally be within [0, n-1] for p in (0, 100).
+    # For example, if N=1, p=1, ceil(0.01*1)-1 = 0.
+    # If N=1, p=99, ceil(0.99*1)-1 = 0.
+    # The min/max clamp is a safeguard, but for p in (0, 100), rank_0_indexed will be >=0 and <n.
+    # Smallest possible rank for p > 0 is 1 (for N=1, p=0.001 -> ceil(0.00001) = 1). So 0-indexed is 0.
+    # Largest possible rank for p < 100 is N (e.g., N=5, p=99.9 -> ceil(4.995) = 5). So 0-indexed is N-1.
+    final_index = max(0, min(n - 1, int(rank_0_indexed)))
+
+    return s[final_index]
+
+def compute_summary_range(samples: List[float]) -> float:
+    """Compute the range of samples using a helper."""
+    return sample_range(samples)
+=== END ===

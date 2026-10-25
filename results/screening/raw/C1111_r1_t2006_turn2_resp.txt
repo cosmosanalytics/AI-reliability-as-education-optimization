@@ -1,0 +1,35 @@
+=== FILE: pool.py ===
+"""Database pool manager."""
+from typing import Dict, Any
+from env_loader import merge_env_settings
+from options import ConnectionOptions
+
+def configure_pool(base_template: Dict[str, Any], overrides: Dict[str, Any]) -> ConnectionOptions:
+    """Configure connection pool options from template and overrides.
+    Returns ConnectionOptions instance.
+    """
+    settings = merge_env_settings(base_template, overrides)
+    dsn = settings.get("dsn", "sqlite:///:memory:")
+    
+    # The default empty dictionary for 'pool' is a mutable object.
+    # If the 'pool' key is not present in settings, settings.get("pool", {})
+    # will return the same default empty dictionary object every time.
+    # If this shared default dictionary is then modified by one ConnectionOptions
+    # instance, it would affect all other instances that received the same
+    # default. To prevent this, create a fresh copy of the dictionary
+    # if the default is returned.
+    pool_settings = settings.get("pool")
+    if pool_settings is None:
+        pool_settings = {}
+    else:
+        # Ensure we work with a copy to prevent modifications to the original
+        # dictionary passed in `settings` from affecting ConnectionOptions.
+        # This also guards against a caller passing a mutable dictionary
+        # and modifying it later, expecting it not to affect the created
+        # ConnectionOptions instance.
+        pool_settings = dict(pool_settings)
+
+    opts = ConnectionOptions(dsn=dsn, pool_params=pool_settings)
+    _ = opts.summary()
+    return opts
+=== END ===

@@ -1,0 +1,67 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+
+    The total discount is distributed as evenly as possible, with any
+    remaining cents (due to fractional allocation) being distributed
+    one cent at a time to the lines with the largest fractional remainder.
+
+    line_totals: list of integer cents.
+    Returns list of discount cents per line.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+
+    num_lines = len(line_totals)
+    if num_lines == 0:
+        return []
+
+    total_line_value = sum(line_totals)
+    if total_line_value == 0:
+        return [0] * num_lines
+
+    # Calculate base allocation and fractional remainders
+    allocations_and_remainders = []
+    for i, cents in enumerate(line_totals):
+        # Use float division for precision, then store integer part and remainder
+        exact_allocation = (cents * total_discount_cents) / total_line_value
+        base_allocation = int(exact_allocation)
+        remainder = exact_allocation - base_allocation
+        allocations_and_remainders.append((base_allocation, remainder, i))
+
+    # Sort by remainder in descending order to distribute remaining cents
+    # If remainders are equal, the original order (index i) is preserved by stable sort.
+    allocations_and_remainders.sort(key=lambda x: x[1], reverse=True)
+
+    # Sum of base allocations
+    current_total_allocated = sum(item[0] for item in allocations_and_remainders)
+
+    # Distribute remaining cents
+    remaining_cents = total_discount_cents - current_total_allocated
+    for i in range(remaining_cents):
+        # Increment the allocation for the line with the largest remainder
+        # Since we sorted, the first 'remaining_cents' items get an extra cent
+        allocations_and_remainders[i] = (
+            allocations_and_remainders[i][0] + 1,
+            allocations_and_remainders[i][1],
+            allocations_and_remainders[i][2]
+        )
+
+    # Restore original order of lines
+    final_allocations = [0] * num_lines
+    for alloc, _, original_index in allocations_and_remainders:
+        final_allocations[original_index] = alloc
+
+    return final_allocations
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===

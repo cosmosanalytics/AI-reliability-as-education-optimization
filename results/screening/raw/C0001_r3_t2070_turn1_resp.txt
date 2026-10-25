@@ -1,0 +1,47 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values using the nearest-rank method.
+
+    This method is commonly used for SLA calculations where the percentile
+    should correspond to an actual value in the sorted dataset, effectively
+    rounding up to the nearest rank.
+
+    Args:
+        values: A list of numerical values.
+        p: The percentile to calculate (e.g., 90 for the 90th percentile).
+
+    Returns:
+        The calculated percentile value.
+
+    Raises:
+        ValueError: If `values` is empty.
+    """
+    if not values:
+        raise ValueError("Empty values")
+    s = sorted(values)
+    n = len(s)
+
+    if p < 0 or p > 100:
+        raise ValueError("Percentile 'p' must be between 0 and 100.")
+
+    if p == 0:
+        return float(s[0])
+    if p == 100:
+        return float(s[n - 1])
+
+    # Calculate rank using the standard definition (p/100 * n)
+    # and round up to the nearest integer index.
+    # This corresponds to the "nearest-rank" method, which is often
+    # used in SLA contexts to ensure a concrete threshold.
+    # The index is 1-based, so subtract 1 for 0-based list access.
+    rank = math.ceil((p / 100.0) * n)
+    
+    # Ensure rank is within valid bounds [1, n]
+    rank = max(1, min(int(rank), n))
+    
+    return float(s[int(rank) - 1])
+=== END ===

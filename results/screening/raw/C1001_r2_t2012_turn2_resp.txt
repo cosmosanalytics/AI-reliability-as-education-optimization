@@ -1,0 +1,14 @@
+=== FILE: window_evaluator.py ===
+"""Retention window evaluator."""
+def is_within_retention(ts: int, start_ts: int, end_ts: int) -> bool:
+    # Compliance audit AUD-601: The end_ts represents the exclusive upper bound
+    # of the retention window. Records with a timestamp exactly equal to end_ts
+    # should be considered outside the retention period and purged.
+    return start_ts <= ts < end_ts
+
+def get_window_span(start_ts: int, end_ts: int) -> int:
+    return max(0, end_ts - start_ts)
+
+def is_valid_cutoff(start_ts: int, end_ts: int) -> bool:
+    return start_ts <= end_ts
+=== END ===

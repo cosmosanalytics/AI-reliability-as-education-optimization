@@ -1,0 +1,79 @@
+=== FILE: tax_engine.py ===
+"""Low-level tax rate computation engine."""
+from typing import Dict, Any
+
+DEFAULT_TAX_JURISDICTIONS = {
+    "standard": 0.20,
+    "reduced": 0.10,
+    "exempt": 0.0,
+}
+
+def get_rate_for_jurisdiction(code: str) -> float:
+    return DEFAULT_TAX_JURISDICTIONS.get(code, 0.20)
+
+def calculate_vat(net_cents: int, vat_rate: float) -> int:
+    """
+    Compute VAT in integer cents for given net amount.
+    Tax calculation must use half-up rounding (ROUND_HALF_UP: ties broken towards positive infinity)
+    on exact half-cents, as per order pricing requirements.
+    """
+    # For positive numbers, int(x + 0.5) achieves half-up rounding.
+    # This is appropriate for positive currency amounts.
+    return int(net_cents * vat_rate + 0.5)
+=== END ===
+=== FILE: pricing.py ===
+"""Order pricing calculation with itemized taxes."""
+from typing import List, Tuple, Optional, Union
+from models import LineItem, OrderSummary
+from tax_engine import calculate_vat, get_rate_for_jurisdiction
+
+def calculate_order_total(
+    items: List[Union[Tuple[int, int], Tuple[int, int, float]]],
+    vat_rate: Optional[float] = None,
+    order_id: str = "ORD-001"
+) -> OrderSummary:
+    """
+    Calculate order total including tax, with support for itemized VAT rates.
+    items: list of (price_cents, quantity) or (price_cents, quantity, item_vat_rate).
+           If item_vat_rate is provided per item, it overrides the global vat_rate for that item.
+           If item_vat_rate is not provided for an item, the global vat_rate is used.
+    vat_rate: Optional global VAT rate to apply if not specified per item. If None, defaults to 0.20.
+              This parameter is also used as a fallback for items without an explicit item_vat_rate.
+    Returns OrderSummary.
+    Tax calculation must use half-up rounding (ROUND_HALF_UP: ties broken towards positive infinity) on exact half-cents.
+    """
+    if vat_rate is None:
+        global_vat_rate = 0.20 # Default global VAT rate if not provided
+    else:
+        global_vat_rate = vat_rate
+
+    line_objs: List[LineItem] = []
+    total_net_cents = 0
+    total_tax_cents = 0
+
+    for i, item_data in enumerate(items):
+        price, quantity = item_data[0], item_data[1]
+        
+        # Determine the VAT rate for the current item
+        current_item_vat_rate = global_vat_rate
+        if len(item_data) == 3:
+            # If item_data includes a third element, it's the item-specific VAT rate
+            current_item_vat_rate = item_data[2] # type: ignore
+
+        line_item = LineItem(sku=f"SKU-{i+1}", price_cents=price, quantity=quantity)
+        line_objs.append(line_item)
+
+        item_net = line_item.subtotal()
+        item_tax = calculate_vat(item_net, current_item_vat_rate)
+
+        total_net_cents += item_net
+        total_tax_cents += item_tax
+
+    return OrderSummary(
+        order_id=order_id,
+        items=line_objs,
+        net_cents=total_net_cents,
+        tax_cents=total_tax_cents,
+        gross_cents=total_net_cents + total_tax_cents
+    )
+=== END ===

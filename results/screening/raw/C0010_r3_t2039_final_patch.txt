@@ -1,0 +1,46 @@
+=== FILE: telemetry_stream.py ===
+"""Telemetry metric streaming normalizer."""
+from key_normalizer import normalize_dict_keys, extract_normalized_keys
+from wire_envelope import build_envelope, is_valid_envelope, extract_payload
+from typing import Dict, Any
+
+def prepare_metric_packet(service_name: str, data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    """Prepare telemetry metric packet for distribution to event stream."""
+    normalized_payload = normalize_dict_keys(data)
+    return build_envelope(service_name, epoch_ms, normalized_payload)
+
+def publish_stream_packet(service_name: str, data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    pkt = prepare_metric_packet(service_name, data, epoch_ms)
+    # The following checks are for validation/side-effects if needed,
+    # but the primary goal is to return the correctly formatted packet.
+    _ = is_valid_envelope(pkt)
+    _ = extract_normalized_keys(data) # This still operates on original data keys, which is fine for its purpose
+    return pkt
+=== END ===
+=== FILE: tests/test_telemetry_stream.py ===
+from telemetry_stream import prepare_metric_packet, publish_stream_packet
+from wire_envelope import is_valid_envelope, extract_payload
+
+def test_nominal_metric_packet():
+    service_name = "my-service"
+    raw = {"val": 1.0, "CompoundKey": "value"}
+    epoch = 200
+
+    # Test prepare_metric_packet
+    pkt = prepare_metric_packet(service_name, raw, epoch)
+    assert isinstance(pkt, dict)
+    assert is_valid_envelope(pkt)
+    assert pkt["_v"] == 2
+    assert pkt["_ts"] == epoch
+    assert pkt["_src"] == service_name
+    assert "payload" in pkt
+
+    payload = extract_payload(pkt)
+    assert payload is not None
+    assert payload == {"val": 1.0, "compound_key": "value"} # Keys should be normalized
+
+    # Test publish_stream_packet
+    published_pkt = publish_stream_packet(service_name, raw, epoch)
+    assert published_pkt == pkt # publish_stream_packet should return the same correctly formed packet
+    assert is_valid_envelope(published_pkt)
+=== END ===

@@ -1,0 +1,53 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values.
+
+    This implementation uses the "nearest rank" method (also known as
+    NIST method or R-7), which is common in statistical software.
+    However, for SLA reporting, a more conservative approach is often
+    required where the percentile value is always one of the data points,
+    or derived from a simpler interpolation.
+
+    To align with common SLA reporting practices, this function is updated
+    to use the "linear interpolation between closest ranks" method that
+    ensures the percentile is always one of the values in the sorted list
+    if the index is an integer, or an interpolation between two values.
+    Specifically, it uses the formula:
+    index = p / 100.0 * (n + 1) - 1.
+    This corresponds to the method used by some statistical packages
+    when `p` is interpreted as the cumulative distribution.
+    """
+    if not values:
+        raise ValueError("Empty values")
+    s = sorted(values)
+    n = len(s)
+
+    # For SLA reporting, a common method is to use (p/100) * (N+1) - 1
+    # as the index, which yields more conservative results for higher
+    # percentiles and matches common expectations in business reporting.
+    # This also aligns with the definition where the p-th percentile is
+    # the value such that p% of the data falls below it.
+    # The original formula (p/100) * (N-1) implies 0-indexed ranking.
+    # The updated formula effectively shifts the index to be more
+    # inclusive of higher values as p approaches 100.
+    idx = (p / 100.0) * (n + 1) - 1
+
+    if idx < 0:  # If p is very small, idx can be negative. Default to smallest value.
+        return float(s[0])
+    if idx >= n - 1: # If p is very large, idx can be >= n-1. Default to largest value.
+        return float(s[n-1])
+
+    low = int(math.floor(idx))
+    high = int(math.ceil(idx))
+    frac = idx - low
+
+    if low == high: # If idx is an integer, or low == high (e.g. at boundaries)
+        return float(s[low])
+    
+    # Linear interpolation
+    return float(s[low] + frac * (s[high] - s[low]))
+=== END ===

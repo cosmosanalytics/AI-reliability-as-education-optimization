@@ -1,0 +1,38 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values.
+
+    This function implements the "R-7" or "NIST" method for percentile calculation,
+    which is equivalent to linear interpolation between the values of the
+    empirical distribution function.
+    """
+    if not values:
+        raise ValueError("Empty values")
+    s = sorted(values)
+    n = len(s)
+
+    # The index calculation for the R-7 method is (p / 100.0) * n.
+    # This differs from the (p / 100.0) * (n - 1) method (R-6),
+    # which is less common for statistical software.
+    # The R-7 method ensures that the 100th percentile is the maximum value
+    # and the 0th percentile is the minimum value (for n > 1).
+    idx = (p / 100.0) * n
+
+    if idx <= 1:
+        return float(s[0])
+    if idx >= n:
+        return float(s[n - 1])
+
+    k = int(math.floor(idx))
+    f = idx - k
+
+    # k is 1-indexed for the formula, so we use k-1 for 0-indexed list access
+    # For k=1, s[k-1] is s[0].
+    # For k=n-1, s[k-1] is s[n-2].
+    # For k=n, s[k-1] is s[n-1].
+    return float(s[k - 1] + f * (s[k] - s[k - 1]))
+=== END ===

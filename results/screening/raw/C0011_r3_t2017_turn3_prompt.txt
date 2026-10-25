@@ -1,0 +1,21 @@
+=== TOOL_OUTPUT (exit code: 1) ===
+FF                                                                       [100%]
+================================== FAILURES ===================================
+_____________________________ test_nominal_match ______________________________
+tests\test_guard.py:6: in test_nominal_match
+    assert is_scope_permitted(p, "corp::billing::invoices") is True
+E   AssertionError: assert False is True
+E    +  where False = is_scope_permitted(RoutePolicy(role='admin', allowed_pattern='corp::billing::*', description='', is_active=True), 'corp::billing::invoices')
+_________________________ test_sibling_path_boundary __________________________
+tests\test_guard.py:11: in test_sibling_path_boundary
+    assert is_scope_permitted(p, "corp::reports_secret") is False
+E   AssertionError: assert True is False
+E    +  where True = is_scope_permitted(RoutePolicy(role='analyst', allowed_pattern='corp::reports', description='', is_active=True), 'corp::reports_secret')
+=========================== short test summary info ===========================
+FAILED tests/test_guard.py::test_nominal_match - AssertionError: assert False...
+FAILED tests/test_guard.py::test_sibling_path_boundary - AssertionError: asse...
+2 failed in 0.24s
+
+=== END_TOOL_OUTPUT ===
+
+If further modifications or tests are needed, output revised tool blocks or file blocks. When you are finished, output your complete final patch in === FILE === format.

@@ -1,0 +1,48 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values)
+    # The "nearest-rank house standard" typically refers to
+    # the method where the rank is determined by (N * P / 100)
+    # rounded to the nearest integer, and then picking the element
+    # at that rank. In 0-indexed arrays, this often means
+    # index = max(0, min(N-1, round(N * P / 100) - 1)).
+    # For P=0, this should be the first element, for P=100, the last.
+    # A common and robust way to implement nearest-rank is:
+    # index = math.ceil(p / 100.0 * len(s)) - 1
+    # This handles p=0 and p=100 correctly for 0-indexed arrays.
+    
+    # Ensure p is within [0, 100]
+    if p < 0.0:
+        p = 0.0
+    if p > 100.0:
+        p = 100.0
+
+    # For empty lists, validate_metric_samples would have raised ValueError.
+    # For a list with N elements, the indices are 0 to N-1.
+    # The rank for p percentile is N * p / 100.
+    # The nearest rank method:
+    # If p = 0, index should be 0.
+    # If p = 100, index should be N-1.
+    # For other p, index = int(math.ceil(len(s) * p / 100.0)) - 1
+    # Special handling for p=0 to ensure index is 0.
+    if p == 0.0:
+        idx = 0
+    else:
+        idx = int(math.ceil(len(s) * p / 100.0)) - 1
+    
+    # Ensure the index is within bounds [0, len(s) - 1]
+    # This is important for edge cases with small N or p=100.
+    idx = max(0, min(idx, len(s) - 1))
+    
+    return s[idx]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

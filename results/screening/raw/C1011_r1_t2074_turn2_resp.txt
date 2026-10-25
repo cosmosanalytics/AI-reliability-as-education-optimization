@@ -1,0 +1,48 @@
+=== FILE: jitter_core.py ===
+"""Low-level jitter percentile calculation engine."""
+import math
+from typing import List
+
+def evaluate_jitter_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile values across observed samples using nearest-rank method.
+
+    The nearest-rank method calculates the index k = math.ceil(p / 100 * n) - 1
+    (using 0-based indexing) on sorted values.
+
+    Args:
+        values: A list of float values representing jitter samples.
+        p: The percentile to calculate (e.g., 95 for 95th percentile).
+
+    Returns:
+        The percentile value.
+
+    Raises:
+        ValueError: If the input list of values is empty.
+    """
+    if not values:
+        raise ValueError("No jitter values")
+    
+    s = sorted(values)
+    n = len(s)
+
+    # Nearest-rank percentile calculation: index k = math.ceil(p / 100 * n) - 1
+    # The problem description specifies using 0-based index.
+    # Note: math.ceil(0) is 0, so if p/100*n is 0, k will be -1.
+    # For p=0, 0/100*n = 0, ceil(0) - 1 = -1. This is out of bounds.
+    # For p=100, 100/100*n = n, ceil(n) - 1 = n-1. This is the last element.
+    # For p > 0, p/100*n will be > 0.
+    # The smallest index would be for p approaching 0, where ceil(p/100*n) would be 1, making k=0.
+    # So, clamp the index to be within [0, n-1].
+    
+    # Calculate 1-based rank
+    rank = math.ceil(p / 100.0 * n)
+
+    # Convert to 0-based index and clamp to valid range [0, n-1]
+    # For p=0, rank will be 0, index -1. We want the first element s[0].
+    # For p=100, rank will be n, index n-1. We want the last element s[n-1].
+    # For 0 < p <= 100, rank will be between 1 and n.
+    # So 0-based index will be rank - 1.
+    idx = int(max(0, min(n - 1, rank - 1)))
+
+    return float(s[idx])
+=== END ===

@@ -1,0 +1,41 @@
+=== FILE: latency_calc.py ===
+"""Gateway request latency percentile calculation."""
+import math
+from typing import List, Dict, Any
+from metric_types import MetricWindow, LatencyRecord
+from metric_summary import format_metric_summary
+
+def compute_percentile(window: MetricWindow, percentile: float) -> float:
+    """Calculates metric percentile using nearest-rank method: index k = math.ceil(p / 100 * n) - 1 on sorted values.
+    Do not use linear interpolation.
+    """
+    vals = window.raw_values()
+    if not vals:
+        raise ValueError("Empty metric window")
+    s = sorted(vals)
+    n = len(s)
+    # Nearest-rank method: k = math.ceil(p / 100 * n) - 1
+    # The index is 0-based, so subtract 1.
+    # The minimum index is 0, so math.ceil(p / 100 * n) must be at least 1.
+    # For n=1, p=50, math.ceil(0.5) = 1. k = 1-1 = 0. This is correct.
+    k_float = (percentile / 100.0) * n
+    k = math.ceil(k_float) - 1
+    
+    # Ensure k is within valid bounds [0, n-1]
+    # For percentile 0, k_float is 0, ceil(0) is 0, k = -1. Should be 0.
+    # For percentile 100, k_float is n, ceil(n) is n, k = n-1. This is correct.
+    # The problem description implicitly assumes 0 < p <= 100.
+    # If percentile can be 0, special handling might be needed, but usually percentiles are > 0.
+    # Assuming typical percentile ranges (e.g., 1 to 100), k will be >= 0.
+    # If p=0, k would be -1. For p=0, it's typically the minimum value.
+    # If p=100, k is n-1. This implies the largest value.
+    
+    # Clamp k to be within [0, n-1] in case of edge values for percentile
+    k = max(0, min(k, n - 1))
+
+    return float(s[k])
+
+def summarize_window(window: MetricWindow, percentile: float) -> Dict[str, Any]:
+    val = compute_percentile(window, percentile)
+    return format_metric_summary(window.sample_count(), val)
+=== END ===

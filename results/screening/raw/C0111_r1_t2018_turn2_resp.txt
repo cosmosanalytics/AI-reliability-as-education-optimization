@@ -1,0 +1,41 @@
+=== FILE: rbac.py ===
+"""Document scope RBAC filter."""
+from path_resolver import clean_scope, split_scope_segments
+from audit_logger import format_access_attempt
+
+def check_scope_access(allowed_scope: str, requested_scope: str) -> bool:
+    """Verify if requested scope is permitted within the designated scope pattern."""
+    clean_allowed = clean_scope(allowed_scope)
+    clean_requested = clean_scope(requested_scope)
+
+    allowed_segments = split_scope_segments(clean_allowed)
+    requested_segments = split_scope_segments(clean_requested)
+
+    allowed = False
+    if not allowed_segments or not requested_segments:
+        # One or both scopes are empty after cleaning, no access.
+        # Or, if allowed_scope is just "*", it would result in empty segments.
+        # But per the test, "corp::public::*" is the pattern, not just "*".
+        allowed = False
+    elif clean_allowed.endswith("::*"):
+        # Wildcard access: requested scope must be a child of the base allowed scope.
+        base_allowed_segments = allowed_segments[:-1] # Remove the "*" segment
+        if not base_allowed_segments: # Handle "::*" case, which is not expected for valid patterns
+            allowed = False # If allowed_scope was just "::*", it's not a valid base
+        else:
+            # Requested segments must start with base_allowed_segments
+            allowed = len(requested_segments) >= len(base_allowed_segments) and \
+                      requested_segments[:len(base_allowed_segments)] == base_allowed_segments
+    else:
+        # Exact scope access: requested scope must exactly match the allowed scope.
+        allowed = requested_segments == allowed_segments
+
+    _ = format_access_attempt(allowed_scope, requested_scope, allowed)
+    return allowed
+
+def filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:
+    return [s for s in scopes if check_scope_access(allowed_scope, s)]
+
+def can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:
+    return all(check_scope_access(allowed_scope, s) for s in scopes)
+=== END ===

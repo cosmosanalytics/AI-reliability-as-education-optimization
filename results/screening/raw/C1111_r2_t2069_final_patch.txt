@@ -1,0 +1,49 @@
+=== FILE: latency_calc.py ===
+"""Gateway request latency percentile calculation."""
+import math
+from typing import List, Dict, Any
+from metric_types import MetricWindow, LatencyRecord
+from metric_summary import format_metric_summary
+
+def compute_percentile(window: MetricWindow, percentile: float) -> float:
+    """Calculates metric percentile using nearest-rank method: index k = math.ceil(p / 100 * n) - 1 on sorted values.
+    Do not use linear interpolation.
+    """
+    vals = window.raw_values()
+    if not vals:
+        raise ValueError("Empty metric window")
+    s = sorted(vals)
+    n = len(s)
+
+    # Apply nearest-rank method as specified in the docstring:
+    # index k = math.ceil(p / 100 * n) - 1
+    # This k is the 0-indexed position in the sorted list.
+    
+    # Calculate the 1-indexed rank
+    rank_float = (percentile / 100.0) * n
+    rank = math.ceil(rank_float)
+
+    # Convert 1-indexed rank to 0-indexed array index
+    # The docstring formula `k = math.ceil(p / 100 * n) - 1` directly provides the 0-indexed index.
+    # We must ensure this index is within the valid bounds [0, n-1].
+    
+    # If percentile is 0, rank_float is 0, math.ceil(0) is 0.
+    # Then `idx = 0 - 1 = -1`. This would be an invalid index.
+    # The nearest-rank method typically assumes percentile > 0 for non-empty lists.
+    # For a 0 percentile, the minimum value (index 0) is usually expected.
+    # For a 100 percentile, the maximum value (index n-1) is usually expected.
+    # The formula `math.ceil(p / 100 * n) - 1` handles p=100 correctly by giving n-1.
+    # For p=0, it produces -1, so we clamp it.
+    
+    idx = int(rank) - 1
+    
+    # Clamp the index to be within [0, n-1] to handle edge cases like percentile=0
+    # or floating point inaccuracies when percentile=100.
+    idx = max(0, min(idx, n - 1))
+
+    return float(s[idx])
+
+def summarize_window(window: MetricWindow, percentile: float) -> Dict[str, Any]:
+    val = compute_percentile(window, percentile)
+    return format_metric_summary(window.sample_count(), val)
+=== END ===

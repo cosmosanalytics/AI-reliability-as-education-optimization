@@ -1,0 +1,28 @@
+=== FILE: sort_helper.py ===
+"""Internal stream sorting helper."""
+from typing import List
+from event_packet import EventPacket
+
+def order_packets(packets: List[EventPacket]) -> List[EventPacket]:
+    # The original sorting key was (-p.severity, p.stream_id).
+    # The ticket mentions "Out-of-order stream tiebreaker caused state replication desync
+    # during high-severity packet bursts", implying that the stream_id tie-breaker
+    # was problematic and led to inconsistent ordering across replicas.
+    # To resolve this, we remove the stream_id from the tie-breaking logic.
+    # When primary keys (severity) are equal, the sort becomes unstable regarding
+    # stream_id, allowing for potentially different but equally valid orderings
+    # based on the underlying Python sort implementation, which is often Timsort
+    # and stable. However, if the intent is to avoid any deterministic tie-breaking
+    # by stream_id, simplifying the key to just severity is appropriate.
+    # If a stable tie-breaker is required, a unique, immutable timestamp or
+    # sequence number would be more suitable than stream_id.
+    # For this patch, based on the ticket description, removing the problematic
+    # stream_id tie-breaker is the direct solution.
+    return sorted(packets, key=lambda p: -p.severity)
+
+def get_max_severity(packets: List[EventPacket]) -> int:
+    return max((p.severity for p in packets), default=0)
+
+def count_critical_packets(packets: List[EventPacket]) -> int:
+    return sum(1 for p in packets if p.is_critical())
+=== END ===

@@ -1,0 +1,37 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values.
+
+    The percentile calculation uses the "nearest rank" method (also known as
+    Method 1 in NIST's list), which is suitable for discrete data and
+    common in SLA monitoring for determining the value at or below which
+    a given percentage of observations fall.
+    """
+    if not values:
+        raise ValueError("Empty values")
+    s = sorted(values)
+    n = len(s)
+
+    # For P-th percentile (0 < P <= 100), the index is calculated as:
+    # L = N * P / 100.
+    # If L is an integer, the P-th percentile is the L-th smallest value.
+    # If L is not an integer, the P-th percentile is the smallest value
+    # that is greater than L (i.e., rounded up to the next integer rank).
+    #
+    # We use 1-based indexing for L, then convert to 0-based for list access.
+    rank = math.ceil((p / 100.0) * n)
+
+    # Handle edge case where p=0 which would result in rank 0 or 1.
+    # The smallest percentile value is effectively the first element.
+    if rank == 0:
+        rank = 1
+
+    # Convert 1-based rank to 0-based index
+    idx = int(rank) - 1
+
+    return float(s[idx])
+=== END ===

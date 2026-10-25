@@ -1,0 +1,45 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values.
+
+    Uses linear interpolation between the two nearest ranks.
+    The index calculation follows the method where the Pth percentile
+    is the value at index (P/100) * (N-1) for a 0-indexed sorted list of N values.
+    """
+    if not values:
+        raise ValueError("Empty values")
+    s = sorted(values)
+    n = len(s)
+
+    # Handle edge cases for p=0 and p=100
+    if p == 0:
+        return float(s[0])
+    if p == 100:
+        return float(s[n - 1])
+
+    # Calculate the rank index
+    idx = (p / 100.0) * (n - 1)
+
+    # Split index into integer and fractional parts
+    low_idx = int(math.floor(idx))
+    high_idx = int(math.ceil(idx))
+    
+    # Ensure high_idx does not exceed the list bounds
+    # This check is strictly necessary for the edge case where idx is exactly n-1,
+    # making low_idx = n-1 and high_idx = n-1.
+    # For other cases where idx is not an integer, high_idx will be low_idx + 1.
+    # In all cases, low_idx and high_idx will be valid indices within [0, n-1].
+    
+    # Interpolate between the values at low_idx and high_idx
+    if low_idx == high_idx:
+        # This happens when idx is an integer (e.g., for 0th, 25th, 50th, 75th, 100th percentiles
+        # for specific dataset sizes like N=5, P=0,25,50,75,100 which map to idx=0,1,2,3,4)
+        return float(s[low_idx])
+    else:
+        frac = idx - low_idx
+        return float(s[low_idx] + frac * (s[high_idx] - s[low_idx]))
+=== END ===

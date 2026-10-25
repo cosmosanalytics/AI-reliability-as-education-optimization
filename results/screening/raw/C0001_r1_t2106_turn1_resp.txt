@@ -1,0 +1,50 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    """
+    Calculate the p-th percentile of a list of samples using the nearest-rank method.
+
+    The nearest-rank method calculates the rank `r = ceil(p/100 * n)`,
+    where `n` is the number of samples. The percentile is then the value
+    at that rank (using 1-based indexing for rank, or `r-1` for 0-based indexing).
+    For an empty list of samples, a ValueError is raised by validate_metric_samples.
+    If p is outside the range [0, 100], the behavior is consistent with the
+    nearest-rank definition, effectively clamping to the first or last element.
+    """
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values) # s is sorted samples
+    n = len(s)
+
+    if p < 0.0:
+        # According to nearest-rank, p=0 should return the minimum value.
+        # ceil(0/100 * n) = 0, but rank is 1-based, so rank 1.
+        return s[0]
+    if p > 100.0:
+        # According to nearest-rank, p=100 should return the maximum value.
+        # ceil(100/100 * n) = n, so rank n.
+        return s[n-1]
+
+    # Calculate rank using the nearest-rank method (R-1 in NIST terminology)
+    # r = ceil(p/100 * n)
+    rank = math.ceil((p / 100.0) * n)
+
+    # Adjust rank to 0-based index.
+    # The smallest rank is 1, corresponding to index 0.
+    # The largest rank is n, corresponding to index n-1.
+    # We subtract 1 from the 1-based rank to get the 0-based index.
+    index = int(rank) - 1
+
+    # Ensure index is within bounds [0, n-1] for edge cases like p=0 or p very small.
+    # validate_metric_samples ensures n > 0.
+    index = max(0, min(index, n - 1))
+
+    return s[index]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

@@ -1,0 +1,51 @@
+=== FILE: rpc_calc.py ===
+"""Microservice RPC duration percentile calculator."""
+import math
+from typing import List, Dict, Any
+from rpc_data import RpcSeries, RpcSample
+from rpc_formatter import format_rpc_stat
+
+def compute_rpc_percentile(series: RpcSeries, p: float) -> float:
+    """Calculates SLA percentile for RPC responses.
+
+    This implementation uses the nearest-rank method (Type 1), where the index is
+    calculated as `math.ceil((p / 100.0) * n) - 1` for a 0-based index.
+    If `p` is 0, the minimum value is returned. If `p` is 100, the maximum value is returned.
+    For other values, the value at the calculated rank is returned.
+    """
+    vals = series.durations()
+    if not vals:
+        raise ValueError("No RPC samples available")
+    s = sorted(vals)
+    n = len(s)
+
+    if p < 0.0 or p > 100.0:
+        raise ValueError("Percentile must be between 0 and 100.")
+    
+    if p == 0.0:
+        return float(s[0])
+    if p == 100.0:
+        return float(s[n - 1])
+
+    # Calculate index using the nearest-rank method (Type 1 in some classifications).
+    # This formula gives a 1-based rank: r = ceil(p/100 * n).
+    # For a 0-based index, we subtract 1: idx = r - 1.
+    # Example: s=[10, 20, 30, 40], n=4. p=50.
+    # r = ceil(0.5 * 4) = ceil(2.0) = 2.
+    # idx = 2 - 1 = 1. s[1] is 20.0.
+    # This matches the expected value of 20.0 for the failing test.
+    rank = (p / 100.0) * n
+    idx = int(math.ceil(rank)) - 1
+    
+    # Ensure index is within bounds [0, n-1]
+    # The ceil(rank) - 1 logic already handles this for 0 < p < 100.
+    # For p slightly above 0, rank will be slightly above 0, ceil(rank) is 1, idx is 0.
+    # For p slightly below 100, rank will be slightly below n, ceil(rank) is n, idx is n-1.
+    # The explicit p=0 and p=100 checks handle the boundaries.
+
+    return float(s[idx])
+
+def build_rpc_report(service_name: str, series: RpcSeries, p: float) -> Dict[str, Any]:
+    val = compute_rpc_percentile(series, p)
+    return format_rpc_stat(service_name, series.count(), val)
+=== END ===

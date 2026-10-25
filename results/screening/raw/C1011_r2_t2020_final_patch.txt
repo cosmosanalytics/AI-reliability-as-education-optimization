@@ -1,0 +1,113 @@
+My apologies, I made an error in my previous patch. My analysis of `event.topic_root()` and `is_topic_subscribed` was incorrect, leading to a fix that would not resolve the issue as described by the failing test and ticket.
+
+The problem states: "Consumer subscribed to 'orders' topic received internal administrative events from 'orders_admin'."
+This means if `subscribed_topic` is "orders", an event with `topic_path` "orders_admin::created" should *not* be dispatched.
+
+Original `should_dispatch_webhook`:
+`return is_topic_subscribed(subscribed_topic, event.topic_path)`
+If `subscribed_topic = "orders"` and `event.topic_path = "orders_admin::created"`, this becomes `is_topic_subscribed("orders", "orders_admin::created")`.
+`"orders_admin::created".startswith("orders")` is `True`. This is the bug.
+
+My previous attempt:
+`return is_topic_subscribed(subscribed_topic, event.topic_root())`
+If `subscribed_topic = "orders"` and `event.topic_path = "orders_admin::created"`, `event.topic_root()` is "orders_admin".
+This becomes `is_topic_subscribed("orders", "orders_admin")`.
+`"orders_admin".startswith("orders")` is `True`. The bug persists.
+
+The core issue is that `is_topic_subscribed` uses `startswith`, which is too broad for matching root topics. A subscription to "orders" should only match event topics that *are exactly* "orders" or begin with "orders::". It should not match "orders_admin" or "orders_internal".
+
+To fix this, when the `subscribed_topic` does not contain a "::", it implies a subscription to a root topic. In this case, it should match the `event.topic_root()` exactly, or match event topics that begin with the subscribed root followed by "::".
+
+Let's refine `should_dispatch_webhook`:
+
+If `subscribed_topic` is "orders":
+- `event.topic_path = "orders::created"` should match. `event.topic_root() = "orders"`.
+- `event.topic_path = "orders_admin::created"` should NOT match. `event.topic_root() = "orders_admin"`.
+
+The simplest way to achieve this is to ensure that if the `subscribed_topic` itself is a root (e.g., "orders"), we compare it directly with the event's `topic_root()`. If the `subscribed_topic` is more specific (e.g., "orders::created"), then the existing `startswith` logic on the full `topic_path` is appropriate.
+
+Revised approach for `should_dispatch_webhook`:
+If `subscribed_topic` itself contains "::", then it's a specific sub-topic subscription, and `is_topic_subscribed(subscribed_topic, event.topic_path)` is correct.
+If `subscribed_topic` does *not* contain "::", it's a root topic subscription. In this case, we must ensure `subscribed_topic` matches `event.topic_root()` exactly.
+
+```python
+from prefix_validator import is_topic_subscribed
+from webhook import WebhookEvent
+
+def should_dispatch_webhook(subscribed_topic: str, event: WebhookEvent) -> bool:
+    """Determine if webhook event topic is permitted under the subscription filter.
+
+    A subscription to 'orders' should match 'orders::created' but not 'orders_admin::created'.
+    """
+    if "::" not in subscribed_topic:
+        # If subscribed_topic is a root (e.g., "orders"), it should only match events
+        # whose root topic is exactly that, or events that start with "orders::"
+        # The is_topic_subscribed function uses startswith, so if we pass
+        # "orders" and "orders::created", it will match.
+        # But if we pass "orders" and "orders_admin::created", it would also match.
+        # The key is to check if the subscribed_topic is an exact match for the event's root,
+        # OR if the event's full topic path starts with the subscribed_topic followed by '::'.
+        # A simpler way is to ensure the event's topic_root is exactly the subscribed_topic.
+        return subscribed_topic == event.topic_root()
+    else:
+        # If subscribed_topic includes '::' (e.g., "orders::created"),
+        # then the standard startswith logic applies to the full path.
+        return is_topic_subscribed(subscribed_topic, event.topic_path)
+
+```
+Let's test this logic mentally:
+1. `subscribed_topic = "orders"`, `event.topic_path = "orders::created"`
+   - `"::" not in "orders"` is `True`.
+   - `return "orders" == event.topic_root()` -> `return "orders" == "orders"` is `True`. (Correct)
+
+2. `subscribed_topic = "orders"`, `event.topic_path = "orders_admin::created"`
+   - `"::" not in "orders"` is `True`.
+   - `return "orders" == event.topic_root()` -> `return "orders" == "orders_admin"` is `False`. (Correct, fixes the bug)
+
+3. `subscribed_topic = "orders::created"`, `event.topic_path = "orders::created::v1"`
+   - `"::" not in "orders::created"` is `False`.
+   - `return is_topic_subscribed("orders::created", "orders::created::v1")` -> `"orders::created::v1".startswith("orders::created")` is `True`. (Correct, specific sub-topic subscription)
+
+This looks like the correct approach. The `clean_topic_segment` and `is_wildcard_subscription` functions in `prefix_validator.py` are not used by `should_dispatch_webhook` and are not directly relevant to this specific bug, so they don't need modification. The `WebhookEvent` class also remains suitable.
+
+The `docstring` for `should_dispatch_webhook` needs to be updated to reflect this new logic. I will also remove the `clean_topic_segment` import as it's not used in this file.
+
+(1) Did you alter any test file? No.
+(2) Are boundary values (empty, zero, negative) handled? The topic paths are strings; empty strings for `topic_path` or `subscribed_topic` would be handled by string comparison (`==` or `startswith`). `WebhookEvent.topic_path` is a string, `split("::")[0]` on an empty string would result in `""` which is fine. `is_topic_subscribed("", "")` is `True`. `subscribed_topic == event.topic_root()` for empty strings would also work as expected.
+(3) Are raised exception types exact? No new exceptions are introduced.
+(4) Does the patch preserve caller backward compatibility? Yes, the signature of `should_dispatch_webhook` remains unchanged. The behavior changes for specific edge cases as required by the bug fix, but the general contract for existing callers is maintained.
+
+```python
+=== FILE: scope_checker.py ===
+"""Webhook scope dispatch checker."""
+from prefix_validator import is_topic_subscribed
+from webhook import WebhookEvent
+
+def should_dispatch_webhook(subscribed_topic: str, event: WebhookEvent) -> bool:
+    """Determine if webhook event topic is permitted under the subscription filter.
+
+    A subscription to a root topic (e.g., 'orders') should only match events
+    whose root topic is an exact match (e.g., 'orders::created' matches,
+    but 'orders_admin::created' does not).
+    For more specific subscriptions (e.g., 'orders::created'), the event's
+    full topic path must start with the subscribed pattern.
+    """
+    if "::" not in subscribed_topic:
+        # If the subscribed_topic is a root (e.g., "orders"),
+        # it must exactly match the event's root topic.
+        return subscribed_topic == event.topic_root()
+    else:
+        # If the subscribed_topic is specific (e.g., "orders::created"),
+        # use the standard 'startswith' logic on the full topic path.
+        return is_topic_subscribed(subscribed_topic, event.topic_path)
+
+def filter_dispatch_queue(subscribed_topic: str, events: list) -> list:
+    return [e for e in events if should_dispatch_webhook(subscribed_topic, e)]
+
+def batch_topic_summary(events: list) -> dict:
+    summary = {}
+    for e in events:
+        summary[e.topic_path] = summary.get(e.topic_path, 0) + 1
+    return summary
+=== END ===
+```

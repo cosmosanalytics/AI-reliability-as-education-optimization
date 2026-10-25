@@ -1,0 +1,91 @@
+=== FILE: guard.py ===
+"""API gateway authorization guard."""
+from policy import RoutePolicy
+from url_normalizer import clean_scope
+
+def is_scope_permitted(policy: RoutePolicy, request_scope: str) -> bool:
+    """Check if request_scope is authorized under policy.allowed_pattern.
+    Access control scopes must use the double-colon hierarchy tenant::department::service::action.
+    Sibling paths must be checked against '::' segment boundaries.
+    The single asterisk wildcard '*' matches exactly one segment; the double asterisk '**' matches arbitrary multi-segment prefixes.
+    """
+    clean_req = clean_scope(request_scope)
+    
+    # Handle the special case of an empty request scope.
+    # An empty request scope can only be permitted by a wildcard '**' policy or an empty policy.
+    if not clean_req:
+        return policy.allowed_pattern == "**" or policy.allowed_pattern == ""
+
+    # Split both the allowed pattern and the request scope into segments.
+    # An empty string splits into [''], so handle this explicitly for safety.
+    pattern_segments = policy.allowed_pattern.split('::') if policy.allowed_pattern else ['']
+    request_segments = clean_req.split('::') if clean_req else ['']
+
+    p_idx = 0
+    r_idx = 0
+    
+    while p_idx < len(pattern_segments) and r_idx < len(request_segments):
+        pattern_segment = pattern_segments[p_idx]
+        request_segment = request_segments[r_idx]
+
+        if pattern_segment == "**":
+            # Double asterisk matches zero or more segments.
+            # Find the next non-'**' segment in the pattern.
+            next_p_segment_idx = p_idx + 1
+            while next_p_segment_idx < len(pattern_segments) and pattern_segments[next_p_segment_idx] == "**":
+                next_p_segment_idx += 1
+
+            if next_p_segment_idx == len(pattern_segments):
+                # '**' is the last pattern segment or followed only by other '**'.
+                # It matches all remaining request segments.
+                return True
+
+            # The actual next literal segment after '**' (and any subsequent '**')
+            target_segment = pattern_segments[next_p_segment_idx]
+            
+            # Find `target_segment` in the remaining `request_segments`.
+            # '**' consumes request segments until it finds `target_segment`.
+            found_target = False
+            while r_idx < len(request_segments):
+                if request_segments[r_idx] == target_segment:
+                    found_target = True
+                    break
+                r_idx += 1
+            
+            if not found_target:
+                return False # Could not find the segment after '**'
+
+            # If found, `r_idx` now points to `target_segment`.
+            # Advance `p_idx` to `next_p_segment_idx` to match the target.
+            p_idx = next_p_segment_idx
+            # `r_idx` is already correctly positioned by the inner loop.
+            
+        elif pattern_segment == "*":
+            # Single asterisk matches exactly one segment.
+            p_idx += 1
+            r_idx += 1
+        elif pattern_segment == request_segment:
+            # Exact match for the current segment.
+            p_idx += 1
+            r_idx += 1
+        else:
+            # Segments do not match and it's not a wildcard.
+            return False
+
+    # After the loop, both pointers should have reached the end of their respective lists.
+    # If there are remaining pattern segments, they must all be '**'.
+    while p_idx < len(pattern_segments) and pattern_segments[p_idx] == "**":
+        p_idx += 1
+    
+    return p_idx == len(pattern_segments) and r_idx == len(request_segments)
+
+
+def evaluate_request(policies: list, role: str, scope: str) -> bool:
+    for p in policies:
+        if p.matches_role(role) and is_scope_permitted(p, scope):
+            return True
+    return False
+
+def count_permitted_scopes(policy: RoutePolicy, scopes: list) -> int:
+    return sum(1 for s in scopes if is_scope_permitted(policy, s))
+=== END ===

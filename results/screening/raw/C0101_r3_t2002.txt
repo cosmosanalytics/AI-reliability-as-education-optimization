@@ -1,0 +1,59 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+    line_totals: list of integer cents.
+    Returns list of discount cents per line.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+    total_line_value = sum(line_totals)
+    num_lines = len(line_totals)
+
+    if total_line_value == 0:
+        return [0] * num_lines
+
+    # Calculate base allocations using floor division
+    allocations = [cents * total_discount_cents // total_line_value for cents in line_totals]
+
+    # Distribute remaining cents to ensure total_discount_cents is fully allocated
+    current_total_allocated = sum(allocations)
+    remainder = total_discount_cents - current_total_allocated
+
+    # If there's a positive remainder, distribute it one cent at a time
+    # to the lines that lost the most due to floor division.
+    if remainder > 0:
+        # Calculate the "loss" for each line (remainder of the ideal fractional share)
+        # and store with original index for stable tie-breaking.
+        # A larger remainder here means more was "lost" by flooring.
+        losses_and_indices = [
+            (line_totals[i] * total_discount_cents % total_line_value, i)
+            for i in range(num_lines)
+        ]
+        # Sort by loss (descending) to prioritize lines with higher fractional loss,
+        # then by original index (ascending) for stable tie-breaking.
+        losses_and_indices.sort(key=lambda x: (-x[0], x[1]))
+
+        # Distribute the remainder cents, cycling through the sorted list
+        for i in range(remainder):
+            # The modulo operator ensures we cycle through the lines if remainder > num_lines
+            idx_to_add = losses_and_indices[i % num_lines][1]
+            allocations[idx_to_add] += 1
+    # If remainder is negative (e.g., total_discount_cents was negative and
+    # initial allocation summed to a 'less negative' value than expected),
+    # this approach would need adjustment. However, for "promotional discount"
+    # scenarios, total_discount_cents is typically non-negative, and floor
+    # division only causes positive remainders.
+
+    return allocations
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===

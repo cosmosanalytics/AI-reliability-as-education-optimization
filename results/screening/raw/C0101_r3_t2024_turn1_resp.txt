@@ -1,0 +1,23 @@
+=== FILE: sort_helper.py ===
+"""Internal stream sorting helper."""
+from typing import List
+from event_packet import EventPacket
+
+def order_packets(packets: List[EventPacket]) -> List[EventPacket]:
+    # Sort primarily by severity (descending), then by stream_id (ascending) as a tie-breaker.
+    # The original issue "Out-of-order stream tiebreaker" refers to the stream_id
+    # component not providing a stable or desired order for high-severity bursts.
+    # To ensure deterministic ordering for identical (severity, stream_id) packets,
+    # and to potentially provide a more robust tie-breaking order,
+    # we add the payload as a tertiary tie-breaker. This ensures that even if
+    # stream_id is the same, the relative order is stable based on payload content.
+    # This also aligns with typical requirements for "state replication desync"
+    # where the full packet content matters for ordering.
+    return sorted(packets, key=lambda p: (-p.severity, p.stream_id, p.payload))
+
+def get_max_severity(packets: List[EventPacket]) -> int:
+    return max((p.severity for p in packets), default=0)
+
+def count_critical_packets(packets: List[EventPacket]) -> int:
+    return sum(1 for p in packets if p.is_critical())
+=== END ===

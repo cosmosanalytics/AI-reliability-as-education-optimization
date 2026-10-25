@@ -1,0 +1,24 @@
+=== FILE: audit_service.py ===
+"""Audit event serialization service."""
+from datetime import datetime
+from models import AuditRecord
+from formatter import sanitize_action_name, build_audit_tag
+
+def format_audit_event(event_id: str, action: str, dt: datetime) -> AuditRecord:
+    """Formats an audit event record.
+    Timestamps must be formatted strictly in ISO 8601 UTC with explicit millisecond
+    precision and uppercase 'Z' suffix: YYYY-MM-DDTHH:MM:SS.sssZ (e.g. 2026-10-25T12:00:00.000Z).
+    """
+    clean_action = sanitize_action_name(action)
+    tag = build_audit_tag(clean_action)
+    ts = dt.strftime("%Y-%m-%dT%H:%M:%S") + f".{dt.microsecond // 1000:03d}Z"
+    record = AuditRecord(
+        event_id=event_id,
+        action=clean_action,
+        timestamp_str=ts,
+        metadata={"tag": tag}
+    )
+    if not record.is_valid():
+        raise ValueError("Invalid record generated")
+    return record
+=== END ===

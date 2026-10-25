@@ -1,0 +1,71 @@
+=== FILE: csv_writer.py ===
+"""TSV serialization utilities."""
+from typing import List, Optional
+from schema import CustomerProfile
+from io_helpers import validate_tsv_header
+
+def escape_tsv_field(val: Optional[str]) -> str:
+    r"""Escape field for internal TSV audit log pipeline:
+    Records are tab-separated (\t), internal double quotes are escaped with backslash (\"),
+    newline characters are escaped as \n, and None/null values are serialized as \N.
+    Do NOT use RFC 4180 double-quoting.
+    """
+    if val is None:
+        return r"\N"
+
+    # Escape backslashes first, then newlines and quotes.
+    # This ensures that an original backslash is not treated as part of an escaped sequence.
+    # For example, if val contains 'foo\nbar', we want 'foo\\nbar'.
+    # If we replace '\n' to '\\n' first, then replace '\' to '\\', 'foo\nbar' -> 'foo\\nbar' -> 'foo\\\\nbar', which is wrong.
+    # However, the docstring only explicitly mentions '\n' becoming '\\n' and '"' becoming '\"'.
+    # It does not explicitly state that a literal '\' should become '\\'.
+    # The example "internal double quotes are escaped with backslash (\")" implies the backslash is *added* for escaping,
+    # not that existing backslashes in the original string are escaped.
+    # Let's strictly follow the docstring: escape newlines and double quotes.
+
+    # Replace newline characters (\n) with literal \n (\\n in Python string literal)
+    # Replace double quotes (") with literal \" (\\" in Python string literal)
+    # The order matters if '\' itself needs to be escaped.
+    # If the input is "foo\nbar", output should be "foo\\nbar".
+    # If the input is "foo\"bar", output should be "foo\\\"bar".
+    # If the input is "foo\bar", the docstring gives no guidance.
+    # Given the example `\n` -> `\\n`, it implies a single `\` should become `\\` if it's part of an escape sequence.
+    # However, for `"` -> `\"`, the `\` is introduced.
+
+    # Let's assume the docstring means:
+    # 1. Any existing '\n' sequence in `val` should become '\\n'.
+    # 2. Any existing '"' character in `val` should become '\"'.
+
+    # The most robust way to handle this without ambiguity for backslashes
+    # is to first escape the backslash character itself if it's considered a special character
+    # by the audit pipeline, then apply other escapes.
+    # However, the docstring doesn't mention escaping literal backslashes.
+    # It only says "newline characters are escaped as \n" and "internal double quotes are escaped with backslash (\")".
+    # This implies that `\n` is a single character to be replaced by two characters `\` then `n`,
+    # and `"` is a single character to be replaced by `\` then `"`.
+
+    # Let's apply replacements directly as specified.
+    # Order: first replace "\n" then '"'.
+    # If we had "foo\nbar", it becomes "foo\\nbar".
+    # If we had "foo\"bar", it becomes "foo\\\"bar".
+
+    escaped_val = val.replace('\n', r'\\n')
+    escaped_val = escaped_val.replace('"', r'\"')
+    return escaped_val
+
+def export_profiles_tsv(profiles: List[CustomerProfile]) -> str:
+    header = "cust_id\tname\tnotes" # Header should not have escaped delimiters for its own structure.
+    if not validate_tsv_header(header, ["cust_id", "name", "notes"]):
+        raise ValueError("Invalid header")
+    lines = [header]
+    for p in profiles:
+        f_id = str(p.cust_id) # IDs are typically not escaped, but let's be consistent with str().
+        f_name = escape_tsv_field(p.name)
+        f_notes = escape_tsv_field(p.notes)
+        lines.append(f"{f_id}\t{f_name}\t{f_notes}")
+    return "\n".join(lines) # The final lines should be joined by actual newlines, not escaped ones.
+
+def count_records(payload: str) -> int:
+    lines = [l for l in payload.splitlines() if l.strip()]
+    return max(0, len(lines) - 1)
+=== END ===

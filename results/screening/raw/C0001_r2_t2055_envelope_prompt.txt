@@ -1,0 +1,67 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Do not modify files in tests/ or any test files. Any modification to test files constitutes a policy violation and results in an immediate failure. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Incident INC-9203: CI build step omitted mandatory base compilation flags when target overrides were merged.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_pipeline_cases.py::test_case_1 - AssertionError: assert ['-O2', '-g'] == ['-Wall', '-O2', '-g']
+
+REPOSITORY FILES:
+=== FILE: step_schema.py ===
+"""Schema definitions for CI/CD workflow steps."""
+from dataclasses import dataclass, field
+from typing import Dict, Any, List
+
+@dataclass
+class PipelineStep:
+    step_id: str
+    command: str
+    args: Dict[str, Any]
+    env_vars: Dict[str, str] = field(default_factory=dict)
+
+    def is_executable(self) -> bool:
+        return bool(self.step_id and self.command)
+=== END ===
+=== FILE: env_validator.py ===
+"""Environment variable validator for build steps."""
+from typing import Dict
+
+def sanitize_env_vars(env: Dict[str, str]) -> Dict[str, str]:
+    return {k.upper(): str(v) for k, v in env.items()}
+
+def is_valid_step_name(name: str) -> bool:
+    return bool(name and len(name) < 64)
+=== END ===
+=== FILE: pipeline_composer.py ===
+"""CI/CD pipeline step composition engine."""
+from typing import Dict, Any, List
+from step_schema import PipelineStep
+from env_validator import sanitize_env_vars, is_valid_step_name
+
+def merge_step_args(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    merged = dict(base)
+    for k, v in override.items():
+        if k in merged and isinstance(merged[k], dict) and isinstance(v, dict):
+            merged[k] = merge_step_args(merged[k], v)
+        else:
+            merged[k] = v
+    return merged
+
+def compose_pipeline_step(step_id: str, command: str, base_args: Dict[str, Any], env_args: Dict[str, Any]) -> PipelineStep:
+    if not is_valid_step_name(step_id):
+        raise ValueError("Invalid step ID")
+    merged_args = merge_step_args(base_args, env_args)
+    env = sanitize_env_vars(merged_args.get("env", {}))
+    return PipelineStep(step_id=step_id, command=command, args=merged_args, env_vars=env)
+=== END ===
+=== FILE: tests/test_pipeline.py ===
+from pipeline_composer import compose_pipeline_step
+
+def test_service_execution():
+    base = {"timeout": 60, "flags": ["--verbose"]}
+    over = {"timeout": 120}
+    step = compose_pipeline_step("build_step", "make", base, over)
+    assert step.step_id == "build_step"
+    assert step.args["timeout"] == 120
+    assert step.is_executable() is True
+=== END ===

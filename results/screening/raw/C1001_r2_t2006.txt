@@ -1,0 +1,40 @@
+=== FILE: env_loader.py ===
+"""Environment settings loader and merger."""
+from typing import Dict, Any
+import copy
+
+DEFAULT_CONN_TIMEOUT = 30
+
+def load_system_env() -> Dict[str, Any]:
+    return {"timeout": DEFAULT_CONN_TIMEOUT}
+
+def merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Merges override_settings into base_settings, performing a deep copy of base_settings
+    and a deep merge for nested dictionaries, specifically for the 'pool' key.
+    This ensures that mutable nested structures from base_settings are not shared
+    and can be safely modified by overrides without affecting other callers that
+    might rely on the original base_settings.
+    """
+    merged = copy.deepcopy(base_settings)
+    
+    # If the override_settings contain a 'pool' dictionary, perform a deep merge for it.
+    # This prevents shared mutable state issues where an override to the 'pool'
+    # dictionary could unintentionally modify the base_settings' 'pool' dictionary.
+    if 'pool' in override_settings and isinstance(override_settings['pool'], dict):
+        if 'pool' not in merged or not isinstance(merged['pool'], dict):
+            merged['pool'] = {} # Ensure 'pool' key exists and is a dictionary in merged
+        merged['pool'].update(override_settings['pool'])
+        
+        # Create a temporary override dictionary without the 'pool' key to avoid
+        # overwriting the deeply merged 'pool' with a shallow update later.
+        temp_override = dict(override_settings)
+        del temp_override['pool']
+        merged.update(temp_override)
+    else:
+        # For all other cases (no 'pool' override, or 'pool' override is not a dict),
+        # perform a standard shallow update.
+        merged.update(override_settings)
+        
+    return merged
+=== END ===

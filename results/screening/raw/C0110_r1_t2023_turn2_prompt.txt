@@ -1,0 +1,21 @@
+=== TOOL_OUTPUT (exit code: 1) ===
+FF                                                                       [100%]
+================================== FAILURES ===================================
+____________________________ test_basic_rebalance _____________________________
+tests\test_rebalancer.py:8: in test_basic_rebalance
+    assert res[0].weight == 50
+E   AssertionError: assert 10 == 50
+E    +  where 10 = ScheduledTask(task_id=1, weight=10, payload='a', active=True, assigned_worker=None).weight
+____________________________ test_weight_ordering _____________________________
+tests\test_rebalancer.py:13: in test_weight_ordering
+    assert rebalance_tasks([t1, t2])[0].task_id == 2
+E   AssertionError: assert 1 == 2
+E    +  where 1 = ScheduledTask(task_id=1, weight=5, payload='a', active=True, assigned_worker=None).task_id
+=========================== short test summary info ===========================
+FAILED tests/test_rebalancer.py::test_basic_rebalance - AssertionError: asser...
+FAILED tests/test_rebalancer.py::test_weight_ordering - AssertionError: asser...
+2 failed in 0.27s
+
+=== END_TOOL_OUTPUT ===
+
+If further modifications or tests are needed, output revised tool blocks or file blocks. When you are finished, output your complete final patch in === FILE === format.

@@ -1,0 +1,14 @@
+Visible Test Failure (exit code 1):
+F.                                                                       [100%]
+================================== FAILURES ===================================
+_____________________________ test_single_sample ______________________________
+tests\test_audio.py:6: in test_single_sample
+    assert compute_buffer_percentile(s, 50.0) == 0.5
+audio_metrics.py:34: in compute_buffer_percentile
+    return float(s[i] * (1.0 - fraction) + s[i + 1] * fraction)
+E   IndexError: list index out of range
+=========================== short test summary info ===========================
+FAILED tests/test_audio.py::test_single_sample - IndexError: list index out o...
+1 failed, 1 passed in 0.28s
+
+Reply with your complete corrected patch in the required === FILE: path === ... === END === block format.

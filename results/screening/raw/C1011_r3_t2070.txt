@@ -1,0 +1,49 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values using the 'lower' interpolation method.
+
+    For fractional ranks, it returns the value at the lower bound of the interpolated rank.
+    This means the returned value will always be one of the sample values (or the minimum
+    or maximum for p=0 or p=100 respectively).
+
+    Args:
+        values: A list of numerical values.
+        p: The percentile to calculate (e.g., 90 for the 90th percentile).
+
+    Returns:
+        The calculated percentile value.
+
+    Raises:
+        ValueError: If the input `values` list is empty.
+    """
+    if not values:
+        raise ValueError("Empty values")
+    s = sorted(values)
+    n = len(s)
+
+    # Handle edge cases for p=0 and p=100 explicitly for exact results.
+    if p == 0:
+        return float(s[0])
+    if p == 100:
+        return float(s[n-1])
+
+    # Calculate the 0-based index for the percentile.
+    # This formula is common for percentile calculation, where the 0th element
+    # corresponds to the 0th percentile and the (n-1)th element to the 100th percentile.
+    idx = (p / 100.0) * (n - 1)
+
+    # For 'lower' interpolation, we always take the value at the floor of the index.
+    # If idx is an integer (e.g., 3.0), low will be 3, and s[3] is returned.
+    # If idx is fractional (e.g., 3.6), low will be 3, and s[3] is returned.
+    low = int(math.floor(idx))
+
+    # Ensure low index is within bounds, especially for cases where p might be
+    # slightly outside [0, 100] due to floating point or unexpected input.
+    low = max(0, min(low, n - 1))
+
+    return float(s[low])
+=== END ===

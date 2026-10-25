@@ -1,0 +1,133 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+
+    The remaining cents (due to fractional allocation) are distributed
+    one by one to the lines with the largest proportional discount values
+    until the total_discount_cents is fully allocated.
+
+    line_totals: list of integer cents for each line item.
+    total_discount_cents: total discount amount in cents to allocate.
+    Returns list of discount cents per line.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+    if total_discount_cents < 0:
+        raise ValueError("Total discount cents must be non-negative")
+
+    total_line_value = sum(line_totals)
+    num_lines = len(line_totals)
+
+    if total_line_value == 0:
+        # If line totals are zero, and there's a discount, distribute it
+        # evenly among lines if possible, otherwise to the first line.
+        # This handles cases like [0, 0] with total_discount_cents > 0.
+        if num_lines == 0:
+            return []
+        
+        # Distribute discount evenly, then remaining cents to first few lines.
+        base_alloc = total_discount_cents // num_lines
+        allocs = [base_alloc] * num_lines
+        remaining_cents = total_discount_cents % num_lines
+        for i in range(remaining_cents):
+            allocs[i] += 1
+        return allocs
+
+    # Calculate initial proportional allocations using float for precision
+    # Store tuples of (fractional_part, index) to sort for remainder distribution
+    allocs_with_fractions = []
+    for i, cents in enumerate(line_totals):
+        # Calculate full precision value
+        exact_allocation = (cents * total_discount_cents) / total_line_value
+        # Take integer part
+        integer_part = int(exact_allocation)
+        # Calculate fractional part
+        fractional_part = exact_allocation - integer_part
+        allocs_with_fractions.append((fractional_part, i, integer_part))
+
+    # Sort by fractional part in descending order to give remainders to lines
+    # with largest fractional parts. If fractional parts are equal, sort by index
+    # to ensure deterministic distribution (e.g., to the "first" line).
+    allocs_with_fractions.sort(key=lambda x: (-x[0], x[1]))
+
+    # Initialize final allocations with integer parts
+    final_allocations = [0] * num_lines
+    for fractional_part, original_index, integer_part in allocs_with_fractions:
+        final_allocations[original_index] = integer_part
+
+    # Distribute remaining cents
+    current_total_allocated = sum(final_allocations)
+    remaining_cents_to_distribute = total_discount_cents - current_total_allocated
+
+    for _ in range(remaining_cents_to_distribute):
+        # Iterate through the sorted list and add 1 cent to the line
+        # with the largest remaining fractional part (or first if tied)
+        # The sort order ensures we pick the correct line.
+        # We modify the original_index in final_allocations.
+        # Since we sorted by fractional part and then index, the first
+        # element in allocs_with_fractions (which represents a line)
+        # gets the penny. We then conceptually move to the next line for
+        # the next penny.
+        
+        # To distribute remaining cents one by one, we need to iterate
+        # through the lines based on their original fractional values.
+        # The list `allocs_with_fractions` is already sorted for this.
+        # We can simply iterate through it `remaining_cents_to_distribute` times,
+        # adding one cent to each line in order.
+        # A more robust way is to iterate through the *sorted indices* and add.
+        # We can use a modulo operator to cycle through the sorted lines if
+        # remaining_cents_to_distribute is greater than num_lines.
+        
+        # A simpler approach: add cents to the lines corresponding to the
+        # sorted `allocs_with_fractions` list.
+        # The list is already sorted by fractional part (desc) then index (asc).
+        # We just need to apply `+1` to the `original_index` of the first
+        # `remaining_cents_to_distribute` elements in this sorted list.
+        
+        # Example: [0.7, 0.3], total 1 cent left. First element gets it.
+        # Example: [0.7, 0.6, 0.3], total 2 cents left. First two elements get it.
+        # The loop below does this correctly.
+        
+        # The loop iterates `remaining_cents_to_distribute` times.
+        # In each iteration, `i` is the index within the `allocs_with_fractions` list.
+        # `allocs_with_fractions[i % num_lines]` ensures that if we have more cents
+        # than lines, we cycle back to the start of the sorted list.
+        # This is a standard way to distribute remainders.
+        
+        # Get the original index of the line that should receive the current penny
+        # from the pre-sorted list of lines by fractional part.
+        # The `_` in `range(remaining_cents_to_distribute)` is an iteration counter.
+        # `i` here represents which of the `remaining_cents_to_distribute` pennies we are placing.
+        # By using `i % num_lines`, we cycle through the lines (sorted by fractional part)
+        # to distribute the pennies.
+        
+        # Example: 3 lines, 5 cents to distribute.
+        # i=0: gives to line at allocs_with_fractions[0][1]
+        # i=1: gives to line at allocs_with_fractions[1][1]
+        # i=2: gives to line at allocs_with_fractions[2][1]
+        # i=3: gives to line at allocs_with_fractions[0][1] (cycles back)
+        # i=4: gives to line at allocs_with_fractions[1][1]
+        
+        # This logic ensures that pennies are distributed to lines with highest fractional
+        # parts first, and if there are more pennies than lines, it cycles back,
+        # effectively giving some lines an extra +2 cents if needed.
+        
+        # We need to get the original index from the sorted list.
+        # The element is (fractional_part, original_index, integer_part)
+        original_idx_to_receive_penny = allocs_with_fractions[_ % num_lines][1]
+        final_allocations[original_idx_to_receive_penny] += 1
+
+    return final_allocations
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===
+```

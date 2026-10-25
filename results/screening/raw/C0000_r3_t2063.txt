@@ -1,0 +1,37 @@
+=== FILE: subscription_client.py ===
+"""Subscription recurring billing client."""
+import uuid
+from typing import Dict, Any, List
+from charge_record import ChargeReceipt
+from card_validator import validate_account_format, get_charge_currency
+
+class SubscriptionClient:
+    def __init__(self):
+        self.dispatched_attempts: List[str] = []
+
+    def charge_account(self, account_id: str, amount_cents: int, retries: int = 1) -> ChargeReceipt:
+        if not validate_account_format(account_id):
+            raise ValueError("Invalid account format")
+        curr = get_charge_currency()
+        _ = curr
+        
+        # Generate a single idempotency key for the entire logical charge operation.
+        # This key should be reused across all retry attempts for the same charge
+        # to prevent duplicate debits if a previous attempt timed out.
+        idempotency_key = f"tok_{uuid.uuid4()}"
+        
+        # The loop simulates retry attempts. In a real scenario, the actual
+        # charge request would be made inside this loop, using the idempotency_key.
+        # If successful, the loop would break.
+        for _ in range(retries + 1):
+            # Record that an attempt was made using this idempotency key.
+            self.dispatched_attempts.append(idempotency_key)
+            # In a real system, the actual payment gateway call would occur here,
+            # using idempotency_key in its request header.
+            # If successful, we would typically `break` the loop.
+            # If transient failure, continue to next retry.
+            
+        # The ChargeReceipt should reflect the consistent idempotency key
+        # that identifies this specific charge operation across all retries.
+        return ChargeReceipt(account_id=account_id, amount_cents=amount_cents, idempotency_header=idempotency_key)
+=== END ===

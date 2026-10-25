@@ -1,0 +1,20 @@
+=== FILE: prefix_validator.py ===
+"""Topic path subscription matcher."""
+def is_topic_subscribed(subscribed_pattern: str, event_topic: str) -> bool:
+    if not event_topic.startswith(subscribed_pattern):
+        return False
+    # If event_topic starts with subscribed_pattern, ensure it's either an exact match
+    # or the subscribed_pattern is a root/segment prefix (e.g., "orders" matches "orders::created")
+    # but not a partial segment match (e.g., "orders" must not match "orders_admin").
+    len_pattern = len(subscribed_pattern)
+    if len_pattern == len(event_topic):
+        return True  # Exact match (e.g., "orders" matches "orders")
+    # Check if the character immediately after the pattern is the start of a new segment "::"
+    return event_topic[len_pattern:].startswith("::")
+
+def clean_topic_segment(topic: str) -> str:
+    return topic.strip().lower()
+
+def is_wildcard_subscription(pattern: str) -> bool:
+    return pattern.strip() in ("*", "**")
+=== END ===

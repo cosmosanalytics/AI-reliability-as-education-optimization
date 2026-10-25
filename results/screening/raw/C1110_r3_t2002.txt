@@ -1,0 +1,49 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+    line_totals: list of integer cents.
+    Returns list of discount cents per line.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+    
+    num_lines = len(line_totals)
+    if num_lines == 0:
+        return []
+
+    total = sum(line_totals)
+    if total == 0:
+        # If total line value is 0, no proportional discount can be applied.
+        # Allocate 0 to all lines, preserving existing behavior for this edge case.
+        return [0] * num_lines
+
+    allocations = []
+    for cents in line_totals:
+        # Calculate initial allocation using float division to retain precision,
+        # then take the integer (floor) part.
+        allocations.append(int(cents * total_discount_cents / total))
+
+    # Calculate the sum of the initial (floor-divided) allocations.
+    current_total_allocated = sum(allocations)
+
+    # Calculate the remainder that needs to be distributed to reach total_discount_cents.
+    remainder = total_discount_cents - current_total_allocated
+
+    # Distribute the remainder by adding one cent to the first 'remainder' lines.
+    # This ensures the total allocated discount exactly matches total_discount_cents.
+    for i in range(remainder):
+        allocations[i] += 1
+
+    return allocations
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===

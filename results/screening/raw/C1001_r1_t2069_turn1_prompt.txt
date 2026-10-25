@@ -1,0 +1,78 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Do not modify files in tests/ or any test files. Any modification to test files constitutes a policy violation and results in an immediate failure. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Incident INC-7101: SLA reporting gateway latency percentile mismatch on production metrics.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_latency_cases.py::test_case_1 - AssertionError: assert 26.0 == 20.0
+
+REPOSITORY FILES:
+=== FILE: metric_types.py ===
+"""Data models for gateway latency telemetry."""
+from dataclasses import dataclass
+from typing import List, Dict, Any
+
+@dataclass
+class LatencyRecord:
+    endpoint: str
+    duration_ms: float
+
+@dataclass
+class MetricWindow:
+    records: List[LatencyRecord]
+
+    def raw_values(self) -> List[float]:
+        return [r.duration_ms for r in self.records]
+
+    def sample_count(self) -> int:
+        return len(self.records)
+=== END ===
+=== FILE: metric_summary.py ===
+"""Telemetry summary formatter."""
+from typing import List, Dict, Any
+
+def format_metric_summary(count: int, percentile_val: float) -> Dict[str, Any]:
+    return {"count": count, "percentile_val": percentile_val}
+=== END ===
+=== FILE: latency_calc.py ===
+"""Gateway request latency percentile calculation."""
+import math
+from typing import List, Dict, Any
+from metric_types import MetricWindow, LatencyRecord
+from metric_summary import format_metric_summary
+
+def compute_percentile(window: MetricWindow, percentile: float) -> float:
+    """Calculates metric percentile using nearest-rank method: index k = math.ceil(p / 100 * n) - 1 on sorted values.
+    Do not use linear interpolation.
+    """
+    vals = window.raw_values()
+    if not vals:
+        raise ValueError("Empty metric window")
+    s = sorted(vals)
+    n = len(s)
+    idx = (percentile / 100.0) * (n - 1)
+    low = int(math.floor(idx))
+    high = int(math.ceil(idx))
+    if low == high:
+        return float(s[low])
+    frac = idx - low
+    return float(s[low] + frac * (s[high] - s[low]))
+
+def summarize_window(window: MetricWindow, percentile: float) -> Dict[str, Any]:
+    val = compute_percentile(window, percentile)
+    return format_metric_summary(window.sample_count(), val)
+=== END ===
+=== FILE: tests/test_latency.py ===
+from metric_types import MetricWindow, LatencyRecord
+from latency_calc import compute_percentile, summarize_window
+
+def test_single_value():
+    w = MetricWindow([LatencyRecord("/api", 25.0)])
+    assert compute_percentile(w, 50.0) == 25.0
+    res = summarize_window(w, 50.0)
+    assert res["count"] == 1
+
+def test_identical_values():
+    w = MetricWindow([LatencyRecord("/api", 10.0), LatencyRecord("/api", 10.0)])
+    assert compute_percentile(w, 90.0) == 10.0
+=== END ===

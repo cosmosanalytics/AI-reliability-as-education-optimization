@@ -1,0 +1,70 @@
+=== FILE: latency_calc.py ===
+"""Gateway request latency percentile calculation."""
+import math
+from typing import List, Dict, Any
+from metric_types import MetricWindow, LatencyRecord
+from metric_summary import format_metric_summary
+
+def compute_percentile(window: MetricWindow, percentile: float) -> float:
+    """Calculates metric percentile using nearest-rank method: index k = math.ceil(p / 100 * n) - 1 on sorted values.
+    Do not use linear interpolation.
+    """
+    vals = window.raw_values()
+    if not vals:
+        raise ValueError("Empty metric window")
+    s = sorted(vals)
+    n = len(s)
+
+    # Implement nearest-rank method as specified in the docstring:
+    # index k = math.ceil(p / 100 * n) - 1
+    # Note: p is the percentile (e.g., 90 for 90th percentile)
+    # n is the number of data points
+    # k is the 0-based index in the sorted list.
+    # The result must be clamped to valid indices [0, n-1].
+    # math.ceil(x) is 1.0 for x in (0, 1]. For x=0, it's 0.0.
+    # The formula `math.ceil(p/100 * n)` gives a 1-based rank.
+    # If p/100 * n results in 0, we should take the first element (index 0).
+    # If p/100 * n results in a value such that ceil(val) > n, we should take the last element (index n-1).
+    # This means the k should be at least 0 and at most n-1.
+
+    # Calculate the 1-based rank R
+    rank_float = (percentile / 100.0) * n
+    
+    # If percentile is 0, rank_float is 0.0, ceil is 0.0.
+    # If percentile is > 0 and <= 100, rank_float is > 0.0.
+    # math.ceil(0.0) is 0.0.
+    # For a list of 10 elements:
+    # 0th percentile: rank_float = 0.0, ceil_rank = 0.0.
+    # 1st percentile: rank_float = 0.1, ceil_rank = 1.0.
+    # 100th percentile: rank_float = 10.0, ceil_rank = 10.0.
+
+    # The formula `k = math.ceil(p / 100 * n) - 1` needs careful handling for edge cases.
+    # A common interpretation of nearest-rank for percentiles is:
+    # If p * n / 100 is an integer, take the value at that index (0-based).
+    # If p * n / 100 is not an integer, take the value at the next higher index.
+    # This is equivalent to `s[math.ceil(p * n / 100) - 1]` for 1-based rank,
+    # or `s[int(math.ceil(p * n / 100)) - 1]` for 0-based index.
+
+    # Let's derive the 0-based index k directly.
+    # As per the docstring: index k = math.ceil(p / 100 * n) - 1
+    # Example: n=5, p=50. p/100*n = 2.5. ceil(2.5) = 3. k = 3 - 1 = 2. s[2].
+    # Example: n=4, p=75. p/100*n = 3.0. ceil(3.0) = 3. k = 3 - 1 = 2. s[2].
+    # This index should be clamped to ensure it's within [0, n-1].
+    # math.ceil(0.0) is 0.0. If p=0, k=-1, so clamp to 0.
+    # math.ceil(x) where x > n: k > n-1, so clamp to n-1.
+
+    # Calculate 1-based rank
+    one_based_rank = math.ceil((percentile / 100.0) * n)
+
+    # Convert to 0-based index
+    k = int(one_based_rank) - 1
+
+    # Clamp the index to be within valid bounds [0, n-1]
+    k = max(0, min(k, n - 1))
+
+    return float(s[k])
+
+def summarize_window(window: MetricWindow, percentile: float) -> Dict[str, Any]:
+    val = compute_percentile(window, percentile)
+    return format_metric_summary(window.sample_count(), val)
+=== END ===

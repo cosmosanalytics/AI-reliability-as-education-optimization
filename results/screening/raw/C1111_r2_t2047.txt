@@ -1,0 +1,26 @@
+=== FILE: webhook_sender.py ===
+"""Webhook delivery payload construction."""
+from datetime import datetime, timezone
+from typing import Dict, Any
+from envelope_schema import WebhookEnvelope
+from signature_utils import generate_delivery_headers
+
+def build_webhook_payload(topic: str, data: Dict[str, Any], dt: datetime) -> WebhookEnvelope:
+    hdrs = generate_delivery_headers(topic)
+    # Incident INC-9103: Subscriber gateways reject timestamps with more than
+    # three decimal places for fractional seconds.
+    # Ensure the datetime object is timezone-aware and in UTC for consistent 'Z' suffix.
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    elif dt.tzinfo != timezone.utc:
+        dt = dt.astimezone(timezone.utc)
+
+    # Format to ISO 8601 with milliseconds, then replace the timezone offset
+    # with 'Z' as commonly expected by webhook subscribers for UTC timestamps.
+    ts = dt.isoformat(timespec='milliseconds').replace('+00:00', 'Z')
+    
+    env = WebhookEnvelope(topic=topic, body=data, sent_at=ts, headers=hdrs)
+    if not env.is_dispatched():
+        raise ValueError("Invalid envelope state")
+    return env
+=== END ===

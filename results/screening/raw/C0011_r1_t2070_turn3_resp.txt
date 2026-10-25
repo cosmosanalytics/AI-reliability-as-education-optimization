@@ -1,0 +1,51 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values.
+
+    This function implements a percentile calculation method that uses
+    'lower' interpolation for fractional ranks. This means that when
+    the calculated rank falls between two data points, the value of the
+    lower data point is chosen. This approach is often preferred for
+    SLA calculations to provide a more conservative estimate, ensuring
+    that the SLA threshold is evaluated against a value that is at
+    least as high as the true percentile. This is equivalent to
+    NumPy's `interpolation='lower'` method when combined with the `(N-1)`
+    rank calculation.
+
+    Args:
+        values: A list of numerical values.
+        p: The percentile to calculate, a float between 0 and 100.
+
+    Returns:
+        The calculated percentile value.
+
+    Raises:
+        ValueError: If the input `values` list is empty.
+    """
+    if not values:
+        raise ValueError("Empty values")
+    s = sorted(values)
+    n = len(s)
+
+    # Calculate rank based on the (N-1) method for 0-based indexing.
+    # This formula (p / 100.0) * (n - 1) gives a 0-based index (rank - 1).
+    # For example, for a list of 5 elements, the 0th percentile is at index 0,
+    # and the 100th percentile is at index 4 (n-1).
+    idx = (p / 100.0) * (n - 1)
+
+    # For 'lower' interpolation, we always take the value at the floor of the calculated index.
+    # This means if idx is 3.5, we take the value at index 3.
+    # This addresses the incident where a value like 45.0 (interpolated) was
+    # expected to be 40.0 (the lower bound).
+    lower_bound_idx = int(math.floor(idx))
+
+    # The calculated `lower_bound_idx` will always be a valid index for `s`.
+    # For p=0, idx=0, lower_bound_idx=0.
+    # For p=100, idx=n-1, lower_bound_idx=n-1.
+    # For any p between 0 and 100, idx will be between 0 and n-1, inclusive.
+    return float(s[lower_bound_idx])
+=== END ===

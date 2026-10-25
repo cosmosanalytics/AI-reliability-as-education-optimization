@@ -1,0 +1,66 @@
+The `pytest` run did not reproduce the error from the ticket because the `tests/test_jitter_cases.py` file mentioned in the traceback was not provided in the repository listing. However, the `check_jitter_sla` function's docstring explicitly states that "SLA compliance requires nearest-rank percentile estimation: index k = math.ceil(p / 100 * n) - 1 on sorted values." The `jitter_core.evaluate_jitter_percentile` function, which `check_jitter_sla` currently calls, implements a linear interpolation method, not nearest-rank. This is the root cause of the compliance calculation failure.
+
+To fix this, I will modify `jitter_evaluator.py` to implement the nearest-rank percentile estimation directly within or as a helper for `check_jitter_sla`. This ensures the SLA compliance check uses the method specified in its own docstring, without altering the general-purpose `evaluate_jitter_percentile` in `jitter_core.py` which might be used by other functions expecting a different percentile method. The `get_stream_jitter_metrics` function will continue to use the existing `jitter_core.evaluate_jitter_percentile` as its requirements do not specify nearest-rank.
+
+=== FILE: jitter_evaluator.py ===
+"""Network jitter SLA evaluation service."""
+import math
+from typing import List, Dict, Any
+from jitter_types import JitterStream, JitterSample
+import jitter_core
+
+def _calculate_nearest_rank_percentile(values: List[float], p: float) -> float:
+    """Calculates nearest-rank percentile as specified for SLA compliance."""
+    if not values:
+        raise ValueError("No jitter values")
+    s = sorted(values)
+    n = len(s)
+    # Nearest-rank percentile: index k = math.ceil(p / 100 * n) - 1
+    # Adjust for 0-based indexing.
+    # The problem description implicitly assumes p is in (0, 100].
+    # For p=0, math.ceil(0) is 0. For p=100, math.ceil(n) is n.
+    # The index will be from 0 to n-1.
+    k_float = (p / 100.0) * n
+    k = math.ceil(k_float) # 1-based rank
+    
+    # Handle edge case for p=0 or very small p resulting in k=0 (which is not a valid 1-based index)
+    # If k is 0, it means the percentile is at or below the first element.
+    # The common definition of nearest-rank percentile for p=0 is the minimum value.
+    # However, given the formula math.ceil(p/100 * n), if p>0, k will be at least 1.
+    # If p=0, k would be 0, which would lead to an index of -1.
+    # The common practice for 0th percentile is min, 100th percentile is max.
+    # Let's assume p will be strictly positive for a meaningful percentile.
+    
+    # If k_float is exactly 0 (i.e., p=0), k becomes 0, and index becomes -1.
+    # If p is very small such that k_float is > 0 but < 1, k becomes 1.
+    # For example, p=0.01, n=100 -> k_float = 0.01 -> k=1. index = 0.
+    # For a 1-based rank k, the 0-based index is k-1.
+    
+    if k == 0: # This case should ideally not happen if p > 0.
+        return s[0] # Return the minimum value for 0th percentile
+    
+    index = int(k) - 1 # Convert to 0-based index
+    
+    # Ensure index is within bounds [0, n-1]
+    if index < 0:
+        index = 0
+    if index >= n:
+        index = n - 1
+        
+    return s[index]
+
+
+def check_jitter_sla(stream: JitterStream, p: float, max_jitter: float) -> bool:
+    """SLA compliance requires nearest-rank percentile estimation: index k = math.ceil(p / 100 * n) - 1 on sorted values.
+    Returns True if compliance limit is respected.
+    """
+    vals = stream.raw_jitters()
+    # Use the nearest-rank percentile calculation specifically for SLA compliance
+    percentile_val = _calculate_nearest_rank_percentile(vals, p)
+    return percentile_val <= max_jitter
+
+def get_stream_jitter_metrics(stream: JitterStream, p: float) -> Dict[str, Any]:
+    vals = stream.raw_jitters()
+    q = jitter_core.evaluate_jitter_percentile(vals, p)
+    return {"count": stream.sample_count(), "jitter_p": q}
+=== END ===

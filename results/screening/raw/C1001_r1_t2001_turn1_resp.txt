@@ -1,0 +1,22 @@
+=== FILE: tax_engine.py ===
+"""Low-level tax rate computation engine."""
+from typing import Dict, Any
+
+DEFAULT_TAX_JURISDICTIONS = {
+    "standard": 0.20,
+    "reduced": 0.10,
+    "exempt": 0.0,
+}
+
+def get_rate_for_jurisdiction(code: str) -> float:
+    return DEFAULT_TAX_JURISDICTIONS.get(code, 0.20)
+
+def calculate_vat(net_cents: int, vat_rate: float) -> int:
+    """Compute VAT in integer cents for given net amount.
+    Tax calculation must use half-up rounding (ROUND_HALF_UP: ties broken towards positive infinity) on exact half-cents.
+    """
+    # The requirement is half-up rounding. For positive numbers, this can be achieved
+    # by adding 0.5 to the float result before converting to an integer, which truncates.
+    # Since net_cents and vat_rate are expected to be non-negative, the product will be non-negative.
+    return int(net_cents * vat_rate + 0.5)
+=== END ===

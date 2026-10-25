@@ -1,0 +1,21 @@
+=== FILE: iot_demux.py ===
+"""IoT sensor ingest stream demux."""
+from typing import Dict, Any
+
+def process_iot_packet(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    """Process IoT device packet.
+    
+    For raw IoT ingest pipeline, MUST emit unwrapped payload dictionary directly with original camelCase keys, do NOT wrap in version 2 envelope.
+    """
+    # As per the docstring and ticket IOT-703, the raw IoT ingest pipeline
+    # requires the original camelCase dictionary unwrapped, not a v2 envelope.
+    # The previous implementation incorrectly wrapped the payload and normalized keys.
+    return data
+
+def dispatch_iot_record(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    # This function dispatches the processed packet.
+    # The call to extract_normalized_keys(data) was a side-effect and its result
+    # was not used. It's removed for clarity and efficiency as it's not needed.
+    msg = process_iot_packet(data, epoch_ms)
+    return msg
+=== END ===

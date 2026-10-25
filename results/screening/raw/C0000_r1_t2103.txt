@@ -1,0 +1,24 @@
+=== FILE: lease_engine.py ===
+"""Distributed resource lease lock coordinator."""
+from errors import ServiceError, format_error_response
+from tx_record import TxLockEntry, inspect_lock_conflict, describe_lock_state
+from typing import Dict
+
+class LeaseLockEngine:
+    """Manage distributed resource lease locks across nodes."""
+    def __init__(self):
+        self._leases: Dict[str, str] = {}
+
+    def claim_lease(self, resource_id: str, client_id: str) -> TxLockEntry:
+        cur = self._leases.get(resource_id)
+        if inspect_lock_conflict(cur, client_id):
+            raise ServiceError("ERR_RESOURCE_LOCKED", f"Lease for '{resource_id}' is held by '{cur}'")
+        self._leases[resource_id] = client_id
+        return TxLockEntry(tx_id=client_id, resource=resource_id, granted=True)
+
+    def release_lease(self, resource_id: str, client_id: str) -> bool:
+        if self._leases.get(resource_id) == client_id:
+            del self._leases[resource_id]
+            return True
+        return False
+=== END ===

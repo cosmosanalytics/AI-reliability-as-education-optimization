@@ -1,0 +1,41 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values)
+    n = len(s)
+    
+    # The nearest-rank house standard for percentile calculation
+    # uses the rank k = ceil(p / 100.0 * n) for 0 < p <= 100.
+    # The percentile is then the value at the (k-1) index in the sorted list.
+    if not (0 < p <= 100):
+        raise ValueError("Percentile 'p' must be between 0 (exclusive) and 100 (inclusive).")
+    
+    # Calculate the 1-based rank
+    # Note: A common alternative for 'nearest-rank' on non-integer ranks is to use
+    # round(p/100 * n) instead of ceil. However, the ticket explicitly states
+    # "nearest-rank house standard" and the failing test traceback suggests
+    # a specific interpretation that aligns with ceil for non-integer ranks.
+    # For example, if p/100 * n results in 2.5, ceil(2.5) = 3.
+    # If p/100 * n results in 2.0, ceil(2.0) = 2.
+    rank = math.ceil((p / 100.0) * n)
+    
+    # Convert to 0-based index.
+    # The rank is 1-indexed, so the 0-indexed position is rank - 1.
+    idx = int(rank) - 1
+    
+    # Ensure index is within bounds for edge cases (e.g., p=100 might result in idx = n).
+    # The 'ceil' function ensures rank is at least 1 for p > 0, so idx >= 0.
+    # For p=100, rank=n, so idx=n-1, which is valid.
+    # No explicit bounds check needed here due to the constraints on 'p' and 'n'.
+        
+    return s[idx]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

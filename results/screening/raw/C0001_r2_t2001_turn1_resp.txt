@@ -1,0 +1,60 @@
+=== FILE: tax_engine.py ===
+"""Low-level tax rate computation engine."""
+import math
+from typing import Dict, Any
+
+DEFAULT_TAX_JURISDICTIONS = {
+    "standard": 0.20,
+    "reduced": 0.10,
+    "exempt": 0.0,
+}
+
+def get_rate_for_jurisdiction(code: str) -> float:
+    return DEFAULT_TAX_JURISDICTIONS.get(code, 0.20)
+
+def calculate_vat(net_cents: int, vat_rate: float) -> int:
+    """
+    Compute VAT in integer cents for given net amount.
+    Applies half-up rounding (ties broken towards positive infinity) on exact half-cents.
+    """
+    # Half-up rounding for positive numbers: add 0.5 and floor.
+    # This correctly handles cases like 13.5 -> 14, 13.4 -> 13.
+    return math.floor(net_cents * vat_rate + 0.5)
+=== END ===
+=== FILE: pricing.py ===
+"""Order pricing calculation with itemized taxes."""
+from typing import List, Tuple, Optional
+from models import LineItem, OrderSummary
+from tax_engine import calculate_vat, get_rate_for_jurisdiction
+
+def calculate_order_total(items_with_vat_rates: List[Tuple[int, int, float]], order_id: str = "ORD-001") -> OrderSummary:
+    """
+    Calculate order total including itemized tax.
+    items_with_vat_rates: list of (price_cents, quantity, vat_rate_for_item).
+    Returns OrderSummary.
+    Tax calculation must use half-up rounding (ROUND_HALF_UP: ties broken towards positive infinity) on exact half-cents.
+    """
+    line_objs: List[LineItem] = []
+    total_net_cents: int = 0
+    total_tax_cents: int = 0
+
+    for i, (price_cents, quantity, vat_rate) in enumerate(items_with_vat_rates):
+        line_item = LineItem(sku=f"SKU-{i+1}", price_cents=price_cents, quantity=quantity)
+        line_objs.append(line_item)
+
+        item_net = line_item.subtotal()
+        item_tax = calculate_vat(item_net, vat_rate)
+
+        total_net_cents += item_net
+        total_tax_cents += item_tax
+
+    total_gross_cents = total_net_cents + total_tax_cents
+
+    return OrderSummary(
+        order_id=order_id,
+        items=line_objs,
+        net_cents=total_net_cents,
+        tax_cents=total_tax_cents,
+        gross_cents=total_gross_cents
+    )
+=== END ===

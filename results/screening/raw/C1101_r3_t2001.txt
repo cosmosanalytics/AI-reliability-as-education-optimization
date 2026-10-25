@@ -1,0 +1,38 @@
+=== FILE: tax_engine.py ===
+"""Low-level tax rate computation engine."""
+from typing import Dict, Any
+import math
+
+DEFAULT_TAX_JURISDICTIONS = {
+    "standard": 0.20,
+    "reduced": 0.10,
+    "exempt": 0.0,
+}
+
+def get_rate_for_jurisdiction(code: str) -> float:
+    return DEFAULT_TAX_JURISDICTIONS.get(code, 0.20)
+
+def calculate_vat(net_cents: int, vat_rate: float) -> int:
+    """Compute VAT in integer cents for given net amount, using half-up rounding (ties towards positive infinity)."""
+    # Half-up rounding (ties towards positive infinity)
+    # For positive numbers, x.5 rounds up (e.g., 13.5 -> 14).
+    # For negative numbers, x.5 rounds towards zero (e.g., -13.5 -> -13).
+    # This is equivalent to int(x + 0.5) for positive x and int(x - 0.5) for negative x,
+    # or more generally, math.floor(x + 0.5) for positive x and math.ceil(x - 0.5) for negative x,
+    # or using decimal.Decimal with ROUND_HALF_UP.
+    # The simplest way to achieve "ties towards positive infinity" for both positive and negative
+    # values is to use math.floor(value + 0.5) for non-negative values and math.ceil(value - 0.5) for negative values.
+    # However, the standard interpretation of "ROUND_HALF_UP" is that .5 rounds away from zero.
+    # The phrase "ties broken towards positive infinity" means that for any X.5, the result is X+1.
+    # For example, -13.5 should round to -13.
+    # The expression `int(value + 0.5)` implements rounding where .5 always rounds up (towards positive infinity).
+    # E.g., int(13.5 + 0.5) = int(14.0) = 14
+    # E.g., int(-13.5 + 0.5) = int(-13.0) = -13
+    # This correctly implements the "ties broken towards positive infinity" rule.
+    # For non-half values, e.g., 13.4 -> int(13.4 + 0.5) = int(13.9) = 13.
+    # For non-half values, e.g., -13.4 -> int(-13.4 + 0.5) = int(-12.9) = -12. This is correct as -13.4 is closer to -13 than -14.
+    # For non-half values, e.g., -13.6 -> int(-13.6 + 0.5) = int(-13.1) = -13. This is correct as -13.6 is closer to -14 than -13.
+    # The original implementation was `int(net_cents * vat_rate)`, which truncates.
+    # The new implementation `int(net_cents * vat_rate + 0.5)` correctly rounds half-up towards positive infinity.
+    return int(net_cents * vat_rate + 0.5)
+=== END ===

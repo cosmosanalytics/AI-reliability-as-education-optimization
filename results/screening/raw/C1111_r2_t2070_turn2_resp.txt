@@ -1,0 +1,37 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values.
+
+    Uses the "linear interpolation between the closest two ranks" method (e.g., NumPy's
+    'linear' method or R-7 in NIST SP 800-22).
+    """
+    if not values:
+        raise ValueError("Empty values")
+    s = sorted(values)
+    n = len(s)
+    # The index calculation for percentile.
+    # The standard formula (R-7) is (p / 100.0) * (n - 1).
+    # This formula ensures that for p=0, idx=0 (s[0]) and for p=100, idx=n-1 (s[n-1]).
+    idx = (p / 100.0) * (n - 1)
+
+    # Ensure index is within bounds [0, n-1] for cases like p=0 or p=100 with small n.
+    # This also handles edge cases where idx might slightly exceed n-1 due to floating point.
+    idx = max(0.0, min(n - 1.0, idx))
+
+    low = int(math.floor(idx))
+    high = int(math.ceil(idx))
+
+    if low == high:
+        # If idx is an integer, or floor and ceil are the same (e.g., idx=3.0),
+        # then the value is directly at s[low].
+        return float(s[low])
+    else:
+        # Linear interpolation between s[low] and s[high].
+        # The fractional part represents how far between s[low] and s[high] the percentile lies.
+        frac = idx - low
+        return float(s[low] + frac * (s[high] - s[low]))
+=== END ===

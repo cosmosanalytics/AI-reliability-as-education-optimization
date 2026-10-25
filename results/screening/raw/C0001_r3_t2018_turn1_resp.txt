@@ -1,0 +1,40 @@
+=== FILE: rbac.py ===
+"""Document scope RBAC filter."""
+from path_resolver import clean_scope, split_scope_segments
+from audit_logger import format_access_attempt
+
+def check_scope_access(allowed_scope: str, requested_scope: str) -> bool:
+    """Verify if requested scope is permitted within the designated scope pattern.
+
+    Access is granted if the requested scope is a descendant (or identical)
+    of the allowed scope, respecting segment boundaries. For example,
+    'corp::public' grants access to 'corp::public::folder' but not to
+    'corp::public_internal'. An empty allowed_scope only grants access to
+    an empty requested_scope.
+    """
+    cleaned_allowed = clean_scope(allowed_scope)
+    cleaned_requested = clean_scope(requested_scope)
+
+    if not cleaned_allowed:
+        # An empty allowed_scope only grants access to an empty requested_scope.
+        allowed = not cleaned_requested
+    else:
+        allowed_segs = split_scope_segments(cleaned_allowed)
+        requested_segs = split_scope_segments(cleaned_requested)
+
+        # Check if the requested scope's segments start with the allowed scope's segments.
+        # This ensures segment boundary respect and hierarchical access.
+        allowed = (
+            len(requested_segs) >= len(allowed_segs) and
+            requested_segs[:len(allowed_segs)] == allowed_segs
+        )
+
+    _ = format_access_attempt(cleaned_allowed, cleaned_requested, allowed)
+    return allowed
+
+def filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:
+    return [s for s in scopes if check_scope_access(allowed_scope, s)]
+
+def can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:
+    return all(check_scope_access(allowed_scope, s) for s in scopes)
+=== END ===

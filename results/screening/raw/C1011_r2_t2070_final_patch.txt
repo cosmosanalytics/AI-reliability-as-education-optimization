@@ -1,0 +1,58 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values.
+
+    This implementation uses the "linear interpolation between closest ranks"
+    method, where the index is calculated as (p / 100.0) * (n - 1).
+    This is equivalent to the method used by NumPy's percentile with
+    interpolation='linear' for p in [0, 100], and R's quantile with type=7.
+
+    For example, for values [10, 20, 30, 40, 50] and p=90:
+    n = 5
+    idx = (90 / 100.0) * (5 - 1) = 0.9 * 4 = 3.6
+    low = floor(3.6) = 3
+    high = ceil(3.6) = 4
+    frac = 3.6 - 3 = 0.6
+    result = s[3] + 0.6 * (s[4] - s[3]) = 40 + 0.6 * (50 - 40) = 40 + 6 = 46.0
+
+    This method ensures that the 0th percentile is the minimum value
+    and the 100th percentile is the maximum value.
+    """
+    if not values:
+        raise ValueError("Empty values")
+    if not (0 <= p <= 100):
+        raise ValueError("Percentile p must be between 0 and 100")
+
+    s = sorted(values)
+    n = len(s)
+
+    # Handle edge cases for 0th and 100th percentile explicitly to avoid
+    # potential float precision issues with idx calculation leading to
+    # out-of-bounds indexing or incorrect results for n=1.
+    if p == 0:
+        return float(s[0])
+    if p == 100:
+        return float(s[n - 1])
+
+    # Calculate the rank index.
+    # The formula (p / 100.0) * (n - 1) is a common standard for percentile
+    # calculation (e.g., Type 7 in R, numpy.percentile with interpolation='linear').
+    # This ensures that the 0th percentile is the min and 100th is the max.
+    idx = (p / 100.0) * (n - 1)
+
+    low = int(math.floor(idx))
+    high = int(math.ceil(idx))
+
+    # If low and high are the same (i.e., idx is an integer), no interpolation needed.
+    # This also handles the case where n=1, as idx will be 0, low=0, high=0.
+    if low == high:
+        return float(s[low])
+
+    # Linear interpolation
+    frac = idx - low
+    return float(s[low] + frac * (s[high] - s[low]))
+=== END ===

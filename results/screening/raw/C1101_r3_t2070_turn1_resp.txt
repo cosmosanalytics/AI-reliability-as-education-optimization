@@ -1,0 +1,25 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values.
+
+    The percentile is calculated using the nearest-rank method, where the P-th
+    percentile is the smallest value in the dataset such that P percent of the
+    data is less than or equal to this value.
+    """
+    if not values:
+        raise ValueError("Empty values")
+    s = sorted(values)
+    n = len(s)
+    if p == 0:
+        return float(s[0])
+    # The nearest-rank method: calculate index k = ceil(p/100 * n)
+    # The percentile is the value at s[k-1] (0-indexed)
+    k = math.ceil((p / 100.0) * n)
+    # Ensure k is within valid bounds (1 to n)
+    k = max(1, min(n, k))
+    return float(s[int(k) - 1])
+=== END ===

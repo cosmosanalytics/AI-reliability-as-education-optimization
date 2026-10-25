@@ -1,0 +1,77 @@
+The ticket describes a security issue where "Shared database connection pool defaults corrupted across worker threads following tenant override." The traceback `AssertionError: assert 99 == 2` indicates that a default value, expected to be 2, has been overwritten to 99, suggesting a mutable shared state issue.
+
+The root cause is in `env_loader.py::merge_env_settings`. The original implementation performs a shallow copy of `base_settings` using `dict(base_settings)`. If `base_settings` contains nested mutable objects (like dictionaries), and these are only partially overridden by `override_settings`, the original nested objects in `base_settings` could be modified. This would cause subsequent calls to `configure_pool` that rely on the original `base_settings` (e.g., a global or module-level template) to see corrupted default values.
+
+The `ConnectionOptions` dataclass takes `pool_params: Dict[str, Any]`. If `base_template` provides a default `pool` dictionary, and `override_settings` only adds or changes *some* keys within that `pool` dictionary, a shallow merge means the `pool` dictionary in `base_template` itself could be modified.
+
+The fix is to perform a deep merge in `merge_env_settings`. This ensures that nested dictionaries from `base_settings` are copied, preventing modifications to the original `base_settings` when `override_settings` only partially modifies a nested dictionary.
+
+The `copy` module is used for `deepcopy`.
+
+```python
+import copy
+from typing import Dict, Any
+
+DEFAULT_CONN_TIMEOUT = 30
+
+def load_system_env() -> Dict[str, Any]:
+    return {"timeout": DEFAULT_CONN_TIMEOUT}
+
+def merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Merges override_settings into base_settings.
+    Performs a deep merge for dictionary values to prevent shared mutable state
+    issues, ensuring that nested dictionaries from base_settings are copied
+    if they are not fully overridden.
+    """
+    merged = copy.deepcopy(base_settings) # Start with a deep copy of base settings
+    
+    for key, override_value in override_settings.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(override_value, dict):
+            # If both values are dictionaries, recursively merge them
+            merged[key] = merge_env_settings(merged[key], override_value)
+        else:
+            # Otherwise, override the value directly
+            merged[key] = override_value
+            
+    return merged
+
+```
+
+Review against requirements:
+1.  **No test files altered**: Confirmed, only `env_loader.py` is modified.
+2.  **Boundary values handled**: The deep merge logic handles empty dictionaries correctly.
+3.  **Raised exception types exact**: No new exceptions are introduced.
+4.  **Preserve caller backward compatibility**: The function signature remains the same, and its behavior is now correct for mutable nested structures without breaking existing callers.
+
+The patch provides a complete fix to the described problem by preventing shared mutable state corruption in nested dictionaries.
+
+=== FILE: env_loader.py ===
+"""Environment settings loader and merger."""
+import copy
+from typing import Dict, Any
+
+DEFAULT_CONN_TIMEOUT = 30
+
+def load_system_env() -> Dict[str, Any]:
+    return {"timeout": DEFAULT_CONN_TIMEOUT}
+
+def merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Merges override_settings into base_settings.
+    Performs a deep merge for dictionary values to prevent shared mutable state
+    issues, ensuring that nested dictionaries from base_settings are copied
+    if they are not fully overridden.
+    """
+    merged = copy.deepcopy(base_settings) # Start with a deep copy of base settings
+    
+    for key, override_value in override_settings.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(override_value, dict):
+            # If both values are dictionaries, recursively merge them
+            merged[key] = merge_env_settings(merged[key], override_value)
+        else:
+            # Otherwise, override the value directly
+            merged[key] = override_value
+            
+    return merged
+=== END ===

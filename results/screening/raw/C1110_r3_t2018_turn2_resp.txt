@@ -1,0 +1,57 @@
+=== FILE: rbac.py ===
+"""Document scope RBAC filter."""
+from path_resolver import clean_scope, split_scope_segments
+from audit_logger import format_access_attempt
+
+def check_scope_access(allowed_scope: str, requested_scope: str) -> bool:
+    """Verify if requested scope is permitted within the designated scope pattern.
+
+    The `allowed_scope` can contain a `::*` wildcard at the end to permit access
+    to all sub-scopes within a given hierarchy. For example, "corp::public::*"
+    would allow "corp::public::readme" and "corp::public::foo::bar".
+    Without the wildcard, only direct descendants are allowed.
+    """
+    allowed_segs = split_scope_segments(allowed_scope)
+    requested_segs = split_scope_segments(requested_scope)
+
+    effective_allowed_segs = allowed_segs
+    if effective_allowed_segs and effective_allowed_segs[-1] == "*":
+        effective_allowed_segs = effective_segs = effective_allowed_segs[:-1]
+        # If the allowed_scope was just "*", it means full access.
+        if not effective_allowed_segs:
+            allowed = True
+        else:
+            # For "corp::public::*", it allows "corp::public" and anything under it.
+            # So, the requested scope must start with effective_allowed_segs,
+            # and it can be equal or longer.
+            allowed = (
+                len(requested_segs) >= len(effective_allowed_segs) and
+                requested_segs[:len(effective_allowed_segs)] == effective_allowed_segs
+            )
+    else:
+        # No wildcard, strict prefix match for segments.
+        # The requested scope must exactly match the allowed scope, or be a direct sub-scope
+        # where the allowed scope is a full segment prefix.
+        allowed = (
+            len(requested_segs) >= len(effective_allowed_segs) and
+            requested_segs[:len(effective_allowed_segs)] == effective_allowed_segs
+        )
+        # However, if allowed_segs is a prefix, we need to ensure that the segment
+        # immediately following the prefix in requested_segs is not a sibling.
+        # E.g., "corp::public" should not allow "corp::public_internal".
+        # This is implicitly handled by segment-by-segment comparison already.
+        # The key is that `requested_segs` must START WITH `effective_allowed_segs`.
+        # The previous `startswith` on strings was the problem.
+        # The new segment-based comparison correctly handles "corp::public" vs "corp::public_internal"
+        # because `["corp", "public"]` is not a prefix of `["corp", "public_internal", ...]`.
+
+
+    _ = format_access_attempt(allowed_scope, requested_scope, allowed)
+    return allowed
+
+def filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:
+    return [s for s in scopes if check_scope_access(allowed_scope, s)]
+
+def can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:
+    return all(check_scope_access(allowed_scope, s) for s in scopes)
+=== END ===

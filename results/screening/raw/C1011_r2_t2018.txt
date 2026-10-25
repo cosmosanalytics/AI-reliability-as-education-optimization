@@ -1,0 +1,62 @@
+=== FILE: rbac.py ===
+"""Document scope RBAC filter."""
+from path_resolver import clean_scope, split_scope_segments
+from audit_logger import format_access_attempt
+
+def check_scope_access(allowed_scope: str, requested_scope: str) -> bool:
+    """Verify if requested scope is permitted within the designated scope pattern.
+
+    An allowed scope can be a direct path (e.g., "corp::public") or
+    can end with "::*" to indicate a wildcard match for any child scopes
+    (e.g., "corp::public::*").
+
+    Access is granted if:
+    1. The `requested_scope` segments exactly match the `allowed_scope` segments.
+    2. The `allowed_scope` ends with "::*" and the `allowed_scope` segments
+       (excluding the "*") are a prefix of the `requested_scope` segments.
+    3. The `allowed_scope` segments are a strict prefix of the `requested_scope`
+       segments, meaning `allowed_scope` is a parent of `requested_scope`.
+    """
+    cleaned_allowed = clean_scope(allowed_scope)
+    cleaned_requested = clean_scope(requested_scope)
+
+    allowed_segments_raw = split_scope_segments(cleaned_allowed)
+    requested_segments = split_scope_segments(cleaned_requested)
+
+    allowed_is_wildcard = False
+    if allowed_segments_raw and allowed_segments_raw[-1] == "*":
+        allowed_is_wildcard = True
+        allowed_segments = allowed_segments_raw[:-1]
+    else:
+        allowed_segments = allowed_segments_raw
+
+    len_allowed = len(allowed_segments)
+    len_requested = len(requested_segments)
+
+    if not allowed_segments or not requested_segments:
+        # An empty scope cannot grant access, nor can an empty requested scope be granted access
+        allowed = False
+    elif len_requested < len_allowed:
+        # Requested scope is shorter than the allowed scope's non-wildcard prefix
+        allowed = False
+    else:
+        # Check if the allowed segments are a prefix of the requested segments
+        prefix_match = requested_segments[:len_allowed] == allowed_segments
+
+        if allowed_is_wildcard:
+            # If wildcard is present, a prefix match is sufficient if requested is at least as long
+            allowed = prefix_match
+        else:
+            # Without wildcard, access is granted only if it's an exact match
+            # or if the allowed scope is a direct parent (strict prefix)
+            allowed = prefix_match and (len_requested == len_allowed or len_requested > len_allowed)
+
+    _ = format_access_attempt(allowed_scope, requested_scope, allowed)
+    return allowed
+
+def filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:
+    return [s for s in scopes if check_scope_access(allowed_scope, s)]
+
+def can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:
+    return all(check_scope_access(allowed_scope, s) for s in scopes)
+=== END ===

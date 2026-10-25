@@ -1,0 +1,45 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+    line_totals: list of integer cents.
+    Returns list of discount cents per line.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+    total = sum(line_totals)
+    if total == 0:
+        # If total value of lines is zero, no discount can be proportionally allocated.
+        # Return zeros for all lines.
+        return [0] * len(line_totals)
+
+    # Calculate base allocations using integer division.
+    # This may result in a total sum less than total_discount_cents due to fractional cents being truncated.
+    base_allocations = [cents * total_discount_cents // total for cents in line_totals]
+    current_total_allocated = sum(base_allocations)
+
+    # Distribute any remaining cents (the "unallocated pennies") one by one.
+    # The remainder is distributed by adding 1 cent to the first lines, cycling through them.
+    remainder = total_discount_cents - current_total_allocated
+    
+    # Create a mutable list for final allocations
+    final_allocations = list(base_allocations)
+
+    # Distribute the remainder cents. If remainder is negative or zero, this loop won't run.
+    # This handles the "unallocated penny mismatch" for promotional (positive) discounts.
+    for i in range(remainder):
+        # Distribute one cent to the current line, cycling through lines if remainder is large
+        final_allocations[i % len(final_allocations)] += 1
+    
+    return final_allocations
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===

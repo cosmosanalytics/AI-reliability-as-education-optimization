@@ -1,0 +1,78 @@
+=== FILE: guard.py ===
+"""API gateway authorization guard."""
+from policy import RoutePolicy
+from url_normalizer import clean_scope
+
+def _match_segments(pattern_segments: list, request_segments: list) -> bool:
+    """Helper to match segments with '*' and '**' wildcards."""
+    p_idx = 0
+    r_idx = 0
+
+    while p_idx < len(pattern_segments) and r_idx < len(request_segments):
+        pattern_part = pattern_segments[p_idx]
+        request_part = request_segments[r_idx]
+
+        if pattern_part == '**':
+            # '**' matches zero or more segments.
+            # If it's the last pattern segment, it matches all remaining request segments.
+            if p_idx == len(pattern_segments) - 1:
+                return True
+            # If not the last, try to find the next pattern segment in the request.
+            # This is essentially a "skip until" logic.
+            next_pattern_part = pattern_segments[p_idx + 1]
+            found_next = False
+            temp_r_idx = r_idx
+            while temp_r_idx < len(request_segments):
+                if request_segments[temp_r_idx] == next_pattern_part:
+                    # Found a potential match for the next pattern part.
+                    # Recursively check if the rest of the pattern matches from this point.
+                    if _match_segments(pattern_segments[p_idx + 1:], request_segments[temp_r_idx:]):
+                        return True
+                temp_r_idx += 1
+            return False # Could not find a path for the rest of the pattern
+
+        elif pattern_part == '*':
+            # '*' matches exactly one segment.
+            p_idx += 1
+            r_idx += 1
+        elif pattern_part == request_part:
+            # Exact segment match.
+            p_idx += 1
+            r_idx += 1
+        else:
+            # Segments do not match.
+            return False
+
+    # After iterating, both pattern and request segments must be fully consumed
+    # for a match, unless the remaining pattern parts are all '**'.
+    while p_idx < len(pattern_segments) and pattern_segments[p_idx] == '**':
+        p_idx += 1
+
+    return p_idx == len(pattern_segments) and r_idx == len(request_segments)
+
+
+def is_scope_permitted(policy: RoutePolicy, request_scope: str) -> bool:
+    """Check if request_scope is authorized under policy.allowed_pattern.
+    Access control scopes must use the double-colon hierarchy tenant::department::service::action.
+    Sibling paths must be checked against '::' segment boundaries.
+    The single asterisk wildcard '*' matches exactly one segment; the double asterisk '**' matches arbitrary multi-segment prefixes.
+    """
+    clean_req = clean_scope(request_scope)
+    pattern = policy.allowed_pattern
+
+    # Split patterns and request scopes into segments
+    pattern_segments = pattern.split('::')
+    request_segments = clean_req.split('::')
+
+    return _match_segments(pattern_segments, request_segments)
+
+
+def evaluate_request(policies: list, role: str, scope: str) -> bool:
+    for p in policies:
+        if p.matches_role(role) and is_scope_permitted(p, scope):
+            return True
+    return False
+
+def count_permitted_scopes(policy: RoutePolicy, scopes: list) -> int:
+    return sum(1 for s in scopes if is_scope_permitted(policy, s))
+=== END ===

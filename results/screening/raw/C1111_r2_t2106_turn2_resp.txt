@@ -1,0 +1,79 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values)
+    n = len(s)
+    if not (0 <= p <= 100):
+        raise ValueError("Percentile must be between 0 and 100, inclusive.")
+    
+    # Calculate index using the nearest rank method (typically R-1 or R-2 type)
+    # The issue implies a standard where for even N and P=50, the lower of the two middle values is chosen.
+    # This corresponds to using math.ceil for the rank, and then adjusting for 0-based indexing.
+    # For a percentile 'p', the rank 'r' is (p/100) * N.
+    # If r is an integer, the p-th percentile is the r-th value.
+    # If r is not an integer, the p-th percentile is the value at ceil(r).
+    # This is equivalent to `s[math.ceil(p/100 * n) - 1]` for 0-based indexing.
+    
+    # For a list of N items, the ranks are 1 to N.
+    # The rank corresponding to percentile p is (p/100) * N.
+    
+    # Example: [10, 20, 30, 40, 50, 60, 70, 80], N=8, P=50
+    # Rank = (50/100) * 8 = 4.0
+    # The 4th element (0-indexed s[3]) is 40.0.
+    
+    # The previous formula was `idx = (p / 100.0) * (len(s) - 1)`.
+    # For N=8, P=50, this gave idx = 0.5 * 7 = 3.5, which linearly interpolated between s[3] and s[4].
+    # This resulted in 45.0. The expected value was 40.0.
+    
+    # The "nearest-rank house standard" implies that if the rank is an integer,
+    # we take that value. If it's not an integer, we might round up or down.
+    # To get 40.0 for P=50, N=8, the index should be 3 (0-based).
+    # This corresponds to the formula `math.ceil(p / 100.0 * n) - 1`
+    
+    # Handle edge cases for p=0 and p=100 explicitly
+    if p == 0:
+        return s[0]
+    if p == 100:
+        return s[n - 1]
+
+    # Calculate the 1-based rank (index if it were 1-based)
+    rank = (p / 100.0) * n
+    
+    # The "nearest-rank" method often implies finding the element at a specific rank.
+    # If rank is an integer, it's the element at that rank.
+    # If rank is not an integer, it's typically rounded up to the next integer rank.
+    # This is equivalent to using `math.ceil(rank)` for 1-based indexing, then converting to 0-based.
+    
+    # Example: N=8, P=50, rank=4.0. Index = 4 - 1 = 3. s[3] = 40.0
+    # Example: N=5, P=50, rank=2.5. Index = ceil(2.5) - 1 = 3 - 1 = 2. s[2] = 30.0
+    # This definition matches the "nearest rank" method (often R-6 or R-7 variant without interpolation, or specific R-1 type).
+    
+    # Using ceil for rank for 1-based indexing, then converting to 0-based index.
+    # This approach effectively selects the smallest value in the dataset that is greater than
+    # or equal to the desired percentile.
+    
+    # The 0-based index will be `math.ceil(rank) - 1`.
+    # Ensure the index is within bounds [0, n-1].
+    # math.ceil(rank) will be at least 1 (for rank > 0).
+    # math.ceil(rank) will be at most n (for rank <= n).
+    
+    idx = int(math.ceil(rank)) - 1
+    
+    # In case of floating point inaccuracies or edge cases where rank might be slightly less than 1,
+    # ensure idx is not negative.
+    idx = max(0, idx)
+    # Ensure idx does not exceed n-1. This can happen if rank is exactly n, and ceil(n)-1 = n-1.
+    # No, it should not exceed n-1 because rank is at most n, so ceil(rank) is at most n, so idx is at most n-1.
+
+    return s[idx]
+
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

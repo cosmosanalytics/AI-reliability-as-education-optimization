@@ -1,0 +1,56 @@
+=== FILE: guard.py ===
+"""API gateway authorization guard."""
+from policy import RoutePolicy
+from url_normalizer import clean_scope
+
+def is_scope_permitted(policy: RoutePolicy, request_scope: str) -> bool:
+    """Check if request_scope is authorized under policy.allowed_pattern.
+    Access control scopes must use the double-colon hierarchy tenant::department::service::action.
+    Sibling paths must be checked against '::' segment boundaries.
+    The single asterisk wildcard '*' matches exactly one segment; the double asterisk '**' matches arbitrary multi-segment prefixes.
+    """
+    clean_req = clean_scope(request_scope)
+    pattern = policy.allowed_pattern
+
+    if policy.is_wildcard():  # Handles the case where pattern is just "**"
+        return True
+
+    # Split patterns and request scope into segments
+    pattern_segments = pattern.split('::')
+    request_segments = clean_req.split('::')
+
+    # Handle double asterisk wildcard (**)
+    if pattern_segments and pattern_segments[-1] == '**':
+        # Remove '**' from pattern for comparison
+        prefix_pattern_segments = pattern_segments[:-1]
+        # Check if the request scope starts with the prefix of the pattern segments
+        # and ensure the prefix is not longer than the request segments
+        if len(request_segments) >= len(prefix_pattern_segments) and \
+           request_segments[:len(prefix_pattern_segments)] == prefix_pattern_segments:
+            return True
+        return False
+
+    # Handle single asterisk wildcard (*)
+    if pattern_segments and pattern_segments[-1] == '*':
+        # Check if the request scope has exactly one more segment than the pattern prefix
+        # and the prefix matches
+        prefix_pattern_segments = pattern_segments[:-1]
+        if len(request_segments) == len(prefix_pattern_segments) + 1 and \
+           request_segments[:len(prefix_pattern_segments)] == prefix_pattern_segments:
+            return True
+        return False
+
+    # Handle exact match (no wildcards or wildcards already handled)
+    # This also correctly handles the sibling path boundary for patterns like "corp::reports"
+    # where "corp::reports_secret" should not match, as it requires an exact segment-by-segment match.
+    return clean_req == pattern
+
+def evaluate_request(policies: list, role: str, scope: str) -> bool:
+    for p in policies:
+        if p.matches_role(role) and is_scope_permitted(p, scope):
+            return True
+    return False
+
+def count_permitted_scopes(policy: RoutePolicy, scopes: list) -> int:
+    return sum(1 for s in scopes if is_scope_permitted(policy, s))
+=== END ===

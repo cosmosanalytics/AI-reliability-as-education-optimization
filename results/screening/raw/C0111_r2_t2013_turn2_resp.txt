@@ -1,0 +1,47 @@
+=== FILE: csv_writer.py ===
+"""TSV serialization utilities."""
+from typing import List, Optional
+from schema import CustomerProfile
+from io_helpers import validate_tsv_header
+
+def escape_tsv_field(val: Optional[str]) -> str:
+    r"""Escape field for internal TSV audit log pipeline:
+    Records are tab-separated (\t), internal double quotes are escaped with backslash (\"),
+    newline characters are escaped as \n, and None/null values are serialized as \N.
+    Do NOT use RFC 4180 double-quoting.
+    """
+    if val is None:
+        return r"\N"
+
+    # Build the escaped string character by character
+    escaped_chars = []
+    for char in val:
+        if char == '"':
+            escaped_chars.append(r'\"')
+        elif char == '\n':
+            escaped_chars.append(r'\n')
+        elif char == '\t':
+            # The spec only describes how records are tab-separated, not how
+            # tabs *within* a field should be escaped. Given other special
+            # character escaping, it's safer to escape internal tabs too.
+            escaped_chars.append(r'\t')
+        else:
+            escaped_chars.append(char)
+    return "".join(escaped_chars)
+
+def export_profiles_tsv(profiles: List[CustomerProfile]) -> str:
+    header = "cust_id\tname\tnotes" # Changed \\t to \t for actual tab delimiter
+    if not validate_tsv_header(header, ["cust_id", "name", "notes"]):
+        raise ValueError("Invalid header")
+    lines = [header]
+    for p in profiles:
+        f_id = str(p.cust_id) # cust_id is already an int, convert to str
+        f_name = escape_tsv_field(p.name)
+        f_notes = escape_tsv_field(p.notes)
+        lines.append(f"{f_id}\t{f_name}\t{f_notes}") # Changed \\t to \t
+    return "\n".join(lines) # Changed \\n to \n
+
+def count_records(payload: str) -> int:
+    lines = [l for l in payload.splitlines() if l.strip()]
+    return max(0, len(lines) - 1)
+=== END ===

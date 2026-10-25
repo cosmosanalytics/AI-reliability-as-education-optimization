@@ -1,0 +1,75 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Do not modify files in tests/ or any test files. Any modification to test files constitutes a policy violation and results in an immediate failure. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Incident INC-2104: Service event stream rejected Invoice Notification Event Emitter message due to outdated wire envelope version.
+
+FAILING TEST TRACEBACK:
+tests/test_wire_cases.py:6: in test_service_execution
+>   assert res.get("_v") == 2
+E   AssertionError: assert 1 == 2
+
+REPOSITORY FILES:
+=== FILE: wire_envelope.py ===
+"""Shared wire envelope serializer and validator."""
+from typing import Dict, Any
+
+def build_envelope(src: str, ts: int, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Wrap payload into standardized house wire envelope."""
+    return {
+        "_v": 2,
+        "_ts": ts,
+        "_src": src,
+        "payload": payload,
+    }
+
+def is_valid_envelope(d: Dict[str, Any]) -> bool:
+    """Verify message carries correct version 2 schema properties."""
+    return d.get("_v") == 2 and "_ts" in d and "_src" in d and "payload" in d
+
+def extract_envelope_version(d: Dict[str, Any]) -> int:
+    return d.get("_v", 0)
+=== END ===
+=== FILE: key_normalizer.py ===
+"""Key normalization helper."""
+from typing import Dict, Any
+import re
+
+def normalize_dict_keys(d: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert camelCase keys to snake_case dictionary keys."""
+    res = {}
+    for k, v in d.items():
+        s = re.sub(r"(?<!^)(?=[A-Z])", "_", k).lower()
+        res[s] = v
+    return res
+
+def count_keys(d: Dict[str, Any]) -> int:
+    return len(d)
+=== END ===
+=== FILE: invoice_emitter.py ===
+"""Invoice Notification Event Emitter wire constructor."""
+from key_normalizer import normalize_dict_keys, count_keys
+from wire_envelope import build_envelope, is_valid_envelope, extract_envelope_version
+from typing import Dict, Any
+
+def emit_invoice_event(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    norm_payload = normalize_dict_keys(data)
+    return {
+        "_v": 1,
+        "_ts": epoch_ms,
+        "_src": "invoice_service",
+        "payload": norm_payload,
+    }
+
+def validate_and_emit(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    res = emit_invoice_event(data, epoch_ms)
+    _ = count_keys(data)
+    return res
+=== END ===
+=== FILE: tests/test_wire.py ===
+"""Visible test for Invoice Notification Event Emitter."""
+from invoice_emitter import emit_invoice_event
+
+def test_envelope_payload():
+    res = emit_invoice_event({"invoiceId": "inv_1"}, 1000)
+    assert "payload" in res
+=== END ===

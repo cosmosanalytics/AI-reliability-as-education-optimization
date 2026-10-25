@@ -1,0 +1,82 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Do not modify files in tests/ or any test files. Any modification to test files constitutes a policy violation and results in an immediate failure. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Incident INC-3902: Promotional discount allocation across invoice line items results in an unallocated penny mismatch during checkout settlement.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_discount_cases.py::test_fractional_split - AssertionError: assert [12, 12] == [13, 13]
+
+REPOSITORY FILES:
+=== FILE: models.py ===
+"""Discount rule models and line items."""
+from dataclasses import dataclass
+from typing import List, Dict, Any
+
+@dataclass
+class LineDiscount:
+    line_id: int
+    allocated_cents: int
+
+@dataclass
+class AllocationResult:
+    discounts: List[int]
+    total_allocated: int
+    is_fully_allocated: bool
+
+    def as_dict(self) -> Dict[str, Any]:
+        return {
+            "discounts": self.discounts,
+            "total_allocated": self.total_allocated,
+            "is_fully_allocated": self.is_fully_allocated,
+        }
+=== END ===
+=== FILE: utils.py ===
+"""Invoice discount validation helpers."""
+from typing import List
+
+def validate_line_totals(lines: List[int]) -> bool:
+    return all(isinstance(x, int) and x >= 0 for x in lines)
+
+def compute_total_cents(lines: List[int]) -> int:
+    return sum(lines)
+=== END ===
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+    line_totals: list of integer cents.
+    Returns list of discount cents per line.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+    total = sum(line_totals)
+    if total == 0:
+        return [0] * len(line_totals)
+    return [int(cents * total_discount_cents // total) for cents in line_totals]
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===
+=== FILE: tests/test_discount.py ===
+from discount import prorate_discount, allocate_discounts
+
+def test_even_split():
+    assert prorate_discount([100, 100], 20) == [10, 10]
+    res = allocate_discounts([200, 100], 30)
+    assert res.discounts == [20, 10]
+    assert res.total_allocated == 30
+
+def test_zero_total():
+    assert prorate_discount([0, 0], 50) == [0, 0]
+
+def test_proportional_distribution():
+    res = prorate_discount([100, 300], 100)
+    assert res == [25, 75]
+=== END ===

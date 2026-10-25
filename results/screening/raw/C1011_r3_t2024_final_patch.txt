@@ -1,0 +1,19 @@
+=== FILE: sort_helper.py ===
+"""Internal stream sorting helper."""
+from typing import List
+from event_packet import EventPacket
+
+def order_packets(packets: List[EventPacket]) -> List[EventPacket]:
+    # Sort by severity in descending order, then by stream_id in descending order
+    # for tie-breaking.
+    # Python's list.sort() is stable, meaning that if multiple elements have the
+    # same key, their relative order is preserved. We can use this property
+    # to perform a multi-key sort where some keys are descending and others ascending.
+    # First, sort by the secondary tie-breaking key (stream_id) in descending order.
+    packets.sort(key=lambda p: p.stream_id, reverse=True)
+    # Then, sort by the primary key (severity) in descending order.
+    # Due to stability, packets with the same severity will retain their
+    # stream_id-based descending order.
+    packets.sort(key=lambda p: p.severity, reverse=True)
+    return packets
+=== END ===

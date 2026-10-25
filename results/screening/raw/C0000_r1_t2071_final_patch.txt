@@ -1,0 +1,101 @@
+=== FILE: rpc_calc.py ===
+"""Microservice RPC duration percentile calculator."""
+import math
+from typing import List, Dict, Any
+from rpc_data import RpcSeries, RpcSample
+from rpc_formatter import format_rpc_stat
+
+def compute_rpc_percentile(series: RpcSeries, p: float) -> float:
+    """Calculates SLA percentile for RPC responses.
+    This implementation uses the "nearest rank" method, ensuring that
+    at least p% of the values are below or equal to the returned percentile.
+    """
+    vals = series.durations()
+    if not vals:
+        raise ValueError("No RPC samples available")
+    s = sorted(vals)
+    n = len(s)
+
+    # The index calculation for percentiles can vary. A common and robust
+    # approach, especially for SLA reporting, is to ensure that at least
+    # p% of the data points are less than or equal to the reported value.
+    # This usually means taking the ceiling of (p/100 * n) and adjusting
+    # for 0-based indexing.
+    # If p=100, index should be n-1.
+    # If p=0, index should be 0.
+    # The current formula `int(round((p / 100.0) * (n - 1)))` can sometimes
+    # yield a lower value, leading to "inconsistent" reports where the
+    # actual percentile is higher than what's reported.
+    # We switch to a formula that is more common in statistical software
+    # for ensuring a conservative percentile estimate (e.g., matching numpy's
+    # 'linear' interpolation for small datasets when rounded, or similar
+    # to the inclusive method).
+
+    # For p=0, index should be 0.
+    # For p=100, index should be n-1.
+    # For p in (0, 100), the index should be strictly between 0 and n-1.
+    # The formula (p / 100.0) * n - 1 ensures that for p=100, it's n-1.
+    # For p=0, it's -1, which needs to be clamped to 0.
+    # A common approach is: i = (p/100) * n
+    # The index is then i-1 if i is an integer, or floor(i) if i is not.
+    # A simpler way to achieve a "conservative" percentile (i.e., not
+    # under-reporting) is to calculate the 1-based rank k, then take
+    # the element at 0-based index k-1.
+    # k = ceil((p / 100.0) * n)
+    # idx = max(0, int(k) - 1)
+
+    # Let's use the standard definition where the index is calculated
+    # such that it ensures at least p% of the values are below or equal.
+    # This implies using a floor or ceil function depending on exact definition.
+    # A common way to compute the 0-indexed rank `i` such that `s[i]` is the
+    # Pth percentile is: `i = ceil((p / 100.0) * n) - 1`.
+    # This also needs to be clamped to `n-1` for the 100th percentile.
+
+    # Example: n=5, s=[10,20,30,40,50]
+    # p=50: ceil(0.5*5)-1 = ceil(2.5)-1 = 3-1 = 2 -> s[2]=30 (correct median)
+    # p=75: ceil(0.75*5)-1 = ceil(3.75)-1 = 4-1 = 3 -> s[3]=40
+    # p=90: ceil(0.9*5)-1 = ceil(4.5)-1 = 5-1 = 4 -> s[4]=50
+    # p=100: ceil(1.0*5)-1 = 5-1 = 4 -> s[4]=50
+
+    # This definition ensures that for a given percentile P, the value returned
+    # is the smallest value in the dataset such that at least P% of the data
+    # is less than or equal to that value. This is typically what's expected
+    # for SLA reporting where under-reporting is undesired.
+
+    # Clamp p between 0 and 100 to handle edge cases
+    p = max(0.0, min(100.0, p))
+
+    # Calculate 1-based rank
+    k = (p / 100.0) * n
+    
+    # For consistency with common statistical software and to avoid under-reporting,
+    # we use a method that corresponds to the 'higher' value when interpolation
+    # would occur, or the 'nearest' value for integer ranks.
+    # This means for a non-integer rank, we take the next higher index.
+    # For an integer rank, we take that rank.
+    # This can be achieved by `ceil(k)` for the 1-based index, then converting to 0-based.
+    # Or, more directly, using `math.floor` on `(p / 100.0) * n` and clamping.
+
+    # The most common definition for 0-indexed `idx` such that `s[idx]` is the Pth percentile
+    # and `P%` of values are `<= s[idx]` is:
+    # `idx = max(0, math.ceil((p / 100.0) * n) - 1)`
+    # This covers p=0, p=100 correctly, and generally ensures the result is
+    # not lower than expected.
+
+    # Let's re-evaluate the original formula for a common case.
+    # `idx = int(round((p / 100.0) * (n - 1)))`
+    # If `n=3`, `s=[10, 20, 30]`
+    # p=50: `int(round(0.5 * 2)) = 1`. `s[1]=20`. Correct.
+    # p=70: `int(round(0.7 * 2)) = int(round(1.4)) = 1`. `s[1]=20`. But 70th percentile should be 30.
+    # Here, `ceil(0.7*3)-1 = ceil(2.1)-1 = 3-1 = 2`. `s[2]=30`. This is more robust.
+
+    # Adopt the definition: `idx = math.ceil((p / 100.0) * n) - 1`
+    # Ensure index is within bounds [0, n-1]
+    idx = max(0, min(n - 1, int(math.ceil((p / 100.0) * n)) - 1))
+
+    return float(s[idx])
+
+def build_rpc_report(service_name: str, series: RpcSeries, p: float) -> Dict[str, Any]:
+    val = compute_rpc_percentile(series, p)
+    return format_rpc_stat(service_name, series.count(), val)
+=== END ===

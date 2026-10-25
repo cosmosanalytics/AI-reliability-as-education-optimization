@@ -1,0 +1,23 @@
+=== FILE: sort_helper.py ===
+"""Internal stream sorting helper."""
+from typing import List
+from event_packet import EventPacket
+
+def order_packets(packets: List[EventPacket]) -> List[EventPacket]:
+    # To sequence packets by severity in descending order, and then by stream_id in descending
+    # order for tie-breaking, we use Python's stable sort.
+    # First, sort by the secondary key (stream_id) in descending order.
+    # Then, sort by the primary key (severity) in descending order.
+    # Due to the stability of `list.sort()`, packets with the same severity will retain their
+    # relative order from the previous sort by stream_id.
+    packets_copy = list(packets)  # Create a mutable copy to sort in-place
+    packets_copy.sort(key=lambda p: p.stream_id, reverse=True)  # Sort by stream_id descending (secondary key)
+    packets_copy.sort(key=lambda p: p.severity, reverse=True)  # Sort by severity descending (primary key, stable)
+    return packets_copy
+
+def get_max_severity(packets: List[EventPacket]) -> int:
+    return max((p.severity for p in packets), default=0)
+
+def count_critical_packets(packets: List[EventPacket]) -> int:
+    return sum(1 for p in packets if p.is_critical())
+=== END ===

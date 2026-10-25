@@ -1,0 +1,36 @@
+=== FILE: list_merger.py ===
+"""Low-level dictionary and list hierarchy merger."""
+from typing import Dict, Any, List
+
+def merge_spec_values(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Recursively merges dictionary values.
+    - If a key exists in both `base` and `override` and both values are dictionaries, they are recursively merged.
+    - If a key exists in both `base` and `override` and both values are lists, they are combined,
+      with elements from `override` being added to `base` elements, ensuring uniqueness.
+    - For all other types, or if types mismatch, the `override` value replaces the `base` value.
+    """
+    result = dict(base)
+    for k, v in override.items():
+        if k in result:
+            if isinstance(result[k], dict) and isinstance(v, dict):
+                result[k] = merge_spec_values(result[k], v)
+            elif isinstance(result[k], list) and isinstance(v, list):
+                # Combine lists, ensuring uniqueness.
+                # Use an ordered set approach to maintain order from base, then override.
+                combined_list = list(result[k])
+                for item in v:
+                    if item not in combined_list:
+                        combined_list.append(item)
+                result[k] = combined_list
+            else:
+                # For other types or type mismatches, override the base value.
+                result[k] = v
+        else:
+            # If key is only in override, add it.
+            result[k] = v
+    return result
+
+def is_spec_empty(spec: Dict[str, Any]) -> bool:
+    return len(spec) == 0
+=== END ===

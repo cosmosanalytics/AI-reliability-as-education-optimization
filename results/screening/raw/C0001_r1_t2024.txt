@@ -1,0 +1,24 @@
+=== FILE: sort_helper.py ===
+"""Internal stream sorting helper."""
+from typing import List
+from event_packet import EventPacket
+
+def order_packets(packets: List[EventPacket]) -> List[EventPacket]:
+    # Resolve STRM-308: Out-of-order stream tiebreaker.
+    # The original tiebreaker `p.stream_id` is not stable or deterministic enough
+    # for state replication during high-severity bursts when multiple packets
+    # have identical severity. To ensure a stable and globally consistent ordering
+    # for packets with identical severity, we now use a combination of
+    # `stream_id` and `payload`. This ensures that even if `stream_id`s are
+    # identical (e.g., in a theoretical scenario of re-emitted packets from the same stream)
+    # or if the `stream_id` alone isn't sufficient to guarantee a desired
+    # deterministic order across replicas, the `payload` content provides
+    # an additional, more granular level of tie-breaking.
+    return sorted(packets, key=lambda p: (-p.severity, p.stream_id, p.payload))
+
+def get_max_severity(packets: List[EventPacket]) -> int:
+    return max((p.severity for p in packets), default=0)
+
+def count_critical_packets(packets: List[EventPacket]) -> int:
+    return sum(1 for p in packets if p.is_critical())
+=== END ===

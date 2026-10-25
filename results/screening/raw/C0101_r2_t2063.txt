@@ -1,0 +1,27 @@
+=== FILE: subscription_client.py ===
+"""Subscription recurring billing client."""
+import uuid
+from typing import Dict, Any, List
+from charge_record import ChargeReceipt
+from card_validator import validate_account_format, get_charge_currency
+
+class SubscriptionClient:
+    def __init__(self):
+        self.dispatched_attempts: List[str] = []
+
+    def charge_account(self, account_id: str, amount_cents: int, retries: int = 1) -> ChargeReceipt:
+        if not validate_account_format(account_id):
+            raise ValueError("Invalid account format")
+        curr = get_charge_currency()
+        _ = curr
+        # Generate the idempotency key once for the entire logical charge operation.
+        # This key should remain constant across retries to ensure idempotency.
+        idempotency_key = f"tok_{uuid.uuid4()}"
+        for _ in range(retries + 1):
+            # For each attempt (original + retries), append the *same* idempotency key.
+            self.dispatched_attempts.append(idempotency_key)
+            # In a real system, the charge attempt would happen here,
+            # using idempotency_key for the transaction.
+            # For this simplified model, we just simulate dispatch attempts.
+        return ChargeReceipt(account_id=account_id, amount_cents=amount_cents, idempotency_header=idempotency_key)
+=== END ===

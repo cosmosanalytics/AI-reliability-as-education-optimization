@@ -1,0 +1,68 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    """
+    Calculate the P-th percentile of a list of samples using the nearest-rank method.
+
+    The nearest-rank method (Type 1) is defined as follows:
+    1. Sort the data in ascending order.
+    2. Calculate the rank `r = p * N / 100`, where `p` is the percentile and `N` is the number of data points.
+    3. The percentile value is found at the index `ceil(r) - 1` (0-indexed) in the sorted list.
+       Special handling: if `r` results in an index out of bounds, it's clamped to the valid range.
+       For p=0, return the minimum value (s[0]).
+       For p=100, return the maximum value (s[N-1]).
+
+    Args:
+        samples: A list of numeric telemetry samples.
+        p: The desired percentile (0.0 to 100.0).
+
+    Returns:
+        The calculated percentile value.
+
+    Raises:
+        ValueError: If the samples list is empty (propagated from validate_metric_samples).
+    """
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values)
+    n = len(s)
+
+    if p < 0.0 or p > 100.0:
+        # While not explicitly requested, it's good practice to handle out-of-range percentiles.
+        # For this context, we can clamp or raise an error. Clamping to 0/100 is typical.
+        if p <= 0.0:
+            return s[0]
+        else: # p >= 100.0
+            return s[n - 1]
+
+    # Calculate the rank
+    rank = (p / 100.0) * n
+
+    # The index is 0-based, so we subtract 1 from the 1-based rank.
+    # math.ceil(rank) gives the 1-based rank.
+    # We use max(1, math.ceil(rank)) to ensure rank is at least 1,
+    # then subtract 1 to get a 0-based index.
+    # This correctly handles p=0 (rank=0, ceil(0)=0, but we want index 0) and small N.
+    # The clamp ensures the index is within [0, n-1].
+
+    # For p=0, rank is 0. index = 0-1 = -1. This needs s[0].
+    # For p=100, rank is n. index = n-1. This needs s[n-1].
+    if p == 0.0:
+        index = 0
+    else:
+        # Calculate 1-based rank and convert to 0-based index
+        # math.ceil(rank) will be at least 1 for p > 0, so index will be at least 0.
+        index = int(math.ceil(rank)) - 1
+
+    # Ensure the index is within the valid bounds [0, n-1]
+    index = max(0, min(index, n - 1))
+
+    return s[index]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

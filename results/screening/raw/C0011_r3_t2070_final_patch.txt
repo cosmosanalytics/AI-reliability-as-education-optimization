@@ -1,0 +1,40 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values.
+
+    This implementation calculates the rank using `(p / 100.0) * (n - 1)`
+    and then rounds down to the nearest integer rank (floor) to select a
+    value directly from the sorted sample. This effectively implements a
+    'nearest rank, lower bound' method, which is often preferred in SLA
+    contexts to be conservative when a percentile falls between two sample
+    values. This addresses the incident where interpolation to a higher
+    value (e.g., 45.0) was not desired when the lower bound (40.0) was expected.
+    """
+    if not values:
+        raise ValueError("Empty values")
+    s = sorted(values)
+    n = len(s)
+
+    # Calculate the 0-indexed rank using the (n-1) method for consistency
+    # with 0th percentile being s[0] and 100th percentile being s[n-1].
+    rank = (p / 100.0) * (n - 1)
+
+    # For SLA calculation anomaly, the expectation is to take the lower
+    # bound when the rank is fractional (e.g., if rank is 3.5, take s[3]
+    # instead of interpolating between s[3] and s[4]).
+    # This is achieved by taking the floor of the rank.
+    idx_floor = int(math.floor(rank))
+
+    # Ensure the index is within valid bounds [0, n-1]
+    # This handles cases where p < 0 or p > 100, clamping the result to min/max.
+    if idx_floor < 0:
+        idx_floor = 0
+    elif idx_floor >= n:
+        idx_floor = n - 1
+
+    return float(s[idx_floor])
+=== END ===

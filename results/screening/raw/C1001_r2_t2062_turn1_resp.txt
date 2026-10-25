@@ -1,0 +1,17 @@
+=== FILE: idempotency_generator.py ===
+"""Idempotency token generation helpers."""
+import uuid
+
+def generate_outbound_key() -> str:
+    """Generates unique key for outbound request tracking."""
+    # Incident INC-9302 indicates a "non-standard raw UUID idempotency key".
+    # The presence of `get_token_prefix` suggests a standard format is expected.
+    # Prepending the defined prefix makes the key conform to the expected schema.
+    return get_token_prefix() + str(uuid.uuid4())
+
+def is_valid_token_length(token: str) -> bool:
+    return len(token) > 0
+
+def get_token_prefix() -> str:
+    return "idemp_"
+=== END ===

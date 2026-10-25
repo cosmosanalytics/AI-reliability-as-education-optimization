@@ -1,0 +1,87 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values)
+    n = len(s)
+    if n == 0:
+        raise ValueError("Cannot calculate percentile for empty samples list")
+    if p < 0.0 or p > 100.0:
+        raise ValueError("Percentile must be between 0 and 100 inclusive")
+
+    # The "nearest-rank house standard" implies using a method that rounds
+    # the index to the nearest rank. A common interpretation for this is
+    # the method used by numpy.percentile with interpolation='nearest' or
+    # a similar approach where `idx = (p / 100.0) * n` is rounded.
+    # The current implementation uses linear interpolation between the two
+    # closest ranks (R-7 method, `idx = (p / 100.0) * (n - 1)`).
+    #
+    # To align with a "nearest-rank" standard where 50th percentile of
+    # [10, 20, 30, 40, 50, 60, 70] is 40.0, and not 30.0 (R-7) or 45.0 (R-8),
+    # we need a different index calculation.
+    #
+    # The requirement for 50th percentile of [10, 20, 30, 40, 50, 60, 70] to be 40.0
+    # suggests a percentile definition that for an odd number of elements (N),
+    # the median (50th percentile) is the middle element (N+1)/2,
+    # and for even N, it's typically an average of two middle elements.
+    #
+    # A common "nearest rank" method (e.g., R-3 in NIST) uses `h = (p / 100.0) * n`.
+    # If h is an integer, the value is s[h-1]. If h is not an integer, it's s[ceil(h)-1].
+    #
+    # Let's test this with the presumed failing case:
+    # d1 = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0]
+    # n = 7, p = 50.0
+    # h = (50.0 / 100.0) * 7 = 3.5
+    # ceil(h) = 4
+    # value = s[4-1] = s[3] = 40.0. This matches the expected value.
+    #
+    # Now, let's test with the `test_perc` case:
+    # samples = [10.0, 20.0, 30.0], p = 100.0
+    # n = 3, p = 100.0
+    # h = (100.0 / 100.0) * 3 = 3.0
+    # value = s[3-1] = s[2] = 30.0. This matches the existing test.
+    #
+    # This definition is consistent with the "nearest-rank house standard"
+    # interpretation derived from the ticket description and failing test.
+
+    # Calculate index using the R-3 method (often referred to as "nearest rank" or similar)
+    # The rank 'h' is calculated as (P/100) * N.
+    # If h is an integer, the P-th percentile is the h-th element (1-indexed).
+    # If h is not an integer, the P-th percentile is the ceil(h)-th element (1-indexed).
+    # Since Python lists are 0-indexed, we use `h-1` or `ceil(h)-1`.
+
+    h = (p / 100.0) * n
+    if h == 0.0: # Handle 0th percentile edge case for non-empty lists
+        return s[0]
+    
+    # If h is an exact integer, use h-1 as the 0-indexed position.
+    # Otherwise, use ceil(h)-1.
+    # This can be simplified to int(math.ceil(h)) - 1, but we need to be careful
+    # with floating point precision. If h is exactly an integer, ceil(h) is h.
+    # For example, if h=3.0, ceil(h)=3. If h=3.0000000000000001, ceil(h)=4.
+    # A small epsilon can help.
+    
+    # A more robust way to check if h is an integer:
+    if h == math.floor(h): # h is an integer
+        # Handle 0-indexed list for h-th element.
+        # Ensure we don't go out of bounds for p=0 or p=100.
+        # If p=100, h=n. We want s[n-1].
+        # If p=0, h=0. We want s[0].
+        # The h-th element (1-indexed) corresponds to s[h-1] (0-indexed).
+        # For h=0, this would be s[-1] which is invalid/wraps around.
+        # We already handled h=0 (p=0) explicitly.
+        # So for h > 0 and integer, use s[int(h)-1].
+        return s[int(h) - 1]
+    else: # h is not an integer
+        # Use ceil(h)-th element (1-indexed), which is s[int(math.ceil(h))-1] (0-indexed).
+        return s[int(math.ceil(h)) - 1]
+
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

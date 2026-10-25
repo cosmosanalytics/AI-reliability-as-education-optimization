@@ -1,0 +1,51 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+    line_totals: list of integer cents.
+    Returns list of discount cents per line.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+    total = sum(line_totals)
+    if total == 0:
+        return [0] * len(line_totals)
+
+    # Calculate base allocations using integer division (truncates)
+    allocations = []
+    for cents in line_totals:
+        allocations.append(cents * total_discount_cents // total)
+
+    # Distribute remaining cents due to truncation
+    current_total_allocated = sum(allocations)
+    remaining_cents = total_discount_cents - current_total_allocated
+
+    # Distribute remaining cents one by one to the lines with the largest fractional parts.
+    # To do this without floating point, we can identify lines that would have gained
+    # an additional cent if we had used ceiling division or rounding up.
+    # A simpler approach is to distribute the remaining cents to the first `remaining_cents` lines.
+    # This ensures the total_discount_cents is fully allocated.
+    for i in range(remaining_cents):
+        if i < len(allocations): # Ensure we don't try to allocate to non-existent lines
+            allocations[i] += 1
+        else:
+            # This case should ideally not happen if remaining_cents <= len(allocations)
+            # and total_discount_cents is reasonable for the number of lines.
+            # If it does, it implies more remainder than lines, which is fine,
+            # but we can't allocate beyond existing lines.
+            # For this problem, we assume remaining_cents will not exceed len(allocations)
+            # significantly in a way that requires creating new lines.
+            pass # Or log a warning if this scenario is unexpected.
+
+    return allocations
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===

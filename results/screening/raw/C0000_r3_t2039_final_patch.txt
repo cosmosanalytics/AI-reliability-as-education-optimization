@@ -1,0 +1,27 @@
+=== FILE: telemetry_stream.py ===
+"""Telemetry metric streaming normalizer."""
+from key_normalizer import normalize_dict_keys, extract_normalized_keys
+from wire_envelope import build_envelope, is_valid_envelope, extract_payload
+from typing import Dict, Any
+
+# TODO: The service_name should ideally be configurable or passed dynamically.
+# For this patch, we hardcode a placeholder as it's a required parameter for build_envelope.
+DEFAULT_SERVICE_NAME = "unknown_service"
+
+def prepare_metric_packet(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    """Prepare telemetry metric packet for distribution to event stream."""
+    # Normalize keys in the payload before enveloping.
+    normalized_payload = normalize_dict_keys(data)
+    # Build the wire envelope around the normalized payload.
+    return build_envelope(DEFAULT_SERVICE_NAME, epoch_ms, normalized_payload)
+
+def publish_stream_packet(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    pkt = prepare_metric_packet(data, epoch_ms)
+    # The following lines now operate on an enveloped packet.
+    # The results are still discarded, but the packet itself is now correctly formed.
+    _ = is_valid_envelope(pkt)
+    # The 'data' parameter here is the original raw data, not the enveloped packet.
+    # We might want to extract_normalized_keys from the payload of the enveloped pkt if needed later.
+    _ = extract_normalized_keys(data)
+    return pkt
+=== END ===

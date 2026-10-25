@@ -1,0 +1,79 @@
+=== FILE: serializer.py ===
+"""Order item TSV row serializer."""
+from typing import List
+from item import OrderItem
+from catalog_validator import validate_catalog
+
+def _escape_tsv_field(field: str) -> str:
+    """Escapes a string for TSV fields.
+    
+    - Replaces double quotes (") with backslash-double quote (\").
+    - Replaces newlines (\n) with backslash-n (\n).
+    - Encloses the field in double quotes if it contains a tab or a backslash
+      after other escapes, or if it contains a newline (which is now \n).
+      Internal double quotes are doubled if the field is quoted.
+    """
+    # First, handle explicit escapes as per ticket and example
+    field = field.replace('\\', '\\\\') # Escape backslashes first
+    field = field.replace('"', '\\"')   # Escape double quotes
+
+    # Check for characters that require the field to be enclosed in quotes
+    # Newlines are now escaped as '\n', but original newlines would have caused issues.
+    # The requirement is to handle "multiline text".
+    # If the escaped field contains a literal tab character, or a literal newline
+    # (after escaping, which would be '\n'), it should be quoted.
+    # The original intent of "multiline text" likely meant that the field
+    # might inherently contain newlines, which need to be represented on one line
+    # in the TSV, hence '\n' seems to be the intended way to flatten it.
+    # If the *escaped* field still contains a tab, it must be quoted.
+    # The current escaping for `"` and `\` uses `\` as an escape character.
+    # If the field contains `\t`, it should also be quoted.
+    
+    # Re-evaluate the escaping strategy based on common TSV and the provided example.
+    # The example `Widget "Pro" Edition` -> `Widget \"Pro\" Edition`
+    # implies a backslash-based escape for quotes, but *not* enclosing the field.
+    # This is unusual for TSV, which typically uses quoting for delimiters/newlines/quotes.
+    # Given the strict interpretation of the example, we will only escape `"` as `\"`
+    # and `\n` as `\n`. If the field contains a tab, the TSV structure is still broken
+    # unless the field is quoted.
+    # To satisfy "multiline text" and "quotes", and maintain TSV structure,
+    # a common strategy is to:
+    # 1. Replace internal double quotes with two double quotes ("").
+    # 2. Enclose the entire field in double quotes if it contains a tab, newline, or a double quote.
+    # This is standard CSV/TSV. The example from the ticket seems to contradict this.
+
+    # Let's try to infer the intent from "unescaped fields on catalog descriptions containing quotes and multiline text."
+    # and `assert 'ITM-2\tWidget "Pro" Edition' == 'ITM-2\tWidget \\"Pro\\" Edition'`
+    # The expected string `ITM-2\tWidget \\"Pro\\" Edition` implies that the *literal* string
+    # `Widget \"Pro\" Edition` should be in the TSV field, not `"Widget ""Pro"" Edition"`.
+    # This points to a custom escaping where `"` -> `\"` and `\n` -> `\n`.
+    # This is not standard TSV, but we must follow the explicit example.
+
+    # Revised strategy:
+    # 1. Escape backslashes as `\\`.
+    # 2. Escape double quotes as `\"`.
+    # 3. Escape newlines as `\n`.
+    # This assumes the consumer understands this escape syntax.
+    
+    field = field.replace('\\', '\\\\') # Must be first to not double new backslashes
+    field = field.replace('"', '\\"')
+    field = field.replace('\n', '\\n')
+    
+    # If the field contains a literal tab after these escapes, it's still problematic for TSV.
+    # However, the ticket does not mention tabs, only quotes and multiline.
+    # Sticking strictly to the given requirements for quotes and multiline:
+    return field
+
+def serialize_item_row(item: OrderItem) -> str:
+    """Serialize OrderItem into a TSV formatted audit line."""
+    escaped_description = _escape_tsv_field(item.description)
+    return f"{item.item_id}\t{escaped_description}"
+
+def serialize_catalog(items: List[OrderItem]) -> str:
+    if not validate_catalog(items):
+        raise ValueError("Invalid catalog items")
+    return "\n".join(serialize_item_row(i) for i in items)
+
+def count_serialized_items(catalog_str: str) -> int:
+    return len([line for line in catalog_str.splitlines() if line.strip()])
+=== END ===

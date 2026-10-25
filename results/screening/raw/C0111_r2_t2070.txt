@@ -1,0 +1,49 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values.
+
+    Uses the nearest-rank method (NIST method) for percentile calculation,
+    which is commonly used for SLA monitoring. This method selects a value
+    directly from the sorted sample.
+    """
+    if not values:
+        raise ValueError("Empty values")
+    s = sorted(values)
+    n = len(s)
+
+    # For SLA monitoring, it's common to use a discrete percentile method
+    # where the result is one of the sample values. The nearest-rank method
+    # (also known as the NIST method or C = 1 method) is frequently used
+    # for this purpose.
+    # The rank (1-based index) is calculated as ceil(p/100 * n).
+    #
+    # The previous implementation used linear interpolation (R-7 method),
+    # which can return a value not present in the sample. The incident
+    # report suggests this was causing anomalies in SLA calculation.
+
+    if p < 0 or p > 100:
+        raise ValueError("Percentile 'p' must be between 0 and 100, inclusive.")
+    if p == 0:
+        return s[0]
+    if p == 100:
+        return s[n - 1]
+
+    # Calculate 1-based rank using the nearest-rank formula
+    rank = math.ceil((p / 100.0) * n)
+
+    # Adjust to 0-based index
+    idx = int(rank) - 1
+
+    # The rank calculation naturally handles bounds for p in [0, 100].
+    # For p=0, rank is 0, idx is -1, but we handle p=0 explicitly.
+    # For p=100, rank is n, idx is n-1, which is the last element.
+    # For p slightly > 0, rank will be 1, idx will be 0, picking the first element.
+    # For p slightly < 100, rank will be n, idx will be n-1, picking the last element.
+    # So no explicit clamping for idx is needed for 0 < p < 100.
+
+    return float(s[idx])
+=== END ===

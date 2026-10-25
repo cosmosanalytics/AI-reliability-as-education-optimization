@@ -1,0 +1,16 @@
+Visible Test Failure (exit code 1):
+F                                                                        [100%]
+================================== FAILURES ===================================
+____________________________ test_nominal_severity ____________________________
+tests\test_sequencer.py:7: in test_nominal_severity
+    res = sequence_stream_batch([p1, p2])
+sequencer.py:8: in sequence_stream_batch
+    return order_packets(packets)
+sort_helper.py:11: in order_packets
+    return sorted(packets, key=lambda p: -p.severity, stable=True)
+E   TypeError: 'stable' is an invalid keyword argument for sort()
+=========================== short test summary info ===========================
+FAILED tests/test_sequencer.py::test_nominal_severity - TypeError: 'stable' i...
+1 failed in 0.28s
+
+Reply with your complete corrected patch in the required === FILE: path === ... === END === block format.

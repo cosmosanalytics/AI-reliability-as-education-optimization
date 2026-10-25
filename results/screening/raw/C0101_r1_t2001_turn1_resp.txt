@@ -1,0 +1,39 @@
+=== FILE: pricing.py ===
+"""Order pricing calculation with itemized taxes."""
+import math
+from typing import List, Tuple, Optional
+from models import LineItem, OrderSummary
+from tax_engine import calculate_vat, get_rate_for_jurisdiction
+
+def calculate_order_total(items: List[Tuple[int, int]], vat_rate: float = 0.20, order_id: str = "ORD-001") -> OrderSummary:
+    """Calculate order total including tax.
+    items: list of (price_cents, quantity).
+    Returns OrderSummary.
+    Tax calculation must use half-up rounding (ROUND_HALF_UP: ties broken towards positive infinity) on exact half-cents.
+    """
+    line_objs = [LineItem(sku=f"SKU-{i+1}", price_cents=p, quantity=q) for i, (p, q) in enumerate(items)]
+    
+    total_tax_cents = 0
+    total_net_cents = 0
+    for item in line_objs:
+        item_subtotal = item.subtotal()
+        total_net_cents += item_subtotal
+        
+        # Calculate tax for each item's subtotal with half-up rounding
+        # This handles the "itemized billing" aspect and ensures rounding is applied per item.
+        # For positive numbers, round(x + 0.5) achieves round half up for integers.
+        # However, for exact half-cents, e.g., 100 * 0.105 = 10.5, round(10.5) is 10 (round half even).
+        # We need round half up (towards positive infinity).
+        # math.floor(x + 0.5) is a common way to implement round half up for positive x
+        # Alternatively, math.copysign(math.floor(abs(x) + 0.5), x) for general round half up.
+        # Since VAT rates and prices are positive, we can simplify.
+        # int(x + 0.5) is another way for positive x, but it might not be strictly half-up for negative values.
+        # Given the context of VAT, amounts are positive.
+        tax_float = item_subtotal * vat_rate
+        rounded_tax = math.floor(tax_float + 0.5)
+        total_tax_cents += int(rounded_tax) # Cast to int for consistency
+
+    gross = total_net_cents + total_tax_cents
+    
+    return OrderSummary(order_id=order_id, items=line_objs, net_cents=total_net_cents, tax_cents=total_tax_cents, gross_cents=gross)
+=== END ===

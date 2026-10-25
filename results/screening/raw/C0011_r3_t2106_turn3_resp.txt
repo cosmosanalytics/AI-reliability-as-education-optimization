@@ -1,0 +1,49 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values)
+    # The "nearest-rank house standard" implies using the R-1 method where the index is
+    # calculated as (p / 100.0) * N, and values are interpolated.
+    # The original implementation used (p / 100.0) * (N - 1), which is R-7.
+    # For R-1, the index `idx` is 1-based, so we adjust to 0-based for list access.
+    # The formula for the 0-based index `i` for p-th percentile in a sorted list `s` of length `N`
+    # is `i = (p / 100.0) * N - 1`.
+    # If `i` is not an integer, we interpolate linearly between `s[floor(i)]` and `s[ceil(i)]`.
+    n = len(s)
+    if n == 0:
+        raise ValueError("Samples list cannot be empty for percentile calculation")
+    if not (0 <= p <= 100):
+        raise ValueError("Percentile 'p' must be between 0 and 100 inclusive")
+
+    # Calculate the 0-based index.
+    # The standard R-1 method generally uses (p/100) * N as a 1-based rank.
+    # To convert to a 0-based index for a list of N elements, we subtract 1.
+    # So, idx = (p / 100.0) * N - 1.
+    # This ensures that for p=0, idx=-1 (handled by floor/ceil and bounds),
+    # and for p=100, idx=N-1 (the last element).
+    idx = (p / 100.0) * n - 1
+
+    # Ensure idx is within valid bounds for interpolation
+    if idx < 0:
+        return s[0]
+    if idx >= n - 1:
+        return s[n - 1]
+
+    low_idx = int(math.floor(idx))
+    high_idx = int(math.ceil(idx))
+
+    if low_idx == high_idx:
+        return s[low_idx]
+    
+    # Linear interpolation
+    return s[low_idx] + (idx - low_idx) * (s[high_idx] - s[low_idx])
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

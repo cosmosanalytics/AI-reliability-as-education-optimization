@@ -1,0 +1,80 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+    line_totals: list of integer cents.
+    Returns list of discount cents per line.
+    The sum of returned discounts must equal total_discount_cents, with any
+    remainder distributed to the lines with the largest proportional discount amounts.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+    
+    num_lines = len(line_totals)
+    if num_lines == 0:
+        return []
+
+    total_line_value = sum(line_totals)
+    if total_line_value == 0:
+        return [0] * num_lines
+
+    # Calculate base allocations using float for precision, then floor
+    allocations_float = [(cents * total_discount_cents) / total_line_value for cents in line_totals]
+    base_allocations = [int(alloc) for alloc in allocations_float]
+
+    # Calculate the remainder
+    current_total_allocated = sum(base_allocations)
+    remainder = total_discount_cents - current_total_allocated
+
+    # Distribute the remainder
+    if remainder > 0:
+        # Create a list of (fractional_part, original_index) to sort by fractional part
+        # and then by original index for stable tie-breaking.
+        # fractional_part = alloc - int(alloc)
+        # We need to distribute `remainder` cents.
+        # Sort by the largest fractional part to determine which lines get the extra cents.
+        # If fractional parts are equal, distribute to earlier lines (smaller index).
+        
+        # We pair each line's index with its fractional part for sorting.
+        # The fractional part is allocs_float[i] - base_allocations[i]
+        # We also need to be careful with floating point precision, so for comparison
+        # it's better to use the original precise ratio or sort by the remainder
+        # of the multiplication by total_line_value.
+        
+        # A simpler way to get lines that should receive the remainder is to sort
+        # by the residual value `(cents * total_discount_cents) % total_line_value`
+        # and then by original index to ensure stability.
+        
+        # Create a list of tuples (residual, original_index)
+        # The residual is `(line_total * total_discount_cents) % total_line_value`
+        # We sort in descending order of residual to give to lines with largest "leftover".
+        # If residuals are equal, we sort by original_index (ascending) to ensure deterministic behavior.
+        
+        lines_with_residuals = []
+        for i in range(num_lines):
+            # Calculate the numerator before division to find the true remainder
+            numerator = line_totals[i] * total_discount_cents
+            residual = numerator % total_line_value
+            lines_with_residuals.append((residual, i))
+        
+        # Sort by residual in descending order, then by index in ascending order for ties
+        lines_with_residuals.sort(key=lambda x: (-x[0], x[1]))
+
+        # Distribute the remainder to the top `remainder` lines
+        for i in range(remainder):
+            original_index = lines_with_residuals[i][1]
+            base_allocations[original_index] += 1
+
+    return base_allocations
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    # The prorate_discount function now guarantees tot == total_discount_cents
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===

@@ -1,0 +1,78 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+    This function handles fractional cents by distributing any remaining
+    cents (due to rounding) one by one to the lines with the largest
+    proportional share, ensuring the total allocated equals the total discount.
+
+    line_totals: list of integer cents representing the value of each line item.
+    total_discount_cents: total discount amount in cents to be allocated.
+    Returns list of discount cents per line.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+
+    total_line_value = sum(line_totals)
+    num_lines = len(line_totals)
+
+    if total_line_value == 0:
+        return [0] * num_lines
+
+    # Calculate initial allocations based on proportion, keeping float values
+    # These represent the precise proportional shares before rounding.
+    proportional_shares = []
+    for cents in line_totals:
+        proportional_shares.append((cents * total_discount_cents) / total_line_value)
+
+    # Truncate to get initial integer allocations
+    final_allocs = [int(share) for share in proportional_shares]
+
+    # Calculate the sum of currently allocated cents
+    current_allocated_sum = sum(final_allocs)
+
+    # Determine the remaining cents to distribute due to truncation
+    remaining_cents = total_discount_cents - current_allocated_sum
+
+    # If there are remaining cents, distribute them one by one to the lines
+    # that have the largest fractional part (i.e., were "cut off" the most).
+    if remaining_cents > 0:
+        # Create a list of (fractional_part, original_index) tuples
+        # Sort in descending order of fractional_part to prioritize distribution
+        fractional_parts_with_indices = []
+        for i in range(num_lines):
+            fractional_part = proportional_shares[i] - final_allocs[i]
+            fractional_parts_with_indices.append((fractional_part, i))
+        
+        # Sort by fractional part in descending order
+        fractional_parts_with_indices.sort(key=lambda x: x[0], reverse=True)
+
+        # Add 1 cent to the lines with the largest fractional parts
+        # up to `remaining_cents` times.
+        for i in range(remaining_cents):
+            # Ensure we don't try to assign to more lines than exist,
+            # though this loop typically won't exceed num_lines if
+            # total_discount_cents is not excessively large relative to num_lines.
+            if i < num_lines:
+                original_index = fractional_parts_with_indices[i][1]
+                final_allocs[original_index] += 1
+            else:
+                # This should only happen if remaining_cents > num_lines,
+                # which implies a very large discount relative to line counts.
+                # In such a case, we've distributed to all lines once,
+                # and would need to distribute more, but the problem description
+                # implies small "penny" mismatches.
+                break # Stop if we've iterated through all lines
+
+    return final_allocs
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===

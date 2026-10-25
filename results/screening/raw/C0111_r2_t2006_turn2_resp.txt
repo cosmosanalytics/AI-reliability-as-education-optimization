@@ -1,0 +1,26 @@
+=== FILE: env_loader.py ===
+"""Environment settings loader and merger."""
+from typing import Dict, Any
+
+DEFAULT_CONN_TIMEOUT = 30
+
+def load_system_env() -> Dict[str, Any]:
+    return {"timeout": DEFAULT_CONN_TIMEOUT}
+
+def merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:
+    merged = {}
+    for k, v in base_settings.items():
+        if isinstance(v, dict):
+            merged[k] = dict(v) # Make a shallow copy of nested dicts
+        else:
+            merged[k] = v
+    
+    for k, v in override_settings.items():
+        if k in merged and isinstance(merged[k], dict) and isinstance(v, dict):
+            # If both base and override have a dictionary for this key, merge them
+            merged[k].update(v)
+        else:
+            # Otherwise, override directly
+            merged[k] = v
+    return merged
+=== END ===

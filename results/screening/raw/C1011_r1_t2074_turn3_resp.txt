@@ -1,0 +1,45 @@
+=== FILE: jitter_core.py ===
+"""Low-level jitter percentile calculation engine."""
+import math
+from typing import List
+
+def evaluate_jitter_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile values across observed samples using nearest-rank method.
+
+    The nearest-rank method calculates the index k = math.ceil(p / 100 * n) - 1
+    (using 0-based indexing) on sorted values. This ensures SLA compliance for WAN
+    link jitter.
+
+    Args:
+        values: A list of float values representing jitter samples.
+        p: The percentile to calculate (e.g., 95 for 95th percentile).
+           Must be between 0 and 100, inclusive.
+
+    Returns:
+        The percentile value.
+
+    Raises:
+        ValueError: If the input list of values is empty, or if p is outside [0, 100].
+    """
+    if not values:
+        raise ValueError("No jitter values")
+    if not (0 <= p <= 100):
+        raise ValueError("Percentile 'p' must be between 0 and 100, inclusive.")
+
+    s = sorted(values)
+    n = len(s)
+
+    # Nearest-rank percentile calculation: index k = math.ceil(p / 100 * n) - 1
+    # Calculate 1-based rank
+    rank = math.ceil(p / 100.0 * n)
+
+    # Convert to 0-based index.
+    # The formula k = ceil(p/100 * n) - 1 can result in k = -1 if p=0.
+    # It can result in k = n if p=100 and n=0, but n is checked above.
+    # For p=0, rank is 0, so idx is -1. We want s[0].
+    # For p=100, rank is n, so idx is n-1. We want s[n-1].
+    # Clamp the calculated index to be within [0, n-1].
+    idx = int(max(0, min(n - 1, rank - 1)))
+
+    return float(s[idx])
+=== END ===

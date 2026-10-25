@@ -1,0 +1,31 @@
+=== FILE: audit_formatter.py ===
+"""Audit event message wire formatter."""
+from key_normalizer import normalize_dict_keys, extract_normalized_keys
+from wire_envelope import build_envelope, is_valid_envelope, extract_payload
+from typing import Dict, Any
+
+# Assuming a default service name for audit events if not provided,
+# as the function signature cannot be changed and the envelope requires it.
+# In a real-world scenario, this might be configured or passed in.
+DEFAULT_SERVICE_NAME = "unknown_service"
+
+def format_audit_event(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    """Format audit event message.
+    
+    Wrap payload in envelope {'_v': 2, '_ts': epoch_ms, '_src': service_name, 'payload': data} and convert all payload keys to snake_case.
+    """
+    normalized_payload = normalize_dict_keys(data)
+    # The docstring implies service_name is available. Given the constraint
+    # of not changing the function signature, and no service_name being
+    # passed, we use a default. If service_name were to be extracted from
+    # 'data', the docstring would likely specify it.
+    enveloped_msg = build_envelope(DEFAULT_SERVICE_NAME, epoch_ms, normalized_payload)
+    return enveloped_msg
+
+def serialize_audit_event(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    msg = format_audit_event(data, epoch_ms)
+    # These calls are side-effect free and not directly used, but kept as per existing logic.
+    _ = is_valid_envelope(msg)
+    _ = extract_normalized_keys(data) # This still operates on the original 'data'
+    return msg
+=== END ===

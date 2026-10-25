@@ -1,0 +1,55 @@
+=== FILE: jitter_core.py ===
+"""Low-level jitter percentile calculation engine."""
+import math
+from typing import List
+
+def evaluate_jitter_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile values across observed samples."""
+    if not values:
+        raise ValueError("No jitter values")
+    s = sorted(values)
+    n = len(s)
+    idx = (p / 100.0) * (n - 1)
+    low = int(math.floor(idx))
+    high = int(math.ceil(idx))
+    frac = idx - low
+    return float(s[low] + frac * (s[high] - s[low]))
+
+def evaluate_jitter_percentile_nearest_rank(values: List[float], p: float) -> float:
+    """Calculates percentile values across observed samples using the nearest-rank method.
+    Index k = math.ceil(p / 100 * n) - 1 on sorted values.
+    """
+    if not values:
+        raise ValueError("No jitter values")
+    s = sorted(values)
+    n = len(s)
+    # The percentile definition requires an index k = math.ceil(p / 100 * n) - 1
+    # This index is 0-based.
+    k_float = (p / 100.0) * n
+    k = math.ceil(k_float) - 1
+    # Ensure k is within bounds [0, n-1]
+    k = max(0, min(n - 1, int(k)))
+    return float(s[k])
+=== END ===
+=== FILE: jitter_evaluator.py ===
+"""Network jitter SLA evaluation service."""
+from typing import List, Dict, Any
+from jitter_types import JitterStream, JitterSample
+import jitter_core
+
+def check_jitter_sla(stream: JitterStream, p: float, max_jitter: float) -> bool:
+    """SLA compliance requires nearest-rank percentile estimation: index k = math.ceil(p / 100 * n) - 1 on sorted values.
+    Returns True if compliance limit is respected.
+    """
+    vals = stream.raw_jitters()
+    # Use the specific nearest-rank percentile calculation required for SLA compliance.
+    percentile_val = jitter_core.evaluate_jitter_percentile_nearest_rank(vals, p)
+    return percentile_val <= max_jitter
+
+def get_stream_jitter_metrics(stream: JitterStream, p: float) -> Dict[str, Any]:
+    vals = stream.raw_jitters()
+    # This function's docstring does not specify a particular percentile method,
+    # so continue using the default linear interpolation method.
+    q = jitter_core.evaluate_jitter_percentile(vals, p)
+    return {"count": stream.sample_count(), "jitter_p": q}
+=== END ===

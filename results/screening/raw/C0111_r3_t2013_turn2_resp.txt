@@ -1,0 +1,77 @@
+=== FILE: csv_writer.py ===
+"""TSV serialization utilities."""
+from typing import List, Optional
+from schema import CustomerProfile
+from io_helpers import validate_tsv_header
+
+def escape_tsv_field(val: Optional[str]) -> str:
+    r"""Escape field for internal TSV audit log pipeline:
+    Records are tab-separated (\t), internal double quotes are escaped with backslash (\"),
+    newline characters are escaped as \n, and None/null values are serialized as \N.
+    Do NOT use RFC 4180 double-quoting.
+    """
+    if val is None:
+        return r"\N" # Serialize None as \N as per docstring
+    
+    # Escape special characters as per docstring: backslash for quotes, \n for newlines, \t for tabs
+    # The order of replacement matters: escape backslashes first to avoid double-escaping
+    # already escaped characters.
+    escaped_val = val.replace("\\", r"\\") # Escape existing backslashes
+    escaped_val = escaped_val.replace('"', r'\"') # Escape double quotes with backslash
+    escaped_val = escaped_val.replace("\n", r"\n") # Escape newline characters as \n
+    escaped_val = escaped_val.replace("\t", r"\t") # Escape tab characters as \t
+
+    return escaped_val
+
+def export_profiles_tsv(profiles: List[CustomerProfile]) -> str:
+    # Use actual tab and newline characters for construction, not string literals '\\t', '\\n'
+    header = "cust_id\tname\tnotes"
+    if not validate_tsv_header(header, ["cust_id", "name", "notes"]):
+        raise ValueError("Invalid header")
+    lines = [header]
+    for p in profiles:
+        # The profile data itself might contain special characters that need escaping.
+        # The escape_tsv_field function handles this for individual fields.
+        f_cust_id = str(p.cust_id)
+        f_name = escape_tsv_field(p.name)
+        f_notes = escape_tsv_field(p.notes)
+        lines.append(f"{f_cust_id}\t{f_name}\t{f_notes}")
+    return "\n".join(lines)
+
+def count_records(payload: str) -> int:
+    lines = [l for l in payload.splitlines() if l.strip()]
+    return max(0, len(lines) - 1)
+=== END ===
+=== FILE: schema.py ===
+"""Customer profile models."""
+from dataclasses import dataclass
+from typing import Dict, Any, List, Optional
+
+@dataclass
+class CustomerProfile:
+    cust_id: int
+    name: str
+    notes: Optional[str] = None
+    active: bool = True
+    tags: List[str] = None
+
+    def __post_init__(self):
+        if self.tags is None:
+            self.tags = ["standard"]
+
+    def to_row(self) -> list:
+        # to_row is not used by export_profiles_tsv.
+        # If it were, it would also need to use escape_tsv_field for string fields.
+        # However, the ticket only implies changes to the export logic, not internal row representation.
+        return [str(self.cust_id), self.name, self.notes or ""]
+
+    def has_embedded_delimiters(self) -> bool:
+        # This method is not used by csv_writer.py.
+        # Its definition of "delimiters" (tab, newline, double quote) aligns with what
+        # escape_tsv_field now handles, but the logic here is not directly related to the fix.
+        if not self.notes:
+            return False
+        # The docstring for escape_tsv_field mentions \t, \n, \" as escaped characters.
+        # This method checks for actual chars. The fix for escape_tsv_field addresses these.
+        return any(c in self.notes for c in ("\t", "\n", '"'))
+=== END ===

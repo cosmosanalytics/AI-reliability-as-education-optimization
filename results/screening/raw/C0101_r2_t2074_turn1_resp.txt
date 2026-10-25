@@ -1,0 +1,37 @@
+=== FILE: jitter_core.py ===
+"""Low-level jitter percentile calculation engine."""
+import math
+from typing import List
+
+def evaluate_jitter_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile values across observed samples using the nearest-rank method.
+    The index k is calculated as math.ceil(p / 100 * n) - 1 on sorted values.
+    Raises ValueError for empty input or p outside (0, 100].
+    """
+    if not values:
+        raise ValueError("No jitter values")
+    if not (0 < p <= 100):
+        raise ValueError("Percentile p must be between 0 and 100 (inclusive of 100)")
+
+    s = sorted(values)
+    n = len(s)
+
+    # Nearest-rank method: k = ceil(p/100 * n) - 1
+    # Note: math.ceil(0) is 0, so for p=0, this would yield -1.
+    # However, p is constrained to be > 0.
+    # For p=100, k = ceil(n) - 1 = n - 1, which is the last element.
+    k = math.ceil(p / 100.0 * n) - 1
+
+    # Ensure k is within valid bounds (0 to n-1)
+    # k can be -1 if n=0, but n is checked at the start.
+    # k can be n if p/100*n is exactly an integer and p=100,
+    # but math.ceil(p/100*n) - 1 correctly yields n-1.
+    # The only edge case where k might exceed n-1 is if p/100 * n results in
+    # a value that, after ceil, is n+1 (e.g., if p/100 * n was slightly > n).
+    # However, since p <= 100, p/100.0 * n <= n. So ceil(p/100.0 * n) <= n.
+    # Thus, k = ceil(...) - 1 <= n - 1.
+    # The smallest k can be is 0 (e.g., for p close to 0, and n=1, ceil(0.01)-1=0).
+    # With p > 0, k will always be >= 0.
+
+    return float(s[int(k)])
+=== END ===

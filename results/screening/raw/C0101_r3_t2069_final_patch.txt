@@ -1,0 +1,57 @@
+=== FILE: latency_calc.py ===
+"""Gateway request latency percentile calculation."""
+import math
+from typing import List, Dict, Any
+from metric_types import MetricWindow, LatencyRecord
+from metric_summary import format_metric_summary
+
+def compute_percentile(window: MetricWindow, percentile: float) -> float:
+    """Calculates metric percentile using nearest-rank method: index k = math.ceil(p / 100 * n) - 1 on sorted values.
+    Do not use linear interpolation.
+    """
+    vals = window.raw_values()
+    if not vals:
+        raise ValueError("Empty metric window")
+    s = sorted(vals)
+    n = len(s)
+
+    # The docstring explicitly requests the nearest-rank method:
+    # index k = math.ceil(p / 100 * n) - 1 on sorted values.
+    # This formula typically applies for p > 0.
+    # For 0th percentile, we return the minimum value (s[0]), as k = ceil(0) - 1 = -1 is invalid.
+    if percentile == 0.0:
+        return float(s[0])
+    
+    # Ensure percentile is within a valid range for the calculation.
+    # While typically 0-100, values outside this range would lead to index errors
+    # or nonsensical results. For this ticket, we assume valid percentile inputs
+    # based on the problem description.
+    
+    # Calculate 1-based rank (k_rank in the docstring formula, before subtracting 1)
+    k_rank = math.ceil(percentile / 100.0 * n)
+    
+    # Convert to 0-based index.
+    # The docstring's 'k' is 1-based, so the 0-based index is k-1.
+    # Since k_rank is already the 1-based rank, the 0-based index is k_rank - 1.
+    # This naturally handles 100th percentile (k_rank = n, index = n-1).
+    index = int(k_rank) - 1
+    
+    # Ensure the calculated index is within the valid bounds [0, n-1].
+    # This implicitly handles cases where percentile might lead to an index
+    # outside this range if the input percentile is invalid (e.g., negative or >100).
+    # For a valid percentile (0 < p <= 100), k_rank will be between 1 and n,
+    # so index will be between 0 and n-1.
+    if not (0 <= index < n):
+        # This case should ideally not be reached with valid percentiles (0-100) and n > 0.
+        # It's a safeguard for extreme or invalid percentile inputs.
+        if index < 0:
+            return float(s[0]) # Fallback to min for very small/negative percentiles
+        else: # index >= n
+            return float(s[n-1]) # Fallback to max for very large percentiles
+
+    return float(s[index])
+
+def summarize_window(window: MetricWindow, percentile: float) -> Dict[str, Any]:
+    val = compute_percentile(window, percentile)
+    return format_metric_summary(window.sample_count(), val)
+=== END ===

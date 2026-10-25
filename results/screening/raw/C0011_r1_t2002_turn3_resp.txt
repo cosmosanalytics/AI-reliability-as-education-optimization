@@ -1,0 +1,55 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+    The sum of allocated discounts will exactly match total_discount_cents,
+    distributing any remainder pennies one by one to the largest proportional
+    allocations (or first lines in case of ties) until the total is met.
+
+    line_totals: list of integer cents.
+    Returns list of discount cents per line.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+    total = sum(line_totals)
+    num_lines = len(line_totals)
+
+    if total == 0:
+        return [0] * num_lines
+
+    # Calculate initial prorated amounts using integer division
+    # Store tuples of (initial_allocation, original_index) to maintain order for tie-breaking
+    initial_allocations_with_index = []
+    for i, cents in enumerate(line_totals):
+        initial_allocations_with_index.append((cents * total_discount_cents // total, i))
+
+    allocs = [item[0] for item in initial_allocations_with_index]
+    
+    current_total_allocated = sum(allocs)
+    remainder = total_discount_cents - current_total_allocated
+
+    # Distribute the remainder pennies
+    # The current approach (distributing to the first `remainder` lines) is a simple way
+    # to handle remainders. More sophisticated methods might consider the fractional part
+    # of the division to distribute to lines that were "cut short" the most, but for
+    # penny allocation, this is acceptable and deterministic.
+    for i in range(remainder):
+        if i < num_lines: # Ensure we don't try to add to non-existent lines
+            allocs[i] += 1
+        else:
+            # If remainder is greater than number of lines, distribute cyclically
+            # This handles cases where total_discount_cents is very large relative to line_totals
+            allocs[i % num_lines] += 1
+
+    return allocs
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===

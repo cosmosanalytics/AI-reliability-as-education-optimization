@@ -1,0 +1,89 @@
+=== FILE: tax_engine.py ===
+"""Low-level tax rate computation engine."""
+import math
+from typing import Dict, Any
+
+DEFAULT_TAX_JURISDICTIONS = {
+    "standard": 0.20,
+    "reduced": 0.10,
+    "exempt": 0.0,
+}
+
+def get_rate_for_jurisdiction(code: str) -> float:
+    return DEFAULT_TAX_JURISDICTIONS.get(code, 0.20)
+
+def calculate_vat(net_cents: int, vat_rate: float) -> int:
+    """Compute VAT in integer cents for given net amount.
+    Tax calculation must use half-up rounding (ROUND_HALF_UP: ties broken towards positive infinity) on exact half-cents.
+    """
+    # The requirement is half-up rounding, specifically "ties broken towards positive infinity".
+    # This means numbers like 1.5 round to 2, and -1.5 round to -1.
+    # Python's `round()` uses round half to even.
+    # To achieve "round half up towards positive infinity", we can use math.floor for negative numbers
+    # and math.ceil for positive numbers, adjusting for the half-cent tie-breaking.
+    # A common way to implement this for all numbers is `math.floor(x + 0.5)` for positive x
+    # and `math.ceil(x - 0.5)` for negative x.
+    # A more robust general solution is to multiply by 10, round, and divide by 10, but here we need integer cents.
+    # The requirement is `int(net_cents * vat_rate)`.
+    # `decimal.Decimal` with `ROUND_HALF_UP` is the most precise, but we are restricted to standard library.
+    # Given that `net_cents` from LineItem.subtotal implies it can be negative (if price_cents is negative),
+    # we need a solution that works for both positive and negative results of `net_cents * vat_rate`.
+
+    # A standard way to implement "round half up (towards positive infinity)" is:
+    # `floor(x + 0.5)` if x >= 0
+    # `ceil(x - 0.5)` if x < 0
+    # Or, equivalently, `math.copysign(math.floor(abs(x) + 0.5), x)` for positive numbers
+    # and `math.copysign(math.ceil(abs(x) - 0.5), x)` for negative numbers.
+    # A simpler and more direct approach for "round half up towards positive infinity" is:
+    # For positive numbers: `int(value + 0.5)`
+    # For negative numbers: `int(value - 0.5)` (e.g., -1.5 -> -2, -1.4 -> -1, -1.6 -> -2)
+    # This is not "towards positive infinity". -1.5 should be -1.
+    # The correct formula for "round half up towards positive infinity" (e.g., 1.5 -> 2, -1.5 -> -1)
+    # can be achieved by checking the sign and applying `math.floor` or `math.ceil`.
+
+    # Let's use `decimal` for precise rounding as specified, which is allowed as part of standard library.
+    # This correctly handles the "ties broken towards positive infinity" requirement for both positive and negative numbers.
+    from decimal import Decimal, ROUND_HALF_UP, getcontext
+    
+    # Set precision for intermediate calculations if necessary, though for this
+    # simple multiplication, default precision might be fine.
+    # getcontext().prec = 10 # Example, not strictly needed for this case
+    
+    net_decimal = Decimal(net_cents)
+    rate_decimal = Decimal(str(vat_rate)) # Convert float rate to string to avoid float precision issues
+
+    # Perform the multiplication
+    unrounded_vat = net_decimal * rate_decimal
+
+    # Apply rounding using ROUND_HALF_UP
+    # When rounding, Decimal.quantize takes a target exponent (e.g., Decimal('1') for integers)
+    # and a rounding strategy.
+    # ROUND_HALF_UP for Decimal is defined as rounding to the nearest with ties going away from zero.
+    # This means 1.5 -> 2, -1.5 -> -2. This is NOT "towards positive infinity".
+    # The requirement "ties broken towards positive infinity" means:
+    # 1.5 -> 2
+    # -1.5 -> -1
+
+    # The `round()` function in Python 3 uses `ROUND_HALF_EVEN`.
+    # `Decimal`'s `ROUND_HALF_UP` is "round half away from zero".
+    # We need "round half towards positive infinity".
+    # This is `ROUND_CEILING` for positive numbers and `ROUND_FLOOR` for negative numbers.
+    # Or, more directly, `math.copysign(math.floor(abs(value) + 0.5), value)` for half-up (away from zero).
+
+    # Let's re-evaluate the "ROUND_HALF_UP: ties broken towards positive infinity" requirement.
+    # This is equivalent to `math.ceil(x - 0.5)` if x < 0, and `math.floor(x + 0.5)` if x >= 0,
+    # but the simplest way to get "half up towards positive infinity" for both signs
+    # is `math.floor(x + 0.5)` for positive numbers, and `math.ceil(x - 0.5)` for negative numbers.
+    # The `decimal` module's `ROUND_HALF_UP` is "round half away from zero".
+    # `ROUND_CEILING` rounds towards positive infinity.
+    # `ROUND_FLOOR` rounds towards negative infinity.
+
+    # If `unrounded_vat` is positive, we need `ROUND_CEILING` for ties (e.g., 1.5 -> 2).
+    # If `unrounded_vat` is negative, we need `ROUND_CEILING` for ties (e.g., -1.5 -> -1).
+    # So, `ROUND_CEILING` is the correct rounding mode for "towards positive infinity".
+
+    # Quantize to an integer (exponent 0) with ROUND_CEILING
+    rounded_vat = unrounded_vat.quantize(Decimal('1'), rounding=ROUND_CEILING)
+    
+    return int(rounded_vat)
+=== END ===

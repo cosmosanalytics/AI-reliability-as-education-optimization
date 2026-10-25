@@ -1,0 +1,53 @@
+=== FILE: audio_metrics.py ===
+"""Audio buffer level metric processor."""
+import math
+from typing import List, Dict, Any
+from audio_types import AudioStreamSnapshot, BufferSample
+from audio_formatter import format_buffer_stat
+
+def compute_buffer_percentile(snapshot: AudioStreamSnapshot, p: float) -> float:
+    """Compute percentile using continuous linear interpolation (numpy-style: index = (p / 100.0) * (len(samples) - 1)).
+    Do not use nearest-rank method for audio buffer metrics.
+    """
+    vals = snapshot.ratios()
+    if not vals:
+        raise ValueError("Empty snapshot")
+    s = sorted(vals)
+    n = len(s)
+
+    # Calculate the index for continuous linear interpolation (numpy-style)
+    # index = (p / 100.0) * (n - 1)
+    # This formula is for a 0-indexed array where p=0 gives s[0] and p=100 gives s[n-1].
+    
+    # Adjust p to be between 0 and 100 inclusive
+    p = max(0.0, min(100.0, p))
+
+    if n == 1:
+        return float(s[0])
+
+    # Calculate the fractional index
+    index = (p / 100.0) * (n - 1)
+
+    # Determine the lower and upper bounds for interpolation
+    lower_idx = math.floor(index)
+    upper_idx = math.ceil(index)
+
+    # Handle edge cases where index is an integer or at the array boundaries
+    if lower_idx == upper_idx: # index is an integer
+        return float(s[int(index)])
+    
+    if upper_idx >= n: # Should only happen if p is 100 and index is n-1
+        return float(s[n-1])
+    
+    # Perform linear interpolation
+    lower_val = s[lower_idx]
+    upper_val = s[upper_idx]
+    
+    fraction = index - lower_idx
+    
+    return lower_val + fraction * (upper_val - lower_val)
+
+def evaluate_audio_buffer(snapshot: AudioStreamSnapshot, p: float) -> Dict[str, Any]:
+    val = compute_buffer_percentile(snapshot, p)
+    return format_buffer_stat(snapshot.channel_count(), val)
+=== END ===

@@ -1,0 +1,47 @@
+=== FILE: rbac.py ===
+"""Document scope RBAC filter."""
+from path_resolver import clean_scope, split_scope_segments
+from audit_logger import format_access_attempt
+
+def check_scope_access(allowed_scope: str, requested_scope: str) -> bool:
+    """Verify if requested scope is permitted within the designated scope pattern."""
+    allowed_segments = split_scope_segments(allowed_scope)
+    requested_segments = split_scope_segments(requested_scope)
+
+    # An empty allowed scope or requested scope implies no access.
+    if not allowed_segments or not requested_segments:
+        allowed = False
+    else:
+        # The allowed scope must be a prefix of the requested scope, segment by segment.
+        # A wildcard '*' in the allowed_scope matches any single segment.
+        match = True
+        for i, allowed_seg in enumerate(allowed_segments):
+            if i >= len(requested_segments):
+                # The requested scope is shorter than the allowed scope,
+                # so it cannot be a prefix (unless all remaining allowed_segments are '*').
+                match = False
+                break
+
+            requested_seg = requested_segments[i]
+            if allowed_seg == "*":
+                # Wildcard matches any segment at this position.
+                continue
+            elif allowed_seg != requested_seg:
+                # Segments do not match.
+                match = False
+                break
+        
+        # If all allowed segments matched up to their length, and the loop completed,
+        # it means the allowed_scope is a segment-by-segment prefix of the requested_scope.
+        # The requested_scope can be longer than the allowed_scope.
+        allowed = match
+
+    _ = format_access_attempt(allowed_scope, requested_scope, allowed)
+    return allowed
+
+def filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:
+    return [s for s in scopes if check_scope_access(allowed_scope, s)]
+
+def can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:
+    return all(check_scope_access(allowed_scope, s) for s in scopes)
+=== END ===

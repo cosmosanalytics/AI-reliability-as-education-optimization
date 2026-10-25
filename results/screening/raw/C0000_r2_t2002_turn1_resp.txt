@@ -1,0 +1,43 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+    line_totals: list of integer cents.
+    Returns list of discount cents per line.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+    total = sum(line_totals)
+    if total == 0:
+        return [0] * len(line_totals)
+
+    # Calculate initial proportional allocations using integer division
+    allocations = [cents * total_discount_cents // total for cents in line_totals]
+
+    # Calculate the sum of initial allocations
+    current_total_allocated = sum(allocations)
+
+    # Calculate the remainder that needs to be distributed
+    remainder = total_discount_cents - current_total_allocated
+
+    # Distribute the remainder (unallocated pennies)
+    # This loop ensures that the total allocated amount exactly matches total_discount_cents.
+    # Pennies are distributed one by one to the first 'remainder' lines.
+    for i in range(remainder):
+        allocations[i] += 1
+
+    return allocations
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    # The prorate_discount function now guarantees that tot == total_discount_cents,
+    # so is_fully_allocated will always be True unless total_discount_cents is negative.
+    # However, the contract of total_discount_cents implies it's non-negative.
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===

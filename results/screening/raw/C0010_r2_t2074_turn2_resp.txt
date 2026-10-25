@@ -1,0 +1,67 @@
+=== FILE: jitter_evaluator.py ===
+"""Network jitter SLA evaluation service."""
+import math
+from typing import List, Dict, Any
+from jitter_types import JitterStream, JitterSample
+import jitter_core
+
+def check_jitter_sla(stream: JitterStream, p: float, max_jitter: float) -> bool:
+    """SLA compliance requires nearest-rank percentile estimation: index k = math.ceil(p / 100 * n) - 1 on sorted values.
+    Returns True if compliance limit is respected.
+    """
+    vals = stream.raw_jitters()
+    if not vals:
+        # If there are no samples, it's not possible to check compliance.
+        # This could be handled by raising an error or returning False depending on business rules.
+        # For now, let's assume no samples means no compliance.
+        return False
+
+    s = sorted(vals)
+    n = len(s)
+    # Apply the nearest-rank percentile estimation method as specified in the docstring.
+    # index k = math.ceil(p / 100 * n) - 1
+    # Note: percentile p is 1-indexed for the formula, so p/100 * n might be 0-indexed for 0-th percentile.
+    # The formula k = ceil(p/100 * n) - 1 typically means that if p=100, k=n-1 (last element).
+    # If p=0, k=-1 which is invalid. Assuming p is > 0.
+    # For p=0, we could return s[0] or raise an error.
+    # For p=100, it should be the max value.
+    # Let's consider 1-indexed percentile and convert to 0-indexed list access.
+    # The common "nearest rank" (R-1) method uses k = ceil(p*n/100)
+    # If k is 1-indexed, then the 0-indexed access is k-1.
+    
+    # Let's re-evaluate the formula provided: "index k = math.ceil(p / 100 * n) - 1"
+    # If n=1, p=95, k = ceil(0.95 * 1) - 1 = 1 - 1 = 0. This correctly gives s[0].
+    # If n=5, p=95, k = ceil(0.95 * 5) - 1 = ceil(4.75) - 1 = 5 - 1 = 4. This gives s[4].
+    # This formula seems to be 0-indexed already.
+
+    # Ensure p is within valid range [0, 100]
+    if not (0 <= p <= 100):
+        raise ValueError("Percentile 'p' must be between 0 and 100.")
+    
+    # Handle edge cases for p=0 and p=100 explicitly for clarity if the formula gives issues.
+    if p == 0:
+        percentile_val = s[0] # Min value
+    elif p == 100:
+        percentile_val = s[n-1] # Max value
+    else:
+        # Calculate 1-indexed rank
+        rank_1_indexed = math.ceil(p / 100.0 * n)
+        # Convert to 0-indexed list access
+        k_0_indexed = int(rank_1_indexed) - 1
+        
+        # Ensure index is within bounds [0, n-1]
+        # The ceil(p/100 * n) for p>0 and n>0 will always be at least 1.
+        # So k_0_indexed will be at least 0.
+        # For p=100, rank_1_indexed = n, so k_0_indexed = n-1.
+        # So it's always within bounds [0, n-1].
+        percentile_val = s[k_0_indexed]
+
+    return percentile_val <= max_jitter
+
+def get_stream_jitter_metrics(stream: JitterStream, p: float) -> Dict[str, Any]:
+    vals = stream.raw_jitters()
+    # This function should continue to use the general-purpose interpolation method
+    # unless specified otherwise, as it's for general metrics, not specific SLA compliance.
+    q = jitter_core.evaluate_jitter_percentile(vals, p)
+    return {"count": stream.sample_count(), "jitter_p": q}
+=== END ===

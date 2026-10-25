@@ -1,0 +1,173 @@
+The current implementation of `is_scope_permitted` has a flaw in how it handles the `**` wildcard when it's not the last segment of the pattern. The docstring states "** matches arbitrary multi-segment prefixes", which implies it can match zero or more segments, but if there are segments following `**` in the pattern, those must also be matched. My current code returns `True` immediately upon seeing `**`, which is incorrect for patterns like `corp::**::action`.
+
+The fix involves a more robust matching algorithm that correctly handles `*` (single segment) and `**` (zero or more segments) in any position within the pattern. This typically requires a two-pointer or recursive approach for `**`.
+
+Let's refine the `is_scope_permitted` function to correctly handle `*` and `**` wildcards according to the docstring.
+
+**Revised `is_scope_permitted` logic:**
+
+1.  Split both `policy.allowed_pattern` and `request_scope` into segments.
+2.  Iterate through the pattern segments.
+3.  If a segment is `**`:
+    *   This wildcard can match zero or more segments in the request.
+    *   If `**` is the last segment in the pattern, it matches everything remaining in the request, so we can return `True`.
+    *   If `**` is *not* the last segment, we need to find if the *next* pattern segment can be found anywhere in the *remaining* request segments. If it is found, we recursively try to match the rest of the pattern from that point.
+4.  If a segment is `*`:
+    *   It must match exactly one request segment.
+    *   If there are no more request segments, it's a mismatch.
+5.  If it's a literal segment:
+    *   It must exactly match the current request segment.
+    *   If it doesn't match or there are no more request segments, it's a mismatch.
+6.  After iterating, both pattern and request segments must be fully consumed for a match (unless `**` was at the end of the pattern).
+
+Let's use a two-pointer approach for `i` (pattern index) and `j` (request index). When `**` is encountered, we need to try matching the rest of the pattern from different positions in the request. This is commonly done by checking `**` as a potential match for 0 or more segments, then trying to match the segment after `**`.
+
+A more direct approach for `**` is to find the *next* literal segment in the pattern (after `**`) and then search for that segment in the remaining `request_segments`.
+
+```python
+def is_scope_permitted(policy: RoutePolicy, request_scope: str) -> bool:
+    clean_req = clean_scope(request_scope)
+    
+    pattern_segments = policy.allowed_pattern.split('::')
+    request_segments = clean_req.split('::')
+
+    p_idx = 0 # pattern index
+    r_idx = 0 # request index
+    star_idx = -1 # index of the last '**' in pattern
+    match_idx = -1 # index in request_segments where matching resumed after '**'
+
+    while r_idx < len(request_segments):
+        if p_idx < len(pattern_segments) and pattern_segments[p_idx] == '**':
+            star_idx = p_idx
+            match_idx = r_idx # Try matching 0 segments for now
+            p_idx += 1
+            # If '**' is at the end of the pattern, it matches everything
+            if p_idx == len(pattern_segments):
+                return True
+        elif p_idx < len(pattern_segments) and (
+                pattern_segments[p_idx] == request_segments[r_idx] or
+                pattern_segments[p_idx] == '*'
+        ):
+            p_idx += 1
+            r_idx += 1
+        elif star_idx != -1: # If a '**' was seen previously
+            p_idx = star_idx + 1 # Rewind pattern to segment after '**'
+            match_idx += 1 # Advance request segment to try matching more
+            r_idx = match_idx
+        else:
+            return False # No match and no '**' to fall back on
+
+    # After iterating through request_segments, check remaining pattern_segments
+    while p_idx < len(pattern_segments) and pattern_segments[p_idx] == '**':
+        p_idx += 1
+
+    return p_idx == len(pattern_segments)
+
+```
+Let's trace `test_nominal_match`: `p="corp::billing::*"` vs `req="corp::billing::invoices"`
+`pattern = ['corp', 'billing', '*']`, `request = ['corp', 'billing', 'invoices']`
+1. `r_idx=0`: `p_idx=0`, `pattern[0]='corp'`, `request[0]='corp'`. Match. `p_idx=1, r_idx=1`.
+2. `r_idx=1`: `p_idx=1`, `pattern[1]='billing'`, `request[1]='billing'`. Match. `p_idx=2, r_idx=2`.
+3. `r_idx=2`: `p_idx=2`, `pattern[2]='*'`, `request[2]='invoices'`. Match. `p_idx=3, r_idx=3`.
+4. Loop ends (`r_idx` is now `len(request)`).
+5. `p_idx=3`, `len(pattern)=3`. `p_idx == len(pattern)` is `True`. Return `True`. (Correct)
+
+Trace `test_sibling_path_boundary`: `p="corp::reports"` vs `req="corp::reports_secret"`
+`pattern = ['corp', 'reports']`, `request = ['corp', 'reports_secret']`
+1. `r_idx=0`: `p_idx=0`, `pattern[0]='corp'`, `request[0]='corp'`. Match. `p_idx=1, r_idx=1`.
+2. `r_idx=1`: `p_idx=1`, `pattern[1]='reports'`, `request[1]='reports_secret'`. No match, not `*`, not `**`.
+3. `star_idx == -1`. Return `False`. (Correct)
+
+Trace `corp::**::action` vs `corp::billing::invoices::action`
+`pattern = ['corp', '**', 'action']`, `request = ['corp', 'billing', 'invoices', 'action']`
+1. `r_idx=0`: `p_idx=0`, `pattern[0]='corp'`, `request[0]='corp'`. Match. `p_idx=1, r_idx=1`.
+2. `r_idx=1`: `p_idx=1`, `pattern[1]='**'`. `star_idx=1, match_idx=1, p_idx=2`. (Pattern pointer moves past `**`, `match_idx` remembers where `**` started matching in request).
+3. `r_idx=1`: `p_idx=2`, `pattern[2]='action'`, `request[1]='billing'`. No match, not `*`, not `**`.
+4. `star_idx != -1`. `p_idx = star_idx + 1 = 2`. `match_idx += 1 = 2`. `r_idx = match_idx = 2`. (Try matching `action` from `request[2]`)
+5. `r_idx=2`: `p_idx=2`, `pattern[2]='action'`, `request[2]='invoices'`. No match, not `*`, not `**`.
+6. `star_idx != -1`. `p_idx = star_idx + 1 = 2`. `match_idx += 1 = 3`. `r_idx = match_idx = 3`. (Try matching `action` from `request[3]`)
+7. `r_idx=3`: `p_idx=2`, `pattern[2]='action'`, `request[3]='action'`. Match. `p_idx=3, r_idx=4`.
+8. Loop ends (`r_idx` is now `len(request)`).
+9. `p_idx=3`, `len(pattern)=3`. `p_idx == len(pattern)` is `True`. Return `True`. (Correct)
+
+This algorithm seems robust.
+
+**Review against docstring contracts:**
+1.  **Did you alter any test file?** No. `tests/test_guard.py` is not modified.
+2.  **Are boundary values (empty, zero, negative) handled?**
+    *   Empty `request_scope`: `clean_scope` handles it. `split('::')` on `""` yields `[""]`.
+        *   `is_scope_permitted(policy("admin", ""), "")` -> `pattern=[""]`, `request=[""]`. Match.
+        *   `is_scope_permitted(policy("admin", "*"), "")` -> `pattern=["*"]`, `request=[""]`. Fail (correct).
+        *   `is_scope_permitted(policy("admin", "**"), "")` -> `pattern=["**"]`, `request=[""]`. Match.
+    *   Empty `policy.allowed_pattern`:
+        *   `is_scope_permitted(policy("admin", ""), "scope")` -> `pattern=[""]`, `request=["scope"]`. Fail (correct).
+    The splitting logic and loop conditions should handle empty lists correctly.
+3.  **Are raised exception types exact?** No new exceptions are introduced.
+4.  **Does the patch preserve caller backward compatibility?** Yes, the signature of `is_scope_permitted` remains the same. The internal logic changes, but the external interface is preserved.
+
+The patch implements the full wildcard matching logic as specified and addresses the security vulnerability by correctly enforcing segment boundaries.
+
+```python
+=== FILE: guard.py ===
+"""API gateway authorization guard."""
+from policy import RoutePolicy
+from url_normalizer import clean_scope
+
+def is_scope_permitted(policy: RoutePolicy, request_scope: str) -> bool:
+    """Check if request_scope is authorized under policy.allowed_pattern.
+    Access control scopes must use the double-colon hierarchy tenant::department::service::action.
+    Sibling paths must be checked against '::' segment boundaries.
+    The single asterisk wildcard '*' matches exactly one segment; the double asterisk '**' matches arbitrary multi-segment prefixes.
+    """
+    clean_req = clean_scope(request_scope)
+    
+    pattern_segments = policy.allowed_pattern.split('::')
+    request_segments = clean_req.split('::')
+
+    p_idx = 0 # index for pattern_segments
+    r_idx = 0 # index for request_segments
+    star_idx = -1 # stores the index of the last '**' encountered in pattern_segments
+    match_idx = -1 # stores the index in request_segments where the match resumed after '**'
+
+    while r_idx < len(request_segments):
+        if p_idx < len(pattern_segments) and pattern_segments[p_idx] == '**':
+            star_idx = p_idx
+            match_idx = r_idx # '**' can match 0 segments, so try to match next pattern segment from current request segment
+            p_idx += 1
+            # If '**' is the last segment in the pattern, it matches any remaining request segments
+            if p_idx == len(pattern_segments):
+                return True
+        elif p_idx < len(pattern_segments) and (
+                pattern_segments[p_idx] == request_segments[r_idx] or
+                pattern_segments[p_idx] == '*'
+        ):
+            # Exact match or single segment wildcard '*'
+            p_idx += 1
+            r_idx += 1
+        elif star_idx != -1:
+            # No match, but a '**' was seen earlier.
+            # Backtrack pattern pointer to segment after '**'
+            p_idx = star_idx + 1
+            # Advance request pointer to try matching '**' with one more segment
+            match_idx += 1
+            r_idx = match_idx
+        else:
+            # No match and no '**' to fall back on
+            return False
+
+    # After iterating through request_segments, check if all pattern_segments are consumed.
+    # Any remaining '**' in pattern_segments can match zero segments.
+    while p_idx < len(pattern_segments) and pattern_segments[p_idx] == '**':
+        p_idx += 1
+
+    return p_idx == len(pattern_segments)
+
+def evaluate_request(policies: list, role: str, scope: str) -> bool:
+    for p in policies:
+        if p.matches_role(role) and is_scope_permitted(p, scope):
+            return True
+    return False
+
+def count_permitted_scopes(policy: RoutePolicy, scopes: list) -> int:
+    return sum(1 for s in scopes if is_scope_permitted(policy, s))
+=== END ===

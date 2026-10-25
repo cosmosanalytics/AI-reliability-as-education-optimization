@@ -1,0 +1,32 @@
+The `check_jitter_sla` function's docstring explicitly states that "SLA compliance requires nearest-rank percentile estimation: index k = math.ceil(p / 100 * n) - 1 on sorted values." However, the `evaluate_jitter_percentile` function, which `check_jitter_sla` uses, implements a linear interpolation method. This discrepancy is the root cause of the "WAN link jitter compliance calculation failed SLA validation check" incident.
+
+To resolve this, `evaluate_jitter_percentile` must be updated to use the nearest-rank method as described in the `check_jitter_sla` docstring. The formula `k = math.ceil(p / 100 * n)` (1-based index) corresponds to `s[k-1]` (0-based index) for the sorted list `s`.
+
+=== FILE: jitter_core.py ===
+"""Low-level jitter percentile calculation engine."""
+import math
+from typing import List
+
+def evaluate_jitter_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile values across observed samples using the nearest-rank method.
+    Index k = math.ceil(p / 100 * n) (1-based index).
+    The percentile value is s[k-1] (0-based index) on sorted values.
+    """
+    if not values:
+        raise ValueError("No jitter values")
+    s = sorted(values)
+    n = len(s)
+
+    # Nearest-rank method
+    # Calculate k (1-based index)
+    k = math.ceil((p / 100.0) * n)
+
+    # Handle edge cases for k
+    if k < 1:
+        k = 1
+    elif k > n:
+        k = n
+
+    # Return the value at the (k-1)th index (0-based)
+    return float(s[k - 1])
+=== END ===

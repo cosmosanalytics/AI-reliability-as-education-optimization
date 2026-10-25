@@ -1,0 +1,43 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values.
+
+    This implementation uses the "Nearest Rank" method (also known as method R-1
+    in some standards, or equivalent to `numpy.percentile(..., interpolation='higher')`
+    for p > 0). It finds the value in the sorted dataset whose rank corresponds
+    to the given percentile, rounding up to the nearest rank if necessary.
+
+    The original implementation used linear interpolation, which produced
+    non-discrete values. The failing test `assert 45.0 == 40.0` indicates
+    that for SLA monitoring, a value directly from the input dataset is expected,
+    rather than an interpolated one. This method aligns with that expectation
+    by always returning an existing data point.
+    """
+    if not values:
+        raise ValueError("Empty values")
+    if not (0 <= p <= 100):
+        raise ValueError("Percentile must be between 0 and 100 inclusive")
+
+    s = sorted(values)
+    n = len(s)
+
+    # Handle edge case for p=0, which should yield the minimum value.
+    # The 'Nearest Rank' formula usually applies for p > 0.
+    if p == 0:
+        return s[0]
+
+    # Calculate the 1-indexed rank for the percentile.
+    # The formula is typically ceil(p/100 * n).
+    # This ensures that for p > 0, the rank is at least 1.
+    rank = math.ceil((p / 100.0) * n)
+
+    # Convert to 0-indexed and return the value from the sorted list.
+    # rank is 1-indexed, so we subtract 1 for 0-indexed list access.
+    # The rank will be between 1 and n (inclusive), so (rank - 1) will be
+    # between 0 and n-1, which are valid indices.
+    return float(s[int(rank) - 1])
+=== END ===

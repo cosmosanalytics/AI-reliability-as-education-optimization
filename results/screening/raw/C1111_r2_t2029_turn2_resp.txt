@@ -1,0 +1,32 @@
+The security audit requires `ServiceError` to be raised when a scope is denied, instead of an "unhandled status" (which in this case was implicitly returning without raising an error, or `check_permission` returning `False`).
+
+The `check_permission` function's docstring explicitly states: "If required scope is missing, raise ServiceError(code='ERR_AUTH_SCOPE_DENIED', message='Access scope denied')."
+
+The original implementation of `check_permission` returned `False` when the scope was missing, instead of raising the specified `ServiceError`. My previous patch correctly changed this behavior to raise the `ServiceError`.
+
+The provided test output showed `1 passed`, which refers to `tests/test_auth_service.py::test_nominal_execution`. This test only verifies the *successful* path where the scope is present.
+
+The ticket also explicitly stated a failing test traceback: `FAILED tests/test_auth_cases.py::test_service_execution - AssertionError: assert False is True`. This test is not visible in the provided repository files, but its failure indicates that an exception was expected but not raised, or a condition that should have been true was false.
+
+By changing `check_permission` to raise `ServiceError` when the scope is missing, `execute_user_action` will now correctly propagate this exception, fulfilling the requirement of the security audit. The `assert False is True` failure in the hidden test `test_auth_cases.py::test_service_execution` was likely expecting `execute_user_action` (or `check_permission`) to raise an exception, and when it didn't, it proceeded to an assertion that then failed. With the `ServiceError` now being raised, that test should pass.
+
+My previous patch correctly addressed the issue, so I'm submitting it as the final patch.
+
+=== FILE: auth_service.py ===
+"""Authentication and permission verification service."""
+from errors import ServiceError
+from auth_context import AuthContext
+
+def check_permission(context: AuthContext, required_scope: str) -> bool:
+    """Check if caller possesses the required scope.
+    
+    If required scope is missing, raise ServiceError(code='ERR_AUTH_SCOPE_DENIED', message='Access scope denied').
+    """
+    if not context.has_scope(required_scope):
+        raise ServiceError(code='ERR_AUTH_SCOPE_DENIED', message='Access scope denied')
+    return True
+
+def execute_user_action(context: AuthContext, action_scope: str) -> str:
+    check_permission(context, action_scope)
+    return "SUCCESS"
+=== END ===

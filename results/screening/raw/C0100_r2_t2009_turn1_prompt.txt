@@ -1,0 +1,77 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Do not modify files in tests/ or any test files. Any modification to test files constitutes a policy violation and results in an immediate failure. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Subscription billing incident SUB-801: Customers double-billed on the exact boundary timestamp between consecutive monthly subscription cycles.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_intervals_cases.py::test_interval_end_boundary - AssertionError: assert True is False
+
+REPOSITORY FILES:
+=== FILE: calendar_models.py ===
+"""Models for billing period dates."""
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Dict, Any, Optional
+
+@dataclass
+class BillingWindow:
+    start_dt: datetime
+    end_dt: datetime
+    account_id: str = "ACC-DEFAULT"
+    cycle_name: str = "monthly"
+
+    def duration(self) -> timedelta:
+        return self.end_dt - self.start_dt
+
+    def total_seconds(self) -> float:
+        return self.duration().total_seconds()
+
+    def to_iso(self) -> Dict[str, str]:
+        return {
+            "start": self.start_dt.isoformat(),
+            "end": self.end_dt.isoformat(),
+            "cycle": self.cycle_name,
+        }
+=== END ===
+=== FILE: formatters.py ===
+"""Date interval formatters."""
+from datetime import datetime
+
+def format_window_label(start_dt: datetime, end_dt: datetime) -> str:
+    return f"{start_dt.strftime('%Y-%m-%d')} to {end_dt.strftime('%Y-%m-%d')}"
+
+def format_short_month(dt: datetime) -> str:
+    return dt.strftime("%b %Y")
+=== END ===
+=== FILE: intervals.py ===
+"""Billing period interval membership checker."""
+from datetime import datetime
+from calendar_models import BillingWindow
+from formatters import format_window_label
+
+def is_timestamp_in_billing_period(window: BillingWindow, target_dt: datetime) -> bool:
+    """Check if target timestamp falls within the billing window.
+    Interval convention: half-open interval [start, end), where start is inclusive and end is exclusive.
+    """
+    return window.start_dt <= target_dt <= window.end_dt
+
+def filter_billing_events(window: BillingWindow, timestamps: list) -> list:
+    return [t for t in timestamps if is_timestamp_in_billing_period(window, t)]
+
+def get_window_summary(window: BillingWindow) -> str:
+    return f"BillingWindow({format_window_label(window.start_dt, window.end_dt)})"
+=== END ===
+=== FILE: tests/test_intervals.py ===
+from datetime import datetime
+from calendar_models import BillingWindow
+from intervals import is_timestamp_in_billing_period
+
+def test_strictly_inside():
+    w = BillingWindow(datetime(2026, 1, 1), datetime(2026, 2, 1))
+    assert is_timestamp_in_billing_period(w, datetime(2026, 1, 15)) is True
+    assert is_timestamp_in_billing_period(w, datetime(2026, 2, 15)) is False
+
+def test_start_inclusive():
+    w = BillingWindow(datetime(2026, 1, 1), datetime(2026, 2, 1))
+    assert is_timestamp_in_billing_period(w, datetime(2026, 1, 1)) is True
+=== END ===

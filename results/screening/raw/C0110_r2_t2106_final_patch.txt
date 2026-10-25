@@ -1,0 +1,77 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values)
+    n = len(s)
+    if n == 0:
+        raise ValueError("Samples list cannot be empty for percentile calculation")
+    # Using the "nearest-rank" method, specifically the C=1 (or R-8) method
+    # where the index is calculated as p/100 * (N + 1).
+    # This is also known as the NIST method or the method used by R's `quantile`
+    # function with type=8.
+    # The current implementation uses p/100 * (N - 1), which corresponds to
+    # type=7 in R or numpy's default 'linear' interpolation.
+    # The incident report specifies "nearest-rank house standard" which implies
+    # a specific formula that yields 40.0 instead of 45.0 for the failing test.
+    # The (N+1) method yields 40.0 for [10, 20, 30, 40, 50, 60, 70, 80] at 50th percentile.
+    # For p=50, N=8: idx = 0.5 * (8+1) = 4.5.
+    # low = 4, high = 5.
+    # s[4] + (4.5 - 4) * (s[5] - s[4]) = s[4] + 0.5 * (s[5] - s[4]) = (s[4] + s[5]) / 2
+    # which is (50+60)/2 = 55.0. This is still not 40.0.
+
+    # Let's re-evaluate the expectation: d1 for 50.0 should be 40.0.
+    # If d1 is [10, 20, 30, 40, 50, 60, 70], N=7.
+    # Current method: idx = 0.5 * (7-1) = 3.0. Returns s[3] = 40.0.
+    # This would mean the current method *is* correct for this particular d1.
+    # So the traceback must be for a different d1.
+
+    # The failing test `assert calculate_cache_percentile(d1, 50.0) == 40.0`
+    # and the error `AssertionError: assert 45.0 == 40.0`
+    # means that the current code calculated 45.0.
+    # This happens when `idx` is X.5 and `s[X] + s[X+1]` is 90.
+    # Example: d1 = [10, 20, 30, 40, 50, 60, 70, 80]
+    # N = 8.
+    # Current method: idx = (50/100.0) * (8 - 1) = 0.5 * 7 = 3.5
+    # low = 3, high = 4
+    # s[3] + (3.5 - 3) * (s[4] - s[3]) = s[3] + 0.5 * (s[4] - s[3]) = (s[3] + s[4]) / 2.0
+    # = (40.0 + 50.0) / 2.0 = 45.0.
+    # So, d1 must have been something like [10, 20, 30, 40, 50, 60, 70, 80].
+    # For this d1, the expected value is 40.0.
+
+    # If d1 = [10, 20, 30, 40, 50, 60, 70, 80] and 50th percentile is 40.0,
+    # this implies a method where the index is rounded down or specific to the lower bound.
+    # A common "nearest rank" method is `math.ceil(p/100 * n) - 1` for 0-indexed list.
+    # Let's try this:
+    # idx = math.ceil(p / 100.0 * n) - 1
+    # For p=50, n=8: idx = math.ceil(0.5 * 8) - 1 = math.ceil(4.0) - 1 = 4 - 1 = 3.
+    # This would return s[3] = 40.0. This matches the expectation!
+
+    # This method is also known as R-1 or "nearest rank" where the value is
+    # taken directly from the sorted list.
+    # For non-integer indices in p/100 * n, it rounds up.
+    # If p/100 * n is an integer, it means the k-th value.
+
+    # The description states "nearest-rank house standard". This implies using
+    # a discrete rank from the sorted samples, rather than interpolation.
+    # Given the discrepancy (45.0 vs 40.0), it suggests that for `d1 = [10, 20, 30, 40, 50, 60, 70, 80]`,
+    # the 50th percentile should be 40.0.
+    # This corresponds to the index `math.ceil(0.5 * 8) - 1 = 3` (0-indexed).
+
+    # The index calculation for the nearest-rank method (R-1):
+    # k = ceil(p/100 * N)
+    # The value is S[k-1] (for 0-indexed list)
+    k = math.ceil((p / 100.0) * n)
+    # Ensure k is within bounds [1, n]
+    k = max(1, min(int(k), n))
+    return s[k - 1]
+
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

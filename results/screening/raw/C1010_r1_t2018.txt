@@ -1,0 +1,91 @@
+=== FILE: rbac.py ===
+"""Document scope RBAC filter."""
+from path_resolver import clean_scope, split_scope_segments, count_scope_segments
+from audit_logger import format_access_attempt
+
+def check_scope_access(allowed_scope: str, requested_scope: str) -> bool:
+    """Verify if requested scope is permitted within the designated scope pattern.
+
+    An allowed_scope without a wildcard '*' grants access to itself and all
+    its sub-scopes. For example, 'corp::public' allows 'corp::public' and
+    'corp::public::readme'.
+
+    An allowed_scope ending with '::*' grants access to itself and its direct
+    children, but not deeper sub-scopes. For example, 'corp::public::*' allows
+    'corp::public::readme' but not 'corp::public::readme::file'.
+
+    An allowed_scope of just '*' grants access to all top-level scopes (e.g., 'corp::public')
+    and their descendants, effectively all scopes.
+    """
+    cleaned_allowed = clean_scope(allowed_scope)
+    cleaned_requested = clean_scope(requested_scope)
+
+    allowed_segments = split_scope_segments(cleaned_allowed)
+    requested_segments = split_scope_segments(cleaned_requested)
+
+    allowed = False
+
+    if not cleaned_allowed: # Empty allowed_scope means no access unless requested is also empty.
+        allowed = not cleaned_requested
+    elif cleaned_allowed == "*": # Wildcard '*' allows everything.
+        allowed = True
+    elif cleaned_allowed.endswith("::*"):
+        # Specific prefix with direct child wildcard
+        # Remove the '::*' part to get the base prefix
+        base_allowed_segments = split_scope_segments(cleaned_allowed[:-3])
+        if len(requested_segments) == len(base_allowed_segments) + 1:
+            # Check if the requested scope is a direct child
+            if requested_segments[:len(base_allowed_segments)] == base_allowed_segments:
+                allowed = True
+    else:
+        # No wildcard, allowed_scope grants access to itself and all descendants
+        if len(requested_segments) >= len(allowed_segments):
+            if requested_segments[:len(allowed_segments)] == allowed_segments:
+                allowed = True
+
+    _ = format_access_attempt(allowed_scope, requested_scope, allowed)
+    return allowed
+
+def filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:
+    return [s for s in scopes if check_scope_access(allowed_scope, s)]
+
+def can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:
+    return all(check_scope_access(allowed_scope, s) for s in scopes)
+=== END ===
+=== FILE: path_resolver.py ===
+"""Scope resolver utilities."""
+from typing import List, Optional
+
+def clean_scope(scope_str: str) -> str:
+    """Strips whitespace and normalizes scope string."""
+    return scope_str.strip() if scope_str else ""
+
+def split_scope_segments(scope_str: str) -> List[str]:
+    """Splits hierarchy by double-colon delimiter."""
+    # Ensure empty string for '::' or leading/trailing '::' does not produce empty segments
+    cleaned = clean_scope(scope_str)
+    if not cleaned:
+        return []
+    # Replace multiple ':::' with '::' to normalize, then split
+    # Filter out any empty segments that might result from '::' at start/end or ':::'
+    return [seg for seg in cleaned.split("::") if seg]
+
+def count_scope_segments(scope_str: str) -> int:
+    """Returns number of segments in scope string."""
+    return len(split_scope_segments(scope_str))
+
+def validate_scope_syntax(scope_str: str) -> bool:
+    """Validates scope string has non-empty segments."""
+    segs = split_scope_segments(scope_str)
+    # If the original string was not empty, but splitting resulted in no segments (e.g., "::"),
+    # or if any segment is empty, it's invalid.
+    # An empty string is valid in some contexts (like clean_scope), but for validation here,
+    # it typically means "no scope", which might be considered syntactically valid but semantically empty.
+    # The current implementation checks for len(segs) > 0 and all(len(s) > 0 for s in segs).
+    # This correctly handles "::a" -> ["a"] and "a::" -> ["a"].
+    # "a::b" -> ["a", "b"]
+    # "::" -> []
+    # "a::b::" -> ["a", "b"]
+    # So, the logic is sound for non-empty segments.
+    return len(segs) > 0 and all(len(s) > 0 for s in segs)
+=== END ===

@@ -1,0 +1,63 @@
+=== FILE: csv_writer.py ===
+"""TSV serialization utilities."""
+from typing import List, Optional
+from schema import CustomerProfile
+from io_helpers import validate_tsv_header
+
+def escape_tsv_field(val: Optional[str]) -> str:
+    r"""Escape field for internal TSV audit log pipeline:
+    Records are tab-separated (\t), internal double quotes are escaped with backslash (\"),
+    newline characters are escaped as \n, and None/null values are serialized as \N.
+    Do NOT use RFC 4180 double-quoting.
+    """
+    if val is None:
+        return r"\N" # Serialize None/null as \N as per docstring
+    
+    # Escape internal double quotes with backslash (\")
+    # Escape newline characters as \n
+    # Note: tab characters are handled by the overall TSV structure, not per-field escaping.
+    # The docstring explicitly says "Do NOT use RFC 4180 double-quoting."
+    # The previous logic incorrectly used RFC 4180 style for quotes and wrapped fields.
+    
+    # Apply escapes in specific order: backslash first, then quotes, then newlines.
+    # This prevents escaping the newly introduced backslashes if quotes were escaped first.
+    # However, for this specific problem, we only need to escape actual backslashes if they are part of the escape sequence.
+    # The requirement is for internal double quotes and newline characters.
+    
+    # First, handle the actual backslash character itself if it's not part of an escape sequence,
+    # to avoid issues if a literal backslash precedes a quote or 'n'.
+    # Given the prompt, the primary focus is quotes and nulls, and then newlines.
+    
+    # The core issue is that the previous code was using RFC 4180 style (double quotes and wrapping).
+    # The requirement is simple backslash-escaping for quotes and \n for newlines.
+    
+    escaped_val = val.replace('\\', '\\\\') # Escape literal backslashes first, to avoid issues with subsequent escaping.
+    escaped_val = escaped_val.replace('"', r'\"') # Escape internal double quotes with backslash
+    escaped_val = escaped_val.replace('\n', r'\n') # Escape newline characters as \n
+
+    # The original condition `any(c in val for c in [",", "\\n", '"'])` and wrapping
+    # was not aligned with the docstring's specific escaping rules.
+    # The docstring does not mention special handling for commas, or general field wrapping.
+    # We apply the specific escapes and return the string.
+    
+    return escaped_val
+
+def export_profiles_tsv(profiles: List[CustomerProfile]) -> str:
+    # Fix: header should use literal tab characters, not escaped ones, for validate_tsv_header.
+    # The join_tsv_lines or final return should handle the line breaks and field delimiters.
+    header = "cust_id\tname\tnotes"
+    if not validate_tsv_header(header, ["cust_id", "name", "notes"]):
+        raise ValueError("Invalid header")
+    lines = [header]
+    for p in profiles:
+        f_name = escape_tsv_field(p.name)
+        f_notes = escape_tsv_field(p.notes)
+        # The fields are joined with literal tab characters, not escaped '\t'
+        lines.append(f"{p.cust_id}\t{f_name}\t{f_notes}")
+    # The lines are joined with literal newline characters, not escaped '\n'
+    return "\n".join(lines)
+
+def count_records(payload: str) -> int:
+    lines = [l for l in payload.splitlines() if l.strip()]
+    return max(0, len(lines) - 1)
+=== END ===

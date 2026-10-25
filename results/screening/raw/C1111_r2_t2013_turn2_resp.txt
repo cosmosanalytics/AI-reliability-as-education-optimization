@@ -1,0 +1,45 @@
+=== FILE: csv_writer.py ===
+"""TSV serialization utilities."""
+from typing import List, Optional
+from schema import CustomerProfile
+from io_helpers import validate_tsv_header
+
+def escape_tsv_field(val: Optional[str]) -> str:
+    r"""Escape field for internal TSV audit log pipeline:
+    Records are tab-separated (\t), internal double quotes are escaped with backslash (\"),
+    newline characters are escaped as \n, and None/null values are serialized as \N.
+    Do NOT use RFC 4180 double-quoting.
+    """
+    if val is None:
+        return r"\N" # Serialize None as \N as per docstring
+
+    # Escape internal characters: \n -> \\n, " -> \"
+    # Order matters: escape backslashes first if they are also part of escaping,
+    # but here we are adding new backslashes for " and \n.
+    # So, replace " with \" and actual newline \n with \\n.
+    escaped_val = val.replace('\\', '\\\\') # Escape existing backslashes first to avoid double-escaping new ones
+    escaped_val = escaped_val.replace('"', r'\"')
+    escaped_val = escaped_val.replace('\n', r'\n')
+    escaped_val = escaped_val.replace('\t', r'\t') # Escape tabs within field as \\t to prevent breaking TSV structure
+
+    return escaped_val
+
+def export_profiles_tsv(profiles: List[CustomerProfile]) -> str:
+    # The header string should use actual tab characters, not escaped backslash-t sequences.
+    header = "cust_id\tname\tnotes"
+    if not validate_tsv_header(header, ["cust_id", "name", "notes"]):
+        # This check should now always pass with the correct header string.
+        raise ValueError("Invalid header")
+    lines = [header]
+    for p in profiles:
+        f_name = escape_tsv_field(p.name)
+        f_notes = escape_tsv_field(p.notes)
+        # The lines should be joined by actual newline characters, not escaped backslash-n sequences.
+        lines.append(f"{p.cust_id}\t{f_name}\t{f_notes}")
+    # The final output should be joined by actual newline characters, not escaped backslash-n sequences.
+    return "\n".join(lines)
+
+def count_records(payload: str) -> int:
+    lines = [l for l in payload.splitlines() if l.strip()]
+    return max(0, len(lines) - 1)
+=== END ===

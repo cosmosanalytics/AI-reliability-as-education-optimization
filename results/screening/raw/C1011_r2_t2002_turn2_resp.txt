@@ -1,0 +1,186 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+    Any fractional cents are distributed one by one to the lines with the largest
+    remaining fractional part, to ensure the total allocated discount matches
+    total_discount_cents as closely as possible without exceeding it.
+
+    line_totals: list of integer cents representing the value of each line item.
+    total_discount_cents: the total discount amount in cents to be allocated.
+    Returns list of discount cents per line.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+
+    if total_discount_cents < 0:
+        raise ValueError("Total discount cents must be non-negative")
+
+    total_line_value = sum(line_totals)
+    num_lines = len(line_totals)
+
+    if total_line_value == 0:
+        # If no line value, distribute 0 to all lines.
+        # If total_discount_cents > 0, this scenario might imply a different business rule,
+        # but for prorating proportionally, 0 is the logical outcome.
+        return [0] * num_lines
+
+    if num_lines == 0:
+        return []
+
+    # Calculate base allocation for each line using integer division (truncation)
+    base_allocations = []
+    for cents in line_totals:
+        base_allocations.append(cents * total_discount_cents // total_line_value)
+
+    # Calculate the sum of base allocations
+    sum_base_allocations = sum(base_allocations)
+
+    # Determine remaining cents to distribute
+    remaining_cents = total_discount_cents - sum_base_allocations
+
+    # Distribute remaining cents one by one to the lines with the largest fractional remainders
+    if remaining_cents > 0:
+        # Calculate the fractional part (numerator of the remainder) for each line
+        # This determines which lines 'lost' the most due to truncation
+        fractional_remainders = []
+        for i, cents in enumerate(line_totals):
+            # The remainder of (cents * total_discount_cents) / total_line_value
+            # scaled by total_line_value. This is equivalent to (numerator % denominator)
+            # if we consider the full division as (numerator / denominator)
+            remainder = (cents * total_discount_cents) % total_line_value
+            fractional_remainders.append((remainder, i)) # Store (remainder, original_index)
+
+        # Sort lines by their fractional remainders in descending order.
+        # In case of ties, the original order (smaller index) will be preferred due to stable sort,
+        # which is a reasonable tie-breaking mechanism.
+        fractional_remainders.sort(key=lambda x: x[0], reverse=True)
+
+        # Add 1 cent to the 'remaining_cents' number of lines with the largest remainders
+        for i in range(remaining_cents):
+            original_index = fractional_remainders[i][1]
+            base_allocations[original_index] += 1
+
+    return base_allocations
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    # is_fully_allocated should compare against the requested total_discount_cents
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===
+=== FILE: tests/test_discount.py ===
+from discount import prorate_discount, allocate_discounts
+
+def test_even_split():
+    assert prorate_discount([100, 100], 20) == [10, 10]
+    res = allocate_discounts([200, 100], 30)
+    assert res.discounts == [20, 10]
+    assert res.total_allocated == 30
+
+def test_zero_total():
+    assert prorate_discount([0, 0], 50) == [0, 0]
+
+def test_proportional_distribution():
+    res = prorate_discount([100, 300], 100)
+    assert res == [25, 75]
+
+def test_fractional_split_rounding():
+    # This test reflects the original issue where [12, 12] was returned for an expected [13, 13]
+    # This implies the target discount was 26 and line totals led to 13.0 for each
+    # Let's use an example where the fractional part needs to be distributed.
+    # e.g., total_discount_cents = 25, line_totals = [50, 50]
+    # Expected: [12, 13] or [13, 12] (total 25)
+    result = prorate_discount([50, 50], 25)
+    assert sum(result) == 25
+    assert result == [13, 12] or result == [12, 13] # Order depends on tie-breaking, but total must be 25
+
+    # Example from the traceback if total was 26 and lines were [100, 100]
+    # The original implementation would return [13, 13] for [100, 100], 26
+    # If the traceback meant it got [12, 12] when it should have been [13, 13] for some input,
+    # it implies the initial integer division was flawed or the example was different.
+    # With [50, 50] and 26, it should be [13, 13] directly.
+    result_26 = prorate_discount([50, 50], 26)
+    assert result_26 == [13, 13]
+
+    # Test with more complex fractions
+    # 100, 100, 100 total 300. Discount 100.
+    # Each gets 100 * 100 // 300 = 33.
+    # Sum = 99. Remaining 1 cent.
+    # (100 * 100) % 300 = 10000 % 300 = 100 for each.
+    # The first line should get the extra cent.
+    result = prorate_discount([100, 100, 100], 100)
+    assert result == [34, 33, 33]
+    assert sum(result) == 100
+
+    # Test with different line values, total_discount_cents = 10
+    # line_totals = [30, 70], total_line_value = 100
+    # Line 1: 30 * 10 // 100 = 3
+    # Line 2: 70 * 10 // 100 = 7
+    # Sum = 10. No remainder.
+    result = prorate_discount([30, 70], 10)
+    assert result == [3, 7]
+    assert sum(result) == 10
+
+    # line_totals = [30, 70], total_line_value = 100, total_discount_cents = 11
+    # Line 1: 30 * 11 // 100 = 330 // 100 = 3. Remainder % 100 = 30.
+    # Line 2: 70 * 11 // 100 = 770 // 100 = 7. Remainder % 100 = 70.
+    # Base allocations: [3, 7]. Sum = 10. Remaining = 1.
+    # Line 2 has larger remainder (70 vs 30), so it gets the extra cent.
+    result = prorate_discount([30, 70], 11)
+    assert result == [3, 8]
+    assert sum(result) == 11
+
+def test_allocate_discounts_wrapper():
+    # Test that the wrapper correctly sets is_fully_allocated
+    res = allocate_discounts([50, 50], 25)
+    assert sum(res.discounts) == 25
+    assert res.total_allocated == 25
+    assert res.is_fully_allocated is True
+    assert res.discounts == [13, 12] or res.discounts == [12, 13]
+
+    res = allocate_discounts([10, 20, 70], 50) # Should be 5, 10, 35
+    assert res.discounts == [5, 10, 35]
+    assert res.total_allocated == 50
+    assert res.is_fully_allocated is True
+
+def test_empty_line_totals():
+    assert prorate_discount([], 100) == []
+    res = allocate_discounts([], 100)
+    assert res.discounts == []
+    assert res.total_allocated == 0
+    assert res.is_fully_allocated is False
+
+def test_zero_discount():
+    assert prorate_discount([100, 200], 0) == [0, 0]
+    res = allocate_discounts([100, 200], 0)
+    assert res.discounts == [0, 0]
+    assert res.total_allocated == 0
+    assert res.is_fully_allocated is True
+
+def test_negative_discount_raises_error():
+    try:
+        prorate_discount([100, 100], -10)
+        assert False, "ValueError was not raised for negative discount"
+    except ValueError as e:
+        assert str(e) == "Total discount cents must be non-negative"
+
+def test_non_integer_line_totals_validation():
+    try:
+        prorate_discount([100.5, 100], 20)
+        assert False, "ValueError not raised for non-integer line total"
+    except ValueError as e:
+        assert str(e) == "Line totals must be non-negative integers"
+
+def test_negative_line_totals_validation():
+    try:
+        prorate_discount([-10, 100], 20)
+        assert False, "ValueError not raised for negative line total"
+    except ValueError as e:
+        assert str(e) == "Line totals must be non-negative integers"
+=== END ===

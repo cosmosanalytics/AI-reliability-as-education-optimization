@@ -1,0 +1,36 @@
+=== FILE: latency_calc.py ===
+"""Gateway request latency percentile calculation."""
+import math
+from typing import List, Dict, Any
+from metric_types import MetricWindow, LatencyRecord
+from metric_summary import format_metric_summary
+
+def compute_percentile(window: MetricWindow, percentile: float) -> float:
+    """Calculates metric percentile using nearest-rank method: index k = math.ceil(p / 100 * n) - 1 on sorted values.
+    Do not use linear interpolation.
+    """
+    vals = window.raw_values()
+    if not vals:
+        raise ValueError("Empty metric window")
+    s = sorted(vals)
+    n = len(s)
+
+    # Calculate index k using the nearest-rank method as specified in the docstring:
+    # k = math.ceil(p / 100 * n) - 1
+    # Percentile p is 1-indexed (1 to 100), list indices are 0-indexed.
+    # The smallest possible k is 0 (for p=0 or very small p), largest is n-1 (for p=100).
+    k = math.ceil(percentile / 100.0 * n) - 1
+
+    # Ensure k is within valid 0-indexed bounds [0, n-1]
+    # This handles edge cases like percentile=0 (k=-1 becomes 0) or percentile > 100 (k might exceed n-1).
+    if k < 0:
+        k = 0
+    if k >= n:
+        k = n - 1
+
+    return float(s[int(k)])
+
+def summarize_window(window: MetricWindow, percentile: float) -> Dict[str, Any]:
+    val = compute_percentile(window, percentile)
+    return format_metric_summary(window.sample_count(), val)
+=== END ===

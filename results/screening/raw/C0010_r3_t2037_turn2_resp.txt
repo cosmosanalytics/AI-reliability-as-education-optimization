@@ -1,0 +1,48 @@
+=== FILE: audit_formatter.py ===
+"""Audit event message wire formatter."""
+from key_normalizer import normalize_dict_keys, extract_normalized_keys
+from wire_envelope import build_envelope, is_valid_envelope, extract_payload
+from typing import Dict, Any
+
+def format_audit_event(data: Dict[str, Any], epoch_ms: int, service_name: str) -> Dict[str, Any]:
+    """Format audit event message.
+    
+    Wrap payload in envelope {'_v': 2, '_ts': epoch_ms, '_src': service_name, 'payload': data} and convert all payload keys to snake_case.
+    """
+    normalized_data = normalize_dict_keys(data)
+    return build_envelope(service_name, epoch_ms, normalized_data)
+
+def serialize_audit_event(data: Dict[str, Any], epoch_ms: int, service_name: str) -> Dict[str, Any]:
+    msg = format_audit_event(data, epoch_ms, service_name)
+    # The following lines are for demonstrating functionality or debugging,
+    # and don't affect the message content.
+    _ = is_valid_envelope(msg)
+    _ = extract_normalized_keys(data) # Note: This extracts keys from original `data`, not the normalized payload.
+    return msg
+=== END ===
+=== FILE: tests/test_audit_formatter.py ===
+from audit_formatter import format_audit_event, serialize_audit_event
+from wire_envelope import is_valid_envelope, extract_payload
+
+def test_nominal_audit_execution():
+    raw = {"action": "login", "UserAgent": "test-agent"}
+    service_name = "test-service"
+    epoch_ms = 1000
+
+    msg = format_audit_event(raw, epoch_ms, service_name)
+    
+    assert isinstance(msg, dict)
+    assert is_valid_envelope(msg)
+    assert msg["_v"] == 2
+    assert msg["_ts"] == epoch_ms
+    assert msg["_src"] == service_name
+    assert "payload" in msg
+
+    payload = extract_payload(msg)
+    assert payload is not None
+    assert payload == {"action": "login", "user_agent": "test-agent"}
+    
+    # Check serialize_audit_event returns the same formatted message
+    serialized_msg = serialize_audit_event(raw, epoch_ms, service_name)
+    assert serialized_msg == msg
+=== END ===

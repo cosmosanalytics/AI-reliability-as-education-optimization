@@ -1,0 +1,52 @@
+=== FILE: rpc_calc.py ===
+"""Microservice RPC duration percentile calculator."""
+import math
+from typing import List, Dict, Any
+from rpc_data import RpcSeries, RpcSample
+from rpc_formatter import format_rpc_stat
+
+def compute_rpc_percentile(series: RpcSeries, p: float) -> float:
+    """Calculates SLA percentile for RPC responses.
+
+    This function uses the "linear interpolation between nearest ranks" method (R-7 or C=1
+    in NIST SP 800-22, similar to numpy.percentile with interpolation='linear').
+    This approach provides a more consistent result for various data distributions
+    and is widely adopted in statistical software, addressing potential inconsistencies
+    with simpler nearest-rank methods.
+    """
+    vals = series.durations()
+    if not vals:
+        raise ValueError("No RPC samples available")
+    s = sorted(vals)
+    n = len(s)
+
+    # Handle edge case for single sample to avoid potential division by zero or
+    # complex interpolation logic for trivial cases.
+    if n == 1:
+        return float(s[0])
+
+    # Calculate the fractional rank (0-based index)
+    # The rank for percentile p is (p/100.0) * (n-1).
+    # This formula is consistent with common statistical software for linear interpolation.
+    rank = (p / 100.0) * (n - 1)
+
+    # Determine the lower and upper indices for interpolation
+    lower_idx = math.floor(rank)
+    upper_idx = math.ceil(rank)
+
+    # If the rank is an exact integer, return the value at that index
+    if lower_idx == upper_idx:
+        return float(s[int(rank)])
+    else:
+        # Interpolate between the values at the lower and upper indices
+        lower_val = s[int(lower_idx)]
+        upper_val = s[int(upper_idx)]
+        # Calculate the fractional part to weigh the interpolation
+        fraction = rank - lower_idx
+        # Perform linear interpolation
+        return float(lower_val + fraction * (upper_val - lower_val))
+
+def build_rpc_report(service_name: str, series: RpcSeries, p: float) -> Dict[str, Any]:
+    val = compute_rpc_percentile(series, p)
+    return format_rpc_stat(service_name, series.count(), val)
+=== END ===

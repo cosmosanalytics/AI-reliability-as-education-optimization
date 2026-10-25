@@ -1,0 +1,81 @@
+=== FILE: csv_writer.py ===
+"""TSV serialization utilities."""
+from typing import List, Optional
+from schema import CustomerProfile
+from io_helpers import validate_tsv_header
+
+def escape_tsv_field(val: Optional[str]) -> str:
+    r"""Escape field for internal TSV audit log pipeline:
+    Records are tab-separated (\t), internal double quotes are escaped with backslash (\"),
+    newline characters are escaped as \n, and None/null values are serialized as \N.
+    Do NOT use RFC 4180 double-quoting.
+    """
+    if val is None:
+        return "\\N"
+
+    # Escape backslashes first, then other special characters, to avoid double-escaping
+    # e.g., if we replace '\n' with '\\n', then replace '\' with '\\', we get '\\\n'
+    # The current requirements imply only \t, \n, " need escaping, not \ itself.
+    # However, if we escape `"` to `\"`, and `\` was also to be escaped, it would need to be `\\"`
+    # The docstring explicitly says 'internal double quotes are escaped with backslash (\")'.
+    # This implies \ itself is not escaped unless it's part of a special sequence.
+
+    # Escape internal double quotes with backslash
+    escaped_val = val.replace('"', '\\"')
+    # Escape newline characters
+    escaped_val = escaped_val.replace('\n', '\\n')
+    # Escape tab characters (if any, though TSV usually means fields don't contain tabs)
+    # The problem description implicitly states fields are delimited by tabs.
+    # If a field *itself* contains a tab, it needs to be escaped.
+    # The provided test cases do not test for tabs *within* fields, only *between* fields.
+    # However, the `schema.py` `has_embedded_delimiters` check includes `\t`.
+    escaped_val = escaped_val.replace('\t', '\\t')
+
+    return escaped_val
+
+def export_profiles_tsv(profiles: List[CustomerProfile]) -> str:
+    header = "cust_id\tname\tnotes" # Use actual tab character
+    if not validate_tsv_header(header, ["cust_id", "name", "notes"]):
+        raise ValueError("Invalid header")
+    lines = [header]
+    for p in profiles:
+        f_name = escape_tsv_field(p.name)
+        f_notes = escape_tsv_field(p.notes)
+        # Use actual tab character for joining fields
+        lines.append(f"{p.cust_id}\t{f_name}\t{f_notes}")
+    # Use actual newline character for joining lines
+    return "\n".join(lines)
+
+def count_records(payload: str) -> int:
+    lines = [l for l in payload.splitlines() if l.strip()]
+    return max(0, len(lines) - 1)
+=== END ===
+=== FILE: schema.py ===
+"""Customer profile models."""
+from dataclasses import dataclass
+from typing import Dict, Any, List, Optional
+
+@dataclass
+class CustomerProfile:
+    cust_id: int
+    name: str
+    notes: Optional[str] = None
+    active: bool = True
+    tags: List[str] = None
+
+    def __post_init__(self):
+        if self.tags is None:
+            self.tags = ["standard"]
+
+    def to_row(self) -> list:
+        return [str(self.cust_id), self.name, self.notes or ""]
+
+    def has_embedded_delimiters(self) -> bool:
+        if not self.notes:
+            return False
+        # The TSV export explicitly escapes tabs, newlines, and quotes within fields.
+        # This function might be used for other purposes, but for TSV export,
+        # these characters are handled by `escape_tsv_field`.
+        # However, it's a schema method, so it might reflect general data properties.
+        return any(c in self.notes for c in ("\t", "\n", '"'))
+=== END ===

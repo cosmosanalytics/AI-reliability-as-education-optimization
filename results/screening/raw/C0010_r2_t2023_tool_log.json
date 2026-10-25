@@ -1,0 +1,9 @@
+[
+  {
+    "timestamp": "2026-10-25T19:56:23.702472+00:00",
+    "command": "pytest -q tests",
+    "exit_code": 1,
+    "stdout_stderr": "FF                                                                       [100%]\n================================== FAILURES ===================================\n____________________________ test_basic_rebalance _____________________________\ntests\\test_rebalancer.py:8: in test_basic_rebalance\n    assert res[0].weight == 50\nE   AssertionError: assert 10 == 50\nE    +  where 10 = ScheduledTask(task_id=1, weight=10, payload='a', active=True, assigned_worker=None).weight\n____________________________ test_weight_ordering _____________________________\ntests\\test_rebalancer.py:13: in test_weight_ordering\n    assert rebalance_tasks([t1, t2])[0].task_id == 2\nE   AssertionError: assert 1 == 2\nE    +  where 1 = ScheduledTask(task_id=1, weight=5, payload='a', active=True, assigned_worker=None).task_id\n=========================== short test summary info ===========================\nFAILED tests/test_rebalancer.py::test_basic_rebalance - AssertionError: asser...\nFAILED tests/test_rebalancer.py::test_weight_ordering - AssertionError: asser...\n2 failed in 0.30s\n",
+    "elapsed_seconds": 1.885
+  }
+]

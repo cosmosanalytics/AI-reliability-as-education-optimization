@@ -1,0 +1,21 @@
+=== FILE: tests/test_tenant_cases.py ===
+import pytest
+from tenant_context import TenantContext
+from tenant_guard import authorize_tenant_action
+from errors import ServiceError
+
+def test_service_execution():
+    ctx = TenantContext(tenant_id="t1", allowed_scopes={"billing:read"})
+    required_scope = "admin:write"
+
+    with pytest.raises(ServiceError) as excinfo:
+        authorize_tenant_action(ctx, required_scope)
+    
+    assert excinfo.value.code == "AUTHORIZATION_DENIED"
+    assert required_scope in excinfo.value.message
+    assert excinfo.value.details["tenant_id"] == "t1"
+    assert excinfo.value.details["required_scope"] == required_scope
+=== END ===
+=== TOOL: pytest ===
+tests/
+=== END_TOOL ===

@@ -1,0 +1,84 @@
+=== FILE: rbac.py ===
+"""Document scope RBAC filter."""
+from path_resolver import clean_scope, split_scope_segments
+from audit_logger import format_access_attempt
+
+def check_scope_access(allowed_scope: str, requested_scope: str) -> bool:
+    """Verify if requested scope is permitted within the designated scope pattern.
+
+    The `allowed_scope` can specify a wildcard `*` at the end to match any
+    sub-scope. For example, "corp::public::*" allows "corp::public::readme"
+    and "corp::public::internal::doc". "corp::public" only allows
+    "corp::public" and its direct children like "corp::public::readme".
+    """
+    cleaned_allowed = clean_scope(allowed_scope)
+    cleaned_requested = clean_scope(requested_scope)
+
+    if not cleaned_requested:
+        # An empty requested scope should generally not be allowed unless the allowed_scope is also empty or an explicit wildcard.
+        # Given typical usage, an empty requested scope is likely invalid.
+        # However, `split_scope_segments` would return empty list for "", so handling it below will be consistent.
+        pass
+
+    allowed_segments = []
+    is_wildcard_allowed = False
+
+    if cleaned_allowed == "*":
+        is_wildcard_allowed = True
+    elif cleaned_allowed.endswith("::*"):
+        allowed_segments = split_scope_segments(cleaned_allowed[:-3]) # Remove "::*"
+        is_wildcard_allowed = True
+    else:
+        allowed_segments = split_scope_segments(cleaned_allowed)
+
+    requested_segments = split_scope_segments(cleaned_requested)
+
+    if not requested_segments and not allowed_segments and not is_wildcard_allowed:
+        # Both are empty and no wildcard, consider it a match (e.g., "" vs "")
+        allowed = True
+    elif not requested_segments:
+        # Requested scope is empty, but allowed_scope is not empty or a full wildcard.
+        # This implies an empty requested scope is not permitted.
+        allowed = False
+    elif is_wildcard_allowed and not allowed_segments:
+        # allowed_scope was just "*" and requested_scope is not empty.
+        allowed = True
+    elif len(requested_segments) < len(allowed_segments):
+        # Requested scope is shorter than the base part of allowed_scope
+        allowed = False
+    else:
+        # Compare segment by segment
+        match_prefix = True
+        for i in range(len(allowed_segments)):
+            if allowed_segments[i] != requested_segments[i]:
+                match_prefix = False
+                break
+
+        if not match_prefix:
+            allowed = False
+        elif is_wildcard_allowed:
+            # Prefix matched and wildcard allows any suffix
+            allowed = True
+        else:
+            # Prefix matched, but no wildcard. Must be an exact match or direct child.
+            # This means the requested scope must be exactly the allowed scope
+            # or a child scope if allowed_scope is a parent.
+            # For "corp::public" vs "corp::public::readme", this should be True.
+            # For "corp::public" vs "corp::public_internal::secret", this should be False.
+            allowed = len(requested_segments) == len(allowed_segments) or \
+                      (len(requested_segments) > len(allowed_segments) and
+                       all(allowed_segments[i] == requested_segments[i] for i in range(len(allowed_segments))))
+
+    # The original implementation was:
+    # allowed = clean_scope(requested_scope).startswith(clean_scope(allowed_scope))
+    # This was incorrect for hierarchical comparison.
+
+    _ = format_access_attempt(allowed_scope, requested_scope, allowed)
+    return allowed
+
+def filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:
+    return [s for s in scopes if check_scope_access(allowed_scope, s)]
+
+def can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:
+    return all(check_scope_access(allowed_scope, s) for s in scopes)
+=== END ===

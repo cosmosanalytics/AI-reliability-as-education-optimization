@@ -1,0 +1,45 @@
+=== FILE: rbac.py ===
+"""Document scope RBAC filter."""
+from path_resolver import clean_scope, split_scope_segments
+from audit_logger import format_access_attempt
+
+def check_scope_access(allowed_scope: str, requested_scope: str) -> bool:
+    """Verify if requested scope is permitted within the designated scope pattern.
+    Access is granted if the requested scope is identical to the allowed scope,
+    or if it is a direct descendant (sub-scope) of the allowed scope.
+    The allowed scope may use '::*' at the end to explicitly permit any
+    sub-scopes, effectively making 'corp::public::*' equivalent to 'corp::public'
+    for matching purposes, but clearly indicating a wildcard pattern.
+    """
+    cleaned_allowed_scope = clean_scope(allowed_scope)
+    cleaned_requested_scope = clean_scope(requested_scope)
+
+    # Handle the wildcard '::*' at the end of the allowed_scope
+    # If present, it means the allowed_scope is a prefix up to the '::' before '*'
+    if cleaned_allowed_scope.endswith("::*"):
+        # Remove the '::*' part to get the actual hierarchical prefix
+        prefix_allowed_scope = cleaned_allowed_scope[:-3]
+    else:
+        prefix_allowed_scope = cleaned_allowed_scope
+
+    # Split both into segments for strict hierarchical comparison
+    allowed_segments = split_scope_segments(prefix_allowed_scope)
+    requested_segments = split_scope_segments(cleaned_requested_scope)
+
+    # A requested scope cannot be shorter than the allowed scope's base segments
+    if len(requested_segments) < len(allowed_segments):
+        allowed = False
+    else:
+        # Check if the requested scope's initial segments exactly match the allowed scope's segments.
+        # This prevents "corp::public" matching "corp::public_internal"
+        allowed = requested_segments[:len(allowed_segments)] == allowed_segments
+
+    _ = format_access_attempt(cleaned_allowed_scope, cleaned_requested_scope, allowed)
+    return allowed
+
+def filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:
+    return [s for s in scopes if check_scope_access(allowed_scope, s)]
+
+def can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:
+    return all(check_scope_access(allowed_scope, s) for s in scopes)
+=== END ===

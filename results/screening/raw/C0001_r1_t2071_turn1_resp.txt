@@ -1,0 +1,59 @@
+=== FILE: rpc_calc.py ===
+"""Microservice RPC duration percentile calculator."""
+import math
+from typing import List, Dict, Any
+from rpc_data import RpcSeries, RpcSample
+from rpc_formatter import format_rpc_stat
+
+def compute_rpc_percentile(series: RpcSeries, p: float) -> float:
+    """Calculates SLA percentile for RPC responses.
+
+    This implementation uses the 'nearest rank' method which is common for
+    discrete data and is suitable for performance metrics like RPC durations.
+    The index is calculated as ceil(p/100 * N) where N is the number of samples,
+    and then adjusted for 0-based indexing.
+    """
+    vals = series.durations()
+    if not vals:
+        raise ValueError("No RPC samples available")
+    s = sorted(vals)
+    n = len(s)
+    
+    # Calculate the 1-based rank (position) for the percentile.
+    # For a p-th percentile, the rank is typically ceil(p/100 * N).
+    # This ensures that for p=100, we get the last element (max).
+    # For p=0, it's problematic with ceil, but p is usually > 0.
+    # If p=0 is expected, the min value would be s[0].
+    # For practical purposes, p is usually > 0 for percentiles.
+    
+    # Using a 0-based index:
+    # The formula (p / 100.0) * (n - 1) is often used when mapping percentiles
+    # from 0 to 100 directly to array indices from 0 to n-1,
+    # treating the 0th percentile as s[0] and 100th as s[n-1].
+    # However, this can lead to values being rounded down for certain distributions
+    # and fail to capture the intended percentile, especially for small N.
+    #
+    # A more robust approach for the "nearest rank" method, especially for
+    # higher percentiles (e.g., 90th, 99th), is to ensure that the index
+    # points to a value that is at least at the given percentile rank.
+    # The index is typically 0-based: math.ceil(p / 100.0 * n) - 1.
+    # This aligns with common statistical software for discrete data.
+    
+    # Handle edge case for 0th percentile explicitly if needed, otherwise
+    # the formula handles it reasonably if p is small and rounds to 0.
+    if p == 0.0:
+        idx = 0
+    else:
+        # Calculate the 0-based index using the ceil method.
+        # This ensures that the returned value is at or above the p-th percentile.
+        idx = math.ceil((p / 100.0) * n) - 1
+    
+    # Ensure the index is within bounds [0, n-1]
+    idx = max(0, min(idx, n - 1))
+    
+    return float(s[idx])
+
+def build_rpc_report(service_name: str, series: RpcSeries, p: float) -> Dict[str, Any]:
+    val = compute_rpc_percentile(series, p)
+    return format_rpc_stat(service_name, series.count(), val)
+=== END ===

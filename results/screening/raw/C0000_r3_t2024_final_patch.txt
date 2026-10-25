@@ -1,0 +1,21 @@
+=== FILE: sort_helper.py ===
+"""Internal stream sorting helper."""
+from typing import List
+from event_packet import EventPacket
+
+def order_packets(packets: List[EventPacket]) -> List[EventPacket]:
+    # Sort primarily by severity (descending).
+    # Python's `sorted()` function is guaranteed to be stable.
+    # This means that for packets with the same severity, their relative order
+    # from the input list will be preserved. This addresses the issue of
+    # non-deterministic tie-breaking across replicas during high-severity bursts,
+    # preventing state replication desync by ensuring consistent ordering
+    # based on original batch position for equally severe packets.
+    return sorted(packets, key=lambda p: -p.severity)
+
+def get_max_severity(packets: List[EventPacket]) -> int:
+    return max((p.severity for p in packets), default=0)
+
+def count_critical_packets(packets: List[EventPacket]) -> int:
+    return sum(1 for p in packets if p.is_critical())
+=== END ===

@@ -1,0 +1,27 @@
+=== FILE: scope_checker.py ===
+"""Webhook scope dispatch checker."""
+from prefix_validator import is_topic_subscribed, clean_topic_segment
+from webhook import WebhookEvent
+
+def should_dispatch_webhook(subscribed_topic: str, event: WebhookEvent) -> bool:
+    """Determine if webhook event topic is permitted under the subscription filter."""
+    # A subscription to a root topic (e.g., "orders") should only match events
+    # that belong to that exact root topic (e.g., "orders::created").
+    # It should not match events from a different root that happens to start
+    # with the same prefix (e.g., "orders_admin::deleted").
+    if subscribed_topic == event.topic_root():
+        return True
+    
+    # For more specific subscriptions like "orders::created", the original
+    # prefix matching logic is still valid.
+    return is_topic_subscribed(subscribed_topic, event.topic_path)
+
+def filter_dispatch_queue(subscribed_topic: str, events: list) -> list:
+    return [e for e in events if should_dispatch_webhook(subscribed_topic, e)]
+
+def batch_topic_summary(events: list) -> dict:
+    summary = {}
+    for e in events:
+        summary[e.topic_path] = summary.get(e.topic_path, 0) + 1
+    return summary
+=== END ===

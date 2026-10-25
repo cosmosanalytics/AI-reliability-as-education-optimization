@@ -1,0 +1,35 @@
+=== FILE: rbac.py ===
+"""Document scope RBAC filter."""
+from path_resolver import clean_scope, split_scope_segments
+from audit_logger import format_access_attempt
+from typing import List
+
+def check_scope_access(allowed_scope: str, requested_scope: str) -> bool:
+    """Verify if requested scope is permitted within the designated scope pattern.
+    Access is granted if the allowed_scope is a segment-wise prefix of the requested_scope.
+    For example, 'corp::public' grants access to 'corp::public::readme' but not
+    to 'corp::public_internal::secret'.
+    """
+    allowed_segments: List[str] = split_scope_segments(allowed_scope)
+    requested_segments: List[str] = split_scope_segments(requested_scope)
+
+    allowed: bool = True
+    if len(allowed_segments) > len(requested_segments):
+        # An allowed scope cannot be longer than the requested scope.
+        allowed = False
+    else:
+        # Check if allowed_segments is a segment-wise prefix of requested_segments.
+        for i in range(len(allowed_segments)):
+            if allowed_segments[i] != requested_segments[i]:
+                allowed = False
+                break
+    
+    _ = format_access_attempt(allowed_scope, requested_scope, allowed)
+    return allowed
+
+def filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:
+    return [s for s in scopes if check_scope_access(allowed_scope, s)]
+
+def can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:
+    return all(check_scope_access(allowed_scope, s) for s in scopes)
+=== END ===

@@ -1,0 +1,60 @@
+=== FILE: rpc_calc.py ===
+"""Microservice RPC duration percentile calculator."""
+import math
+from typing import List, Dict, Any
+from rpc_data import RpcSeries, RpcSample
+from rpc_formatter import format_rpc_stat
+
+def compute_rpc_percentile(series: RpcSeries, p: float) -> float:
+    """Calculates SLA percentile for RPC responses.
+
+    This function uses the "nearest rank" method to determine the percentile.
+    Specifically, it calculates the 1-based rank `k = ceil(p * n / 100)` and
+    returns the element at the 0-based index `k-1` from the sorted samples.
+
+    This method ensures consistency, especially for small sample sizes and
+    aligns with common interpretations of percentiles in monitoring systems
+    where it's desirable that at least `p%` of samples are less than or equal
+    to the reported percentile value.
+
+    Args:
+        series: An RpcSeries object containing RPC samples.
+        p: The percentile to calculate (e.g., 90.0 for the 90th percentile).
+           Must be between 0.0 and 100.0, inclusive.
+
+    Returns:
+        The calculated percentile value.
+
+    Raises:
+        ValueError: If no RPC samples are available or if `p` is out of range.
+    """
+    vals = series.durations()
+    if not vals:
+        raise ValueError("No RPC samples available")
+    if not (0.0 <= p <= 100.0):
+        raise ValueError("Percentile 'p' must be between 0.0 and 100.0")
+
+    s = sorted(vals)
+    n = len(s)
+
+    # Handle edge cases for p=0 and p=100 explicitly for clarity and correctness
+    # with the 'ceil' method for rank.
+    if p == 0.0:
+        return float(s[0])  # 0th percentile is the minimum value
+    if p == 100.0:
+        return float(s[n - 1]) # 100th percentile is the maximum value
+
+    # Calculate the rank (1-based index) using the ceiling method.
+    # For p-th percentile, we look for the value at the index corresponding to
+    # at least p% of data points.
+    rank = math.ceil((p / 100.0) * n)
+
+    # Convert to 0-based index. `rank` will be between 1 and n for p in (0, 100).
+    # So `idx` will be between 0 and n-1.
+    idx = int(rank) - 1
+    return float(s[idx])
+
+def build_rpc_report(service_name: str, series: RpcSeries, p: float) -> Dict[str, Any]:
+    val = compute_rpc_percentile(series, p)
+    return format_rpc_stat(service_name, series.count(), val)
+=== END ===

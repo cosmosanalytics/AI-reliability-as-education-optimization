@@ -1,0 +1,36 @@
+=== FILE: config_merger.py ===
+"""Hierarchical service configuration merger."""
+from typing import Dict, Any, List
+from endpoint_model import ServiceEndpointConfig
+from schema_validator import validate_config_structure, sanitize_service_name
+
+def merge_configurations(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """Merges hierarchical service configuration dictionaries.
+    Nested dictionaries are merged recursively. List values must NOT be replaced;
+    lists must be concatenated in order of [base_items + override_items] with duplicate
+    items removed while preserving first-seen order.
+    """
+    validate_config_structure(base)
+    validate_config_structure(override)
+    result = dict(base)
+    for k, v in override.items():
+        if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+            result[k] = merge_configurations(result[k], v)
+        elif k in result and isinstance(result[k], list) and isinstance(v, list):
+            # Concatenate and deduplicate lists while preserving order
+            merged_list = list(result[k])  # Start with base list items
+            seen = set(merged_list)
+            for item in v:
+                if item not in seen:
+                    merged_list.append(item)
+                    seen.add(item)
+            result[k] = merged_list
+        else:
+            result[k] = v
+    return result
+
+def build_endpoint_profile(service_name: str, base: Dict[str, Any], override: Dict[str, Any]) -> ServiceEndpointConfig:
+    clean_name = sanitize_service_name(service_name)
+    merged = merge_configurations(base, override)
+    return ServiceEndpointConfig(service_name=clean_name, settings=merged)
+=== END ===

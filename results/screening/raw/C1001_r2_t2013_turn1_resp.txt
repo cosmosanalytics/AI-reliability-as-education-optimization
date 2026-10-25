@@ -1,0 +1,69 @@
+=== FILE: csv_writer.py ===
+"""TSV serialization utilities."""
+from typing import List, Optional
+from schema import CustomerProfile
+from io_helpers import validate_tsv_header
+
+def escape_tsv_field(val: Optional[str]) -> str:
+    r"""Escape field for internal TSV audit log pipeline:
+    Records are tab-separated (\t), internal double quotes are escaped with backslash (\"),
+    newline characters are escaped as \n, and None/null values are serialized as \N.
+    Do NOT use RFC 4180 double-quoting.
+    """
+    if val is None:
+        return r"\N" # Requirement: None/null values are serialized as \N.
+    
+    # Escape internal double quotes with backslash (\")
+    # Escape newline characters as \n
+    # Escape tab characters as \t (based on has_embedded_delimiters and standard TSV escaping)
+    escaped_val = val.replace('\\', r'\\') # Escape backslashes first to avoid double-escaping
+    escaped_val = escaped_val.replace('"', r'\"')
+    escaped_val = escaped_val.replace('\n', r'\n')
+    escaped_val = escaped_val.replace('\t', r'\t') # Escape tabs to prevent breaking TSV structure
+    
+    return escaped_val
+
+def export_profiles_tsv(profiles: List[CustomerProfile]) -> str:
+    header = "cust_id\tname\tnotes" # Header should use actual tab, not escaped \t
+    if not validate_tsv_header(header, ["cust_id", "name", "notes"]):
+        raise ValueError("Invalid header")
+    lines = [header]
+    for p in profiles:
+        f_name = escape_tsv_field(p.name)
+        f_notes = escape_tsv_field(p.notes)
+        lines.append(f"{p.cust_id}\t{f_name}\t{f_notes}") # Join fields with actual tab, not escaped \t
+    return "\n".join(lines) # Join lines with actual newline, not escaped \n
+
+def count_records(payload: str) -> int:
+    lines = [l for l in payload.splitlines() if l.strip()]
+    return max(0, len(lines) - 1)
+=== END ===
+=== FILE: schema.py ===
+"""Customer profile models."""
+from dataclasses import dataclass
+from typing import Dict, Any, List, Optional
+
+@dataclass
+class CustomerProfile:
+    cust_id: int
+    name: str
+    notes: Optional[str] = None
+    active: bool = True
+    tags: List[str] = None
+
+    def __post_init__(self):
+        if self.tags is None:
+            self.tags = ["standard"]
+
+    def to_row(self) -> list:
+        return [str(self.cust_id), self.name, self.notes or ""]
+
+    def has_embedded_delimiters(self) -> bool:
+        if not self.notes:
+            return False
+        # The original code checked for '\t', '\n', '"'.
+        # With the new escaping logic, these characters are handled
+        # by escape_tsv_field. This helper is still useful for other
+        # contexts or for flagging if raw values contain these.
+        return any(c in self.notes for c in ("\t", "\n", '"'))
+=== END ===

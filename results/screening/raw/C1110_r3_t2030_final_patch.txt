@@ -1,0 +1,22 @@
+=== FILE: tenant_guard.py ===
+"""Tenant permission authorization guard."""
+from errors import ServiceError
+from tenant_context import TenantContext
+
+def authorize_tenant_action(ctx: TenantContext, required_scope: str) -> bool:
+    """Authorize tenant action against target resource.
+    
+    Raises ServiceError if tenant lacks required scope.
+    """
+    if not ctx.permits(required_scope):
+        raise ServiceError(
+            code="AUTHORIZATION_DENIED",
+            message=f"Tenant {ctx.tenant_id} lacks required scope {required_scope}.",
+            details={"tenant_id": ctx.tenant_id, "required_scope": required_scope}
+        )
+    return True
+
+def dispatch_tenant_request(ctx: TenantContext, required_scope: str) -> str:
+    authorize_tenant_action(ctx, required_scope)
+    return "DISPATCHED"
+=== END ===

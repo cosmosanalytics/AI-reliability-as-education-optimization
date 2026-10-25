@@ -1,0 +1,111 @@
+The failing test `tests/test_rpc_cases.py::test_case_1` is not present in the provided repository files, so I cannot run it. However, the traceback "AssertionError: assert 20.0 == 30.0" indicates that the `compute_rpc_percentile` function might be returning an incorrect value for a specific input, likely due to a subtle difference in percentile definition.
+
+The current implementation uses `idx = int(round((p / 100.0) * (n - 1)))`. This formula is common, but other definitions exist. A frequently used definition, often associated with statistical software (like `numpy.percentile` when `interpolation='linear'`), calculates the index as `(p / 100.0) * (n - 1)` and then performs linear interpolation between the two nearest ranks if the index is not an integer.
+
+A simpler common definition, often used when `p` is an integer multiple of `100/n`, is `idx = math.ceil((p / 100.0) * n) - 1`. This effectively gives the smallest value in the dataset that is greater than or equal to `p` percent of the values. Let's test this with an example.
+
+Consider `vals = [10, 20, 30, 40, 50]`, `n = 5`.
+If `p = 50.0` (median):
+Current formula: `idx = int(round(0.5 * (5 - 1))) = int(round(2)) = 2`. `s[2]` is `30`.
+Proposed formula: `idx = math.ceil(0.5 * 5) - 1 = math.ceil(2.5) - 1 = 3 - 1 = 2`. `s[2]` is `30`. (Same result)
+
+Consider `vals = [10, 20, 30, 40]`, `n = 4`.
+If `p = 25.0`:
+Current formula: `idx = int(round(0.25 * (4 - 1))) = int(round(0.75)) = 1`. `s[1]` is `20`.
+Proposed formula: `idx = math.ceil(0.25 * 4) - 1 = math.ceil(1) - 1 = 1 - 1 = 0`. `s[0]` is `10`.
+
+This difference (`20` vs `10` for 25th percentile) could be the source of the "inconsistent RPC duration percentiles" and the `assert 20.0 == 30.0` failure if the expected value was based on a different percentile definition. The `math.ceil((p / 100.0) * n) - 1` formula is often used for inclusive percentiles, where the p-th percentile is the first value in the sorted list that is greater than or equal to p% of the values.
+
+Given the incident report, it's safer to align with a definition that is common for reporting telemetry, which often implies the smallest value at or above the percentile. The `math.ceil` based approach is a common interpretation for this. It also ensures that for `p=0`, it returns `s[0]` (min) and for `p=100`, it returns `s[n-1]` (max).
+
+Let's change the index calculation to `idx = math.ceil((p / 100.0) * n) - 1`. We need to handle the edge case where `p=0`, as `ceil(0)` is `0`, which would result in `idx = -1`, leading to an `IndexError`. For `p=0`, the 0th percentile should be the minimum value, `s[0]`.
+
+```python
+import math
+from typing import List, Dict, Any
+from rpc_data import RpcSeries, RpcSample
+from rpc_formatter import format_rpc_stat
+
+def compute_rpc_percentile(series: RpcSeries, p: float) -> float:
+    """Calculates SLA percentile for RPC responses."""
+    vals = series.durations()
+    if not vals:
+        raise ValueError("No RPC samples available")
+    s = sorted(vals)
+    n = len(s)
+
+    # Handle edge cases for p=0 and p=100 explicitly
+    if p == 0.0:
+        return float(s[0])
+    if p == 100.0:
+        return float(s[n - 1])
+
+    # Calculate index using the formula for inclusive percentiles
+    # This formula is equivalent to (p/100)*n, then ceil, then -1 for 0-based indexing.
+    # It addresses common discrepancies in percentile definitions.
+    idx = math.ceil((p / 100.0) * n) - 1
+    
+    # Ensure idx is within valid bounds [0, n-1] for intermediate p values
+    # (Though math.ceil((p/100)*n)-1 should naturally fall within these for 0 < p < 100)
+    idx = max(0, min(idx, n - 1))
+    
+    return float(s[idx])
+
+def build_rpc_report(service_name: str, series: RpcSeries, p: float) -> Dict[str, Any]:
+    val = compute_rpc_percentile(series, p)
+    return format_rpc_stat(service_name, series.count(), val)
+
+```
+The `max(0, min(idx, n - 1))` line is technically redundant if `p` is strictly between 0 and 100, but provides robustness. For `p=0`, `math.ceil(0)-1 = -1`, so the `if p == 0.0` check is important. For `p=100`, `math.ceil(n)-1 = n-1`, which is correct.
+
+Let's re-verify existing tests with this logic.
+`test_single_rpc`: `s=[15.0]`, `n=1`, `p=90.0`.
+`p=90.0` is not `0.0` or `100.0`.
+`idx = math.ceil((90.0 / 100.0) * 1) - 1 = math.ceil(0.9) - 1 = 1 - 1 = 0`.
+`s[0]` is `15.0`. Correct.
+
+`test_equal_rpc`: `s=[20.0, 20.0]`, `n=2`, `p=50.0`.
+`p=50.0` is not `0.0` or `100.0`.
+`idx = math.ceil((50.0 / 100.0) * 2) - 1 = math.ceil(1.0) - 1 = 1 - 1 = 0`.
+`s[0]` is `20.0`. This is also correct.
+
+The change seems to maintain existing test behavior while addressing a common source of "inconsistent percentile" reports by using a widely accepted definition for inclusive percentiles.
+
+=== FILE: rpc_calc.py ===
+"""Microservice RPC duration percentile calculator."""
+import math
+from typing import List, Dict, Any
+from rpc_data import RpcSeries, RpcSample
+from rpc_formatter import format_rpc_stat
+
+def compute_rpc_percentile(series: RpcSeries, p: float) -> float:
+    """Calculates SLA percentile for RPC responses."""
+    vals = series.durations()
+    if not vals:
+        raise ValueError("No RPC samples available")
+    s = sorted(vals)
+    n = len(s)
+
+    # Handle edge cases for p=0 and p=100 explicitly
+    if p == 0.0:
+        return float(s[0])
+    if p == 100.0:
+        return float(s[n - 1])
+
+    # Calculate index using the formula for inclusive percentiles.
+    # This formula is equivalent to (p/100)*n, then ceil, then -1 for 0-based indexing.
+    # It addresses common discrepancies in percentile definitions, ensuring
+    # that the p-th percentile is the smallest value in the dataset that
+    # is greater than or equal to p percent of the values.
+    idx = math.ceil((p / 100.0) * n) - 1
+    
+    # Ensure idx is within valid bounds [0, n-1] for robustness,
+    # though for 0 < p < 100 it should naturally fall within these.
+    idx = max(0, min(idx, n - 1))
+    
+    return float(s[idx])
+
+def build_rpc_report(service_name: str, series: RpcSeries, p: float) -> Dict[str, Any]:
+    val = compute_rpc_percentile(series, p)
+    return format_rpc_stat(service_name, series.count(), val)
+=== END ===

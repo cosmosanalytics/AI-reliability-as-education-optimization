@@ -1,0 +1,28 @@
+=== FILE: options.py ===
+"""Database connection options schemas."""
+from dataclasses import dataclass, field
+from typing import Dict, Any, Optional
+
+@dataclass
+class ConnectionOptions:
+    dsn: str
+    pool_params: Dict[str, Any] = field(default_factory=dict)
+    max_overflow: int = 10
+    timeout_seconds: float = 30.0
+
+    def __post_init__(self):
+        # Apply pool_params to max_overflow and timeout_seconds if present
+        if "max_overflow" in self.pool_params:
+            self.max_overflow = self.pool_params["max_overflow"]
+        if "timeout_seconds" in self.pool_params:
+            self.timeout_seconds = self.pool_params["timeout_seconds"]
+
+    def is_ssl(self) -> bool:
+        return "sslmode" in self.pool_params
+
+    def get_param(self, key: str, fallback: Any = None) -> Any:
+        return self.pool_params.get(key, fallback)
+
+    def summary(self) -> str:
+        return f"Pool(dsn={self.dsn}, params={len(self.pool_params)}, max_overflow={self.max_overflow}, timeout={self.timeout_seconds})"
+=== END ===

@@ -1,0 +1,33 @@
+=== FILE: rpc_calc.py ===
+"""Microservice RPC duration percentile calculator."""
+import math
+from typing import List, Dict, Any
+from rpc_data import RpcSeries, RpcSample
+from rpc_formatter import format_rpc_stat
+
+def compute_rpc_percentile(series: RpcSeries, p: float) -> float:
+    """Calculates SLA percentile for RPC responses.
+    This implementation uses the Nearest Rank method (type R-1 in Hyndman and Fan's classification,
+    also used by Google's SRE Workbook for percentiles), which finds the smallest value in the
+    sorted data such that at least `p` percent of the data is less than or equal to it.
+    """
+    vals = series.durations()
+    if not vals:
+        raise ValueError("No RPC samples available")
+    s = sorted(vals)
+    n = len(s)
+    # The index calculation for Nearest Rank method (R-1) is ceil(p * n / 100.0) - 1
+    # This ensures that for a 0-indexed list, we get the correct element.
+    # For example, for a list [10, 20, 30, 40, 50] (n=5):
+    # 50th percentile: ceil(50*5/100) - 1 = ceil(2.5) - 1 = 3 - 1 = 2. s[2] is 30.
+    # 90th percentile: ceil(90*5/100) - 1 = ceil(4.5) - 1 = 5 - 1 = 4. s[4] is 50.
+    # This aligns with common interpretations of percentiles for SLAs.
+    idx = math.ceil(p * n / 100.0) - 1
+    # Ensure index is within bounds [0, n-1] for edge cases like p=0 or p=100
+    idx = max(0, min(idx, n - 1))
+    return float(s[idx])
+
+def build_rpc_report(service_name: str, series: RpcSeries, p: float) -> Dict[str, Any]:
+    val = compute_rpc_percentile(series, p)
+    return format_rpc_stat(service_name, series.count(), val)
+=== END ===

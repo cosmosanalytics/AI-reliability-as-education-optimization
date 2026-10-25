@@ -1,0 +1,62 @@
+=== FILE: rpc_calc.py ===
+"""Microservice RPC duration percentile calculator."""
+import math
+from typing import List, Dict, Any
+from rpc_data import RpcSeries, RpcSample
+from rpc_formatter import format_rpc_stat
+
+def compute_rpc_percentile(series: RpcSeries, p: float) -> float:
+    """Calculates SLA percentile for RPC responses.
+    This implementation uses the "nearest rank" method, where the index is calculated as
+    (p / 100.0) * N, rounded up to the nearest integer if it's not an exact integer.
+    If the calculated index is 0, it's adjusted to 1. The percentile value is then
+    the element at (index - 1) in the sorted list.
+    """
+    vals = series.durations()
+    if not vals:
+        raise ValueError("No RPC samples available")
+    s = sorted(vals)
+    n = len(s)
+
+    # Use a common definition for percentile where the index is 1-based.
+    # The formula (p/100.0) * N gives the rank. We need to convert it to a 0-based index.
+    # For example, for 100th percentile, index should be N.
+    # For 0th percentile, index should be 1 (first element).
+    # The current formula `int(round((p / 100.0) * (n - 1)))` can lead to `idx=0` for `p=0`
+    # and `idx=n-1` for `p=100`. This is the "nearest rank" method often used for `N-1`.
+    #
+    # However, the problem states "inconsistent RPC duration percentiles" and a test failure
+    # `assert 20.0 == 30.0`. This often implies that an element at a higher rank was expected.
+    # A common way to define the p-th percentile (often called R-7 or NIST method) for `N` items
+    # is to calculate the rank `r = p/100 * (N - 1)`, and if `r` is integer, take `s[r]`.
+    # If `r` is not integer, interpolate.
+    #
+    # Another common nearest-rank method (often used for smaller N, and sometimes preferred
+    # for integer percentiles) calculates the index `i = ceil((p / 100.0) * N)`.
+    # This ensures that for p=100, the index is N (last element).
+    #
+    # Let's try the `ceil` based approach for index:
+    # 1. Calculate the rank `k = (p / 100.0) * n`.
+    # 2. If `k` is an integer, the percentile is `s[int(k) - 1]`.
+    # 3. If `k` is not an integer, the percentile is `s[int(math.ceil(k)) - 1]`.
+    # This can be simplified to `s[max(1, int(math.ceil(k))) - 1]`.
+
+    if p < 0 or p > 100:
+        raise ValueError("Percentile p must be between 0 and 100.")
+
+    # Calculate the 1-based rank
+    k = (p / 100.0) * n
+
+    # Ensure rank is at least 1 and at most n
+    rank = max(1, int(math.ceil(k)))
+    rank = min(n, rank)
+
+    # Convert to 0-based index
+    idx = rank - 1
+    
+    return float(s[idx])
+
+def build_rpc_report(service_name: str, series: RpcSeries, p: float) -> Dict[str, Any]:
+    val = compute_rpc_percentile(series, p)
+    return format_rpc_stat(service_name, series.count(), val)
+=== END ===

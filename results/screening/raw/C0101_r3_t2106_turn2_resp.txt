@@ -1,0 +1,52 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values)
+
+    # The "nearest-rank house standard" implies a specific method for
+    # calculating the percentile. For a 0-indexed sorted list `s` of
+    # length `N`, the p-th percentile can be found by calculating the
+    # rank `r = N * p / 100`.
+    #
+    # If p = 0, the percentile is typically the minimum value (index 0).
+    # If p = 100, the percentile is typically the maximum value (index N-1).
+    # For other p, the index is usually `math.ceil(r) - 1`.
+    # This ensures that for r=1.0, index is 0; for r=N, index is N-1.
+
+    N = len(s)
+
+    # Clamp p to the valid range [0, 100]
+    p = max(0.0, min(100.0, p))
+
+    if N == 0:
+        # validate_metric_samples already raises ValueError for empty lists,
+        # but this check is defensive for clarity regarding percentile calculation.
+        raise ValueError("Cannot calculate percentile for an empty list of samples.")
+
+    if p == 0.0:
+        # 0th percentile is the minimum value
+        idx = 0
+    elif p == 100.0:
+        # 100th percentile is the maximum value
+        idx = N - 1
+    else:
+        # Calculate rank and convert to 0-indexed array position using ceil method.
+        # This corresponds to the "nearest-rank" definition (Type 1 or Type 3 depending on source).
+        # Specifically, it's often described as the smallest value that is greater than or equal to
+        # p percent of the data. For 0-indexed array, this is ceil(N*p/100) - 1.
+        rank = (p / 100.0) * N
+        idx = int(math.ceil(rank)) - 1
+        # Ensure index is within bounds [0, N-1] in case of floating point inaccuracies or edge cases
+        idx = max(0, min(idx, N - 1))
+    
+    return s[idx]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

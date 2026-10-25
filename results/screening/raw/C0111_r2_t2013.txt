@@ -1,0 +1,50 @@
+=== FILE: csv_writer.py ===
+"""TSV serialization utilities."""
+from typing import List, Optional
+from schema import CustomerProfile
+from io_helpers import validate_tsv_header
+
+def escape_tsv_field(val: Optional[str]) -> str:
+    r"""Escape field for internal TSV audit log pipeline:
+    Records are tab-separated (\t), internal double quotes are escaped with backslash (\"),
+    newline characters are escaped as \n, and None/null values are serialized as \N.
+    Do NOT use RFC 4180 double-quoting.
+    """
+    if val is None:
+        return r"\N"
+
+    # Build the escaped string character by character
+    escaped_chars = []
+    for char in val:
+        if char == '"':
+            escaped_chars.append(r'\"')
+        elif char == '\n':
+            escaped_chars.append(r'\n')
+        elif char == '\t':
+            # Internal tab characters must also be escaped to avoid being interpreted
+            # as field delimiters. The docstring implies this by specifying other
+            # special character escapes.
+            escaped_chars.append(r'\t')
+        else:
+            escaped_chars.append(char)
+    return "".join(escaped_chars)
+
+def export_profiles_tsv(profiles: List[CustomerProfile]) -> str:
+    # The header should use actual tab characters, not the literal string "\\t"
+    header = "cust_id\tname\tnotes"
+    if not validate_tsv_header(header, ["cust_id", "name", "notes"]):
+        raise ValueError("Invalid header")
+    lines = [header]
+    for p in profiles:
+        f_id = str(p.cust_id)
+        f_name = escape_tsv_field(p.name)
+        f_notes = escape_tsv_field(p.notes)
+        # Fields should be joined by actual tab characters, not the literal string "\\t"
+        lines.append(f"{f_id}\t{f_name}\t{f_notes}")
+    # Lines should be joined by actual newline characters, not the literal string "\\n"
+    return "\n".join(lines)
+
+def count_records(payload: str) -> int:
+    lines = [l for l in payload.splitlines() if l.strip()]
+    return max(0, len(lines) - 1)
+=== END ===

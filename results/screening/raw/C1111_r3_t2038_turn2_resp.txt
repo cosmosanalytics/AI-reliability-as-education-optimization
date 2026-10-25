@@ -1,0 +1,26 @@
+=== FILE: billing_emitter.py ===
+"""Billing transaction message emitter."""
+from key_normalizer import normalize_dict_keys, extract_normalized_keys
+from wire_envelope import build_envelope, is_valid_envelope, extract_payload
+from typing import Dict, Any
+
+# Define the service name as it's a constant for this emitter.
+# This could also be passed as an argument if it were dynamic, but for a "billing emitter",
+# a fixed service name is a reasonable assumption given the context.
+_SERVICE_NAME = "billing_service"
+
+def emit_billing_record(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    """Emit billing transaction message for downstream consumers.
+    The payload keys are normalized to snake_case and then enveloped.
+    """
+    normalized_payload = normalize_dict_keys(data)
+    return build_envelope(_SERVICE_NAME, epoch_ms, normalized_payload)
+
+def broadcast_billing_event(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    record = emit_billing_record(data, epoch_ms)
+    # The following lines are likely for validation or side effects,
+    # but the core fix is to ensure `record` is a valid envelope.
+    _ = is_valid_envelope(record)
+    _ = extract_normalized_keys(data) # This line operates on the original data, not the normalized payload.
+    return record
+=== END ===

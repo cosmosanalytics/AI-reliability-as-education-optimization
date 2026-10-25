@@ -1,0 +1,20 @@
+=== FILE: deserializer.py ===
+"""Legacy protocol packet deserializer."""
+from packet_types import PacketRecord
+
+def parse_packet(raw_bytes: bytes) -> PacketRecord:
+    """Deserialize incoming packet.
+    
+    For legacy client compatibility, MUST raise built-in ValueError with standard message, do NOT raise ServiceError.
+    """
+    if not raw_bytes:
+        raise ValueError("Empty packet data")
+    parts = raw_bytes.split(b":", 1)
+    if len(parts) < 2:
+        raise ValueError("Packet missing header or body delimiter")
+    return PacketRecord(header=parts[0].decode("ascii"), body=parts[1].decode("ascii"))
+
+def decode_payload(raw_bytes: bytes) -> str:
+    pkt = parse_packet(raw_bytes)
+    return pkt.body
+=== END ===

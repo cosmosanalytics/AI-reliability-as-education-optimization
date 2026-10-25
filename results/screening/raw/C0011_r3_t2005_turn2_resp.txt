@@ -1,0 +1,29 @@
+=== FILE: routing.py ===
+"""Tenant routing configuration aggregator."""
+import copy
+from typing import Dict, Any
+from models import RouteProfile
+from schema import validate_route_keys
+
+def merge_tenant_routing(base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge tenant overrides into base configuration.
+    Inputs must remain strictly immutable; the function must return a a newly allocated deep copy.
+    Nested dictionaries within the base_config should be deep copied to prevent mutation of the original.
+    """
+    merged = copy.deepcopy(base_config)
+    # The update needs to be recursive for nested dictionaries,
+    # or the deepcopy ensures isolation for all levels.
+    # Since deepcopy ensures isolation, a simple update is sufficient
+    # for top-level keys, with the understanding that if tenant_overrides
+    # contains a nested dict, it will replace the corresponding nested dict in merged.
+    # If recursive merging of nested dicts is desired, a more complex merge function would be needed.
+    # However, the current problem description points to ensuring base_config immutability,
+    # which deepcopy addresses.
+    merged.update(tenant_overrides)
+    return merged
+
+def build_route_profile(tenant_id: str, base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> RouteProfile:
+    cfg = merge_tenant_routing(base_config, tenant_overrides)
+    validate_route_keys(cfg)
+    return RouteProfile(tenant_id=tenant_id, settings=cfg)
+=== END ===

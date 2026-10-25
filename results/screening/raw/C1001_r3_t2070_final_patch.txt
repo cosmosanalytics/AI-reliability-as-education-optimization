@@ -1,0 +1,52 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values.
+
+    This implementation uses the "nearest rank" method (also known as the R-1 method in some contexts),
+    where the 1-based rank is calculated as `ceil((p / 100.0) * n)`.
+    This method is often preferred for SLA calculations as it ensures that for a given percentile,
+    the returned value is always one of the data points, and specifically,
+    it represents the smallest value in the dataset such that at least `p` percent
+    of the data is less than or equal to that value.
+
+    The original implementation used linear interpolation between closest ranks (R-7 method),
+    which can produce values not present in the dataset. The incident INC-7102
+    suggests that the SLA reporting pipeline expects a percentile calculation that
+    aligns with a stricter interpretation, likely one that picks an actual data point.
+    The failing test `assert 45.0 == 40.0` indicates that when the R-7 method
+    interpolated to 45.0, the expected value was 40.0, which is a specific data point.
+    The "nearest rank, round up" method addresses this by always selecting
+    an existing data point.
+    """
+    if not values:
+        raise ValueError("Empty values")
+    s = sorted(values)
+    n = len(s)
+
+    # Handle edge cases for p = 0 and p = 100 explicitly.
+    # For p=0, return the minimum value.
+    if p == 0:
+        return float(s[0])
+    # For p=100, return the maximum value.
+    if p == 100:
+        return float(s[n - 1])
+
+    # Calculate the 1-based rank.
+    # The formula `(p / 100.0) * n` is commonly used to find the rank.
+    # Using `math.ceil` on this rank effectively implements the "nearest rank, round up" logic.
+    # For example, for a 80th percentile on 5 items (n=5):
+    # rank = (80 / 100.0) * 5 = 4.0. ceil(4.0) = 4.
+    # For a 80.0001th percentile on 5 items:
+    # rank = (80.0001 / 100.0) * 5 = 4.000005. ceil(4.000005) = 5.
+    rank = (p / 100.0) * n
+    # Convert 1-based rank to 0-based index by subtracting 1.
+    # Ensure the index is within valid bounds [0, n-1].
+    idx = int(math.ceil(rank)) - 1
+    idx = max(0, min(idx, n - 1))
+
+    return float(s[idx])
+=== END ===

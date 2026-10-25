@@ -1,0 +1,29 @@
+=== FILE: billing_emitter.py ===
+"""Billing transaction message emitter."""
+from key_normalizer import normalize_dict_keys, extract_normalized_keys
+from wire_envelope import build_envelope, is_valid_envelope, extract_payload
+from typing import Dict, Any
+
+def emit_billing_record(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    """Emit billing transaction message for downstream consumers."""
+    # The billing record itself should be normalized, as per common practice in billing systems.
+    # The ticket describes a rejection of an *un-enveloped* payload, not an un-normalized one.
+    # However, the `extract_normalized_keys` call in `broadcast_billing_event` suggests
+    # that normalization is an expected step in the process for the raw data.
+    normalized_data = normalize_dict_keys(data)
+    # The core issue is that the payload needs to be enveloped for the message bus.
+    # This function is responsible for emitting the "record", which should be the final
+    # message ready for broadcast.
+    return build_envelope("billing_service", epoch_ms, normalized_data)
+
+def broadcast_billing_event(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    # This function acts as a wrapper that prepares and emits the record.
+    # The `emit_billing_record` now handles the enveloping and normalization.
+    record = emit_billing_record(data, epoch_ms)
+    # The existing checks for validity and key extraction are still relevant
+    # for internal validation or logging purposes, even if `emit_billing_record`
+    # now guarantees an enveloped and normalized output.
+    _ = is_valid_envelope(record)
+    _ = extract_normalized_keys(data) # This inspects the original data, not the enveloped record.
+    return record
+=== END ===

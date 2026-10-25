@@ -1,0 +1,25 @@
+=== FILE: list_merger.py ===
+"""Low-level dictionary and list hierarchy merger."""
+from typing import Dict, Any, List
+
+def merge_spec_values(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """Recursively merges dictionary values.
+    
+    For lists, if a key exists in both base and override and both values are lists,
+    the lists are concatenated (base elements first, then override elements).
+    For other types, override values replace base values."""
+    result = dict(base)
+    for k, v in override.items():
+        if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+            result[k] = merge_spec_values(result[k], v)
+        elif k in result and isinstance(result[k], list) and isinstance(v, list):
+            # As per INC-9202, lists should be merged (concatenated) rather than
+            # replaced, with base elements preceding override elements.
+            result[k] = result[k] + v
+        else:
+            result[k] = v
+    return result
+
+def is_spec_empty(spec: Dict[str, Any]) -> bool:
+    return len(spec) == 0
+=== END ===

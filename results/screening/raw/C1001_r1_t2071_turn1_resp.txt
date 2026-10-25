@@ -1,0 +1,239 @@
+=== FILE: rpc_calc.py ===
+"""Microservice RPC duration percentile calculator."""
+import math
+from typing import List, Dict, Any
+from rpc_data import RpcSeries, RpcSample
+from rpc_formatter import format_rpc_stat
+
+def compute_rpc_percentile(series: RpcSeries, p: float) -> float:
+    """Calculates SLA percentile for RPC responses."""
+    vals = series.durations()
+    if not vals:
+        raise ValueError("No RPC samples available")
+    s = sorted(vals)
+    n = len(s)
+    # The standard definition for percentile rank `p` (0-100) is often
+    # `(N-1)*p/100`, where `N` is the number of data points.
+    # The `round()` function can introduce off-by-one errors for values
+    # exactly at 0.5 when N-1 is odd.
+    # For instance, for N=3, p=25, (3-1)*0.25 = 0.5. round(0.5) = 1.
+    # This points to s[1] (the median) instead of s[0].
+    #
+    # A common and more robust approach is to use linear interpolation,
+    # or a method that correctly handles edge cases.
+    # For small datasets, `math.ceil((p / 100.0) * n) - 1` can be used
+    # to find the index for the p-th percentile element (1-based rank),
+    # then convert to 0-based index. This is closer to the "Type 1" method
+    # when the rank is not integer.
+    #
+    # Given the test failure "assert 20.0 == 30.0", it suggests that
+    # the existing `round` logic was picking an index that was too low.
+    # For example, if the data was [10, 20, 30] and p=25,
+    # idx = int(round(0.25 * 2)) = int(round(0.5)) = 1, returning 20.
+    # If the expectation was 30, the index should be 2.
+    #
+    # A common percentile definition (e.g., NumPy's default `percentile`
+    # with `interpolation='linear'`) for `p`-th percentile rank `k`
+    # is `k = p/100 * (n - 1)`. If `k` is an integer, take `s[k]`.
+    # If `k` is not an integer, interpolate between `s[floor(k)]` and `s[ceil(k)]`.
+    #
+    # For simplicity and to match common behavior for small datasets
+    # where interpolation might not be strictly necessary, or to match
+    # a specific definition that avoids rounding down too aggressively:
+    # `idx = math.ceil((p / 100.0) * n) - 1` is one approach to ensure
+    # that the index is at least the desired rank.
+    #
+    # Another common method that aligns with the "nearest rank" method but
+    # often works better with `p=0` and `p=100` is to ensure the index
+    # is within bounds [0, n-1].
+    #
+    # Let's re-evaluate the original formula `(p / 100.0) * (n - 1)`.
+    # For N=3, values=[10, 20, 30].
+    # p=0: 0 * (2) = 0. idx=0, val=10.
+    # p=50: 0.5 * (2) = 1. idx=1, val=20.
+    # p=100: 1 * (2) = 2. idx=2, val=30.
+    #
+    # The traceback `assert 20.0 == 30.0` means the current code returned 20.0,
+    # but 30.0 was expected. This implies that for some `p`, the index was 1
+    # when it should have been 2 (assuming values like [10, 20, 30]).
+    #
+    # A common definition for percentiles, especially for `p` > 0 and `p` < 100,
+    # is `k = p * n / 100`. If `k` is not an integer, round up to the next integer.
+    # The index would be `ceil(k) - 1`.
+    # Let's try `idx = int(math.ceil((p / 100.0) * n)) - 1`.
+    #
+    # For N=3, values=[10, 20, 30].
+    # p=0: ceil(0 * 3 / 100) - 1 = ceil(0) - 1 = 0 - 1 = -1 (out of bounds, need special handling for p=0)
+    # p=1: ceil(1 * 3 / 100) - 1 = ceil(0.03) - 1 = 1 - 1 = 0. val=10.
+    # p=25: ceil(25 * 3 / 100) - 1 = ceil(0.75) - 1 = 1 - 1 = 0. val=10.
+    # p=50: ceil(50 * 3 / 100) - 1 = ceil(1.5) - 1 = 2 - 1 = 1. val=20.
+    # p=75: ceil(75 * 3 / 100) - 1 = ceil(2.25) - 1 = 3 - 1 = 2. val=30.
+    # p=100: ceil(100 * 3 / 100) - 1 = ceil(3) - 1 = 3 - 1 = 2. val=30.
+    #
+    # This definition also has issues for p=0 and can give different results.
+    #
+    # The most common definition for percentiles, consistent with many statistical packages,
+    # uses linear interpolation when the rank is not an integer.
+    # The problem implies that the existing simple "nearest rank" method is not sufficient.
+    #
+    # The `round((p / 100.0) * (n - 1))` formula is often used for inclusive ranks.
+    # The issue `assert 20.0 == 30.0` indicates that for some input, the calculation
+    # yielded 20.0 when 30.0 was expected. This means the index computed was
+    # one position too low.
+    #
+    # Let's consider the case where `n-1` is odd.
+    # If `n=3`, `n-1=2`.
+    # `p=25`: `0.25 * 2 = 0.5`. `round(0.5)` is `1`. Index `1` gives `s[1]`.
+    # If `s = [10, 20, 30]`, `s[1]` is `20`. If `30` was expected for 25th percentile,
+    # this is the source of the bug.
+    #
+    # The common fix for `round(x.5)` behavior (often rounding to the nearest even integer, or always up)
+    # is to ensure values like `0.5` round up to `1` consistently when the intent is to move to the next higher rank.
+    # Using `math.ceil` for the fractional part of the index, or adding a small epsilon, can change this.
+    #
+    # A common definition for percentile index `k` for `p` (0 to 100) and `n` items is:
+    # `k = (n - 1) * p / 100`.
+    # If `k` is an integer, the percentile is `s[k]`.
+    # If `k` is not an integer, let `i = floor(k)` and `f = k - i`.
+    # The percentile is `s[i] + f * (s[i+1] - s[i])`. This is linear interpolation.
+    #
+    # Since the task is to fix an existing bug `assert 20.0 == 30.0`, and not to rewrite
+    # the entire percentile calculation to a more complex interpolated method,
+    # the simplest change that would cause `20.0` to become `30.0` in the scenario
+    # `s = [10, 20, 30]` for `p=25` (where `round(0.5)` yields 1) is to adjust
+    # how `0.5` is rounded.
+    #
+    # If the intent is to always round `X.5` upwards, one common way is `floor(X + 0.5)`.
+    # Or simply `math.ceil` for the index calculation.
+    #
+    # Let's try `idx = int(math.ceil((p / 100.0) * n)) - 1`. This aligns with the "Type 1" definition.
+    # As discussed, for `p=0`, this results in `-1`.
+    # For `p=0`, the 0th percentile is `s[0]`.
+    # For `p=100`, the 100th percentile is `s[n-1]`.
+    #
+    # Let's use the definition `k = (p / 100.0) * (n - 1)`.
+    # If `p=0`, `k=0`. Index is `0`.
+    # If `p=100`, `k=n-1`. Index is `n-1`.
+    #
+    # The issue is likely when `k` falls exactly on `X.5` and `round()` rounds down when it should round up.
+    # In Python 3, `round(x)` rounds to the nearest even number for `x.5`.
+    # E.g., `round(0.5)` is `0`, `round(1.5)` is `2`, `round(2.5)` is `2`.
+    #
+    # The current code `idx = int(round((p / 100.0) * (n - 1)))`
+    # If `(p / 100.0) * (n - 1)` evaluates to `0.5`, `round(0.5)` is `0`.
+    # If `(p / 100.0) * (n - 1)` evaluates to `2.5`, `round(2.5)` is `2`.
+    #
+    # Let's re-check the `test_case_1` failure `assert 20.0 == 30.0`.
+    # This means `compute_rpc_percentile` returned `20.0` when `30.0` was expected.
+    # This implies that the index `idx` was one position too low.
+    #
+    # Consider `s = [10, 20, 30, 40]`, `n=4`. `n-1=3`.
+    # If `p=25`: `(0.25 * 3) = 0.75`. `round(0.75) = 1`. `s[1]` is `20.0`.
+    # If the expected value was `30.0`, then `idx` should have been `2`.
+    # This means `0.75` should have effectively rounded up to `2`.
+    #
+    # The standard "Type 7" (used by R, Excel) is `(n-1)*p/100`.
+    # A common practice for discrete data or small `n` is to use `math.ceil` for the rank.
+    #
+    # Let's try `idx = int(math.ceil((p / 100.0) * n)) - 1` with clamping.
+    # This is equivalent to "Type 1" percentile definition.
+    #
+    # For `p=0`, `idx = int(math.ceil(0)) - 1 = 0 - 1 = -1`. So handle `p=0` explicitly.
+    # For `p=100`, `idx = int(math.ceil(n)) - 1 = n - 1`. Correct.
+    #
+    # Let's use the definition `k = (p / 100.0) * n`.
+    # The index is `max(0, math.ceil(k) - 1)` for `p > 0`.
+    #
+    # For `s = [10, 20, 30, 40]`, `n=4`.
+    # `p=25`: `k = 0.25 * 4 = 1.0`. `ceil(1.0) - 1 = 0`. `s[0]` is `10.0`.
+    # This is not `20.0` or `30.0`. So this definition doesn't match the error.
+    #
+    # The most direct interpretation of `assert 20.0 == 30.0` with the existing
+    # `round((p / 100.0) * (n - 1))` is that `round(X.5)` was rounding to the lower even number
+    # (e.g., `round(0.5)` to `0`, `round(2.5)` to `2`), when the expectation
+    # was to round up (e.g., `0.5` to `1`, `2.5` to `3`).
+    #
+    # If we replace `round()` with a function that always rounds `X.5` up,
+    # like `math.floor(x + 0.5)` or `math.ceil(x)` for `x > 0`.
+    #
+    # Let's try `idx = int(math.floor((p / 100.0) * (n - 1) + 0.5))`. This is a common way to force round-half-up.
+    #
+    # Example: `s = [10, 20, 30]`, `n=3`. `n-1=2`.
+    # `p=25`: `val = 0.25 * 2 = 0.5`.
+    # `idx = int(math.floor(0.5 + 0.5)) = int(math.floor(1.0)) = 1`. `s[1]` is `20.0`.
+    # This still returns `20.0`. So this is not the fix.
+    #
+    # The issue is that the calculated index was `x` when `x+1` was expected.
+    # This means the percentile calculation was effectively too low.
+    #
+    # Let's assume the issue is with the definition of percentile index.
+    # Some definitions use `(p / 100.0) * n` instead of `(p / 100.0) * (n - 1)`.
+    #
+    # If `idx = int(round((p / 100.0) * n)) - 1` (and clamp to `n-1`):
+    # `s = [10, 20, 30]`, `n=3`.
+    # `p=25`: `0.25 * 3 = 0.75`. `round(0.75) = 1`. `idx = 1 - 1 = 0`. `s[0]` is `10.0`.
+    # This also doesn't match the `20.0` vs `30.0` error.
+    #
+    # The simplest fix for `assert 20.0 == 30.0` where current returns 20.0
+    # is to increment the index when appropriate.
+    #
+    # The problem description mentions "inconsistent RPC duration percentiles".
+    # This implies the current definition is problematic for certain inputs.
+    #
+    # Let's consider the source of truth for percentile calculation.
+    # Python's `statistics.quantiles` uses linear interpolation.
+    # `numpy.percentile` also uses linear interpolation by default.
+    #
+    # The current definition `int(round((p / 100.0) * (n - 1)))` is simple.
+    # The `round()` function in Python 3 uses "round half to even".
+    #
+    # Let's re-examine `s = [10, 20, 30]`, `n=3`.
+    # If `p=25`, `(p/100)*(n-1) = 0.25 * 2 = 0.5`. `round(0.5) = 0`. `s[0]` is `10.0`.
+    # This means if the test expected `30.0` for `p=25`, it's not simply a `round(0.5)` issue.
+    #
+    # What if the input data was `[20.0, 30.0]` and `p=50.0`?
+    # `n=2`. `n-1=1`.
+    # `idx = int(round((50.0 / 100.0) * 1)) = int(round(0.5)) = 0`. `s[0]` is `20.0`.
+    # If `30.0` was expected for `p=50.0`, then `idx` should have been `1`.
+    #
+    # This specific case (`round(0.5)` yielding `0` when `1` is desired)
+    # is the classic example of where "round half to even" differs from "round half up".
+    #
+    # The fix is to change the rounding behavior to always round `X.5` up.
+    # `math.floor(x + 0.5)` is one way to achieve "round half up".
+    #
+    # Let's apply this change:
+    # `idx = int(math.floor((p / 100.0) * (n - 1) + 0.5))`
+    #
+    # Test with `s = [20.0, 30.0]`, `n=2`, `p=50.0`.
+    # `val = (50.0 / 100.0) * (2 - 1) = 0.5 * 1 = 0.5`.
+    # `idx = int(math.floor(0.5 + 0.5)) = int(math.floor(1.0)) = 1`.
+    # `s[1]` is `30.0`. This matches the expected value from the traceback.
+    #
+    # Let's verify other cases:
+    # `s = [15.0]`, `n=1`, `p=90.0`. (from `test_single_rpc`)
+    # `val = (90.0 / 100.0) * (1 - 1) = 0.9 * 0 = 0.0`.
+    # `idx = int(math.floor(0.0 + 0.5)) = int(math.floor(0.5)) = 0`.
+    # `s[0]` is `15.0`. Correct.
+    #
+    # `s = [20.0, 20.0]`, `n=2`, `p=50.0`. (from `test_equal_rpc`)
+    # `val = (50.0 / 100.0) * (2 - 1) = 0.5 * 1 = 0.5`.
+    # `idx = int(math.floor(0.5 + 0.5)) = int(math.floor(1.0)) = 1`.
+    # `s[1]` is `20.0`. Correct. (Index 0 is also 20.0, but 1 is fine).
+    #
+    # This change seems to fix the specific problem reported by the traceback
+    # without breaking existing tests. It addresses the "round half to even"
+    # behavior of `round()` by explicitly using a "round half up" logic.
+
+    k = (p / 100.0) * (n - 1)
+    # Python's built-in `round()` function uses "round half to even" for `X.5` values.
+    # This can lead to inconsistencies where `0.5` rounds to `0` but `1.5` rounds to `2`.
+    # For percentile calculations, it's often desirable for `X.5` to round up (e.g., `0.5` to `1`).
+    # The expression `math.floor(x + 0.5)` effectively implements "round half up".
+    idx = int(math.floor(k + 0.5))
+    return float(s[idx])
+
+def build_rpc_report(service_name: str, series: RpcSeries, p: float) -> Dict[str, Any]:
+    val = compute_rpc_percentile(series, p)
+    return format_rpc_stat(service_name, series.count(), val)
+=== END ===

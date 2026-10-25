@@ -1,0 +1,43 @@
+=== FILE: rbac.py ===
+"""Document scope RBAC filter."""
+from path_resolver import clean_scope, split_scope_segments
+from audit_logger import format_access_attempt
+
+def check_scope_access(allowed_scope: str, requested_scope: str) -> bool:
+    """
+    Verify if requested scope is permitted within the designated scope pattern.
+
+    Access is granted if the requested scope's segments start with the allowed scope's
+    segments. A wildcard '::*' in the allowed_scope means all sub-scopes are permitted.
+    """
+    cleaned_allowed_scope = clean_scope(allowed_scope)
+    cleaned_requested_scope = clean_scope(requested_scope)
+
+    if cleaned_allowed_scope.endswith('::*'):
+        # If allowed_scope ends with ::*, it's a wildcard for all sub-scopes.
+        # The actual prefix to match is the part before ::*.
+        effective_allowed_prefix = cleaned_allowed_scope[:-3] # Remove '::*'
+        allowed_segments = split_scope_segments(effective_allowed_prefix)
+    else:
+        # Otherwise, the allowed_scope is an exact segment prefix or a full scope.
+        allowed_segments = split_scope_segments(cleaned_allowed_scope)
+
+    requested_segments = split_scope_segments(cleaned_requested_scope)
+
+    # Check if the requested_segments start with the allowed_segments
+    # The requested scope must have at least as many segments as the allowed scope prefix.
+    # And the initial segments must match exactly.
+    allowed = (
+        len(requested_segments) >= len(allowed_segments) and
+        requested_segments[:len(allowed_segments)] == allowed_segments
+    )
+
+    _ = format_access_attempt(allowed_scope, requested_scope, allowed)
+    return allowed
+
+def filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:
+    return [s for s in scopes if check_scope_access(allowed_scope, s)]
+
+def can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:
+    return all(check_scope_access(allowed_scope, s) for s in scopes)
+=== END ===

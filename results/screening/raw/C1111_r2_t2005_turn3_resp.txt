@@ -1,0 +1,28 @@
+=== FILE: routing.py ===
+"""Tenant routing configuration aggregator."""
+import copy
+from typing import Dict, Any
+from models import RouteProfile
+from schema import validate_route_keys
+
+def merge_tenant_routing(base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge tenant overrides into base configuration.
+    Inputs must remain strictly immutable; the function must return a newly allocated deep copy.
+    """
+    merged = copy.deepcopy(base_config)
+    
+    def _recursive_merge(target: Dict[str, Any], overrides: Dict[str, Any]):
+        for k, v in overrides.items():
+            if k in target and isinstance(target[k], dict) and isinstance(v, dict):
+                _recursive_merge(target[k], v)
+            else:
+                target[k] = copy.deepcopy(v)
+
+    _recursive_merge(merged, tenant_overrides)
+    return merged
+
+def build_route_profile(tenant_id: str, base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> RouteProfile:
+    cfg = merge_tenant_routing(base_config, tenant_overrides)
+    validate_route_keys(cfg)
+    return RouteProfile(tenant_id=tenant_id, settings=cfg)
+=== END ===

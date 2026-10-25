@@ -1,0 +1,21 @@
+=== TOOL_OUTPUT (exit code: 1) ===
+FF                                                                       [100%]
+================================== FAILURES ===================================
+__________________________ test_nominal_scope_access __________________________
+tests\test_rbac.py:4: in test_nominal_scope_access
+    assert check_scope_access("corp::public::*", "corp::public::readme") is True
+E   AssertionError: assert False is True
+E    +  where False = check_scope_access('corp::public::*', 'corp::public::readme')
+_________________________ test_scope_prefix_boundary __________________________
+tests\test_rbac.py:8: in test_scope_prefix_boundary
+    assert check_scope_access("corp::public", "corp::public_internal::secret") is False
+E   AssertionError: assert True is False
+E    +  where True = check_scope_access('corp::public', 'corp::public_internal::secret')
+=========================== short test summary info ===========================
+FAILED tests/test_rbac.py::test_nominal_scope_access - AssertionError: assert...
+FAILED tests/test_rbac.py::test_scope_prefix_boundary - AssertionError: asser...
+2 failed in 0.29s
+
+=== END_TOOL_OUTPUT ===
+
+If further modifications or tests are needed, output revised tool blocks or file blocks. When you are finished, output your complete final patch in === FILE === format.

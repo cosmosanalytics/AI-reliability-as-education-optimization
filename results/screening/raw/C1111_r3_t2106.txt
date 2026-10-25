@@ -1,0 +1,50 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values)
+    
+    # According to the "nearest-rank house standard", the percentile calculation
+    # should not use interpolation but rather select a specific sample from the sorted list.
+    # The rank (1-based index) is typically calculated as (p / 100.0) * N, where N is the number of samples.
+    # The value at this rank (or its ceiling) is then chosen.
+    # The traceback indicates that for a 50th percentile, 40.0 was expected,
+    # which implies picking the element at `floor(0.5 * N)` or `ceil(0.5 * N) - 1` (0-indexed)
+    # in an 8-element array where 40.0 is s[3].
+
+    if not s:
+        # validate_metric_samples already raises ValueError, but defensive programming
+        raise ValueError("Samples list cannot be empty")
+    
+    # Handle edge cases for 0th and 100th percentiles explicitly
+    if p == 0.0:
+        return s[0]
+    if p == 100.0:
+        return s[-1]
+
+    # Calculate the rank (1-based)
+    rank = (p / 100.0) * len(s)
+    
+    # Use math.ceil to find the rank, then convert to a 0-based index.
+    # This corresponds to the method where the percentile is the value at the
+    # smallest rank that is greater than or equal to (p/100 * N).
+    idx = int(math.ceil(rank)) - 1
+    
+    # Ensure the calculated index is within valid bounds (0 to len(s)-1)
+    # The explicit checks for p=0.0 and p=100.0 above should prevent out-of-bounds,
+    # but this provides an extra layer of safety.
+    if idx < 0:
+        idx = 0
+    elif idx >= len(s):
+        idx = len(s) - 1
+
+    return s[idx]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

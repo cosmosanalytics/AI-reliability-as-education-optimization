@@ -1,0 +1,43 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values.
+
+    Uses the nearest rank method with linear interpolation, where the
+    smallest value corresponds to the 0th percentile and the largest
+    value corresponds to the 100th percentile.
+    """
+    if not values:
+        raise ValueError("Empty values")
+    if not (0 <= p <= 100):
+        raise ValueError("Percentile 'p' must be between 0 and 100 inclusive.")
+
+    s = sorted(values)
+    n = len(s)
+
+    # Handle edge cases for p=0 and p=100 explicitly to avoid floating point issues
+    # and ensure correct boundary behavior.
+    if p == 0:
+        return float(s[0])
+    if p == 100:
+        return float(s[n - 1])
+
+    # Calculate the rank index.
+    # This formula (p/100) * (n-1) correctly maps p=0 to index 0 and p=100 to index n-1,
+    # allowing linear interpolation between sorted values.
+    idx = (p / 100.0) * (n - 1)
+
+    low_idx = int(math.floor(idx))
+    high_idx = int(math.ceil(idx))
+
+    # If low_idx and high_idx are the same, no interpolation is needed.
+    if low_idx == high_idx:
+        return float(s[low_idx])
+
+    # Perform linear interpolation
+    frac = idx - low_idx
+    return float(s[low_idx] + frac * (s[high_idx] - s[low_idx]))
+=== END ===

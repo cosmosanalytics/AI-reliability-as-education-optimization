@@ -1,0 +1,47 @@
+=== FILE: audio_metrics.py ===
+"""Audio buffer level metric processor."""
+import math
+from typing import List, Dict, Any
+from audio_types import AudioStreamSnapshot, BufferSample
+from audio_formatter import format_buffer_stat
+
+def compute_buffer_percentile(snapshot: AudioStreamSnapshot, p: float) -> float:
+    """Compute percentile using continuous linear interpolation (numpy-style: index = (p / 100.0) * (len(samples) - 1)).
+    Do not use nearest-rank method for audio buffer metrics.
+    """
+    vals = snapshot.ratios()
+    if not vals:
+        raise ValueError("Empty snapshot")
+    s = sorted(vals)
+    n = len(s)
+
+    # Calculate the real-valued index as per numpy-style continuous linear interpolation.
+    # index = (p / 100.0) * (len(samples) - 1)
+    idx = (p / 100.0) * (n - 1)
+
+    # Find the lower and upper indices for interpolation
+    # Ensure indices are within valid bounds [0, n-1] for accessing s
+    i = math.floor(idx)
+    j = math.ceil(idx)
+
+    # Handle edge cases where p=0 or p=100, or when n=1.
+    # If the index is an integer, or n=1, no interpolation is needed.
+    # This covers p=0 (idx=0, i=0, j=0) and p=100 (idx=n-1, i=n-1, j=n-1).
+    if i == j:
+        # If idx is an integer, or for a single element list, i and j will be the same.
+        # Clamp idx to [0, n-1] to prevent IndexError if p is slightly out of bounds,
+        # though standard percentiles imply p is in [0, 100].
+        clamped_idx = max(0, min(n - 1, int(round(idx))))
+        return float(s[clamped_idx])
+    else:
+        # Perform linear interpolation
+        # Ensure i and j are within valid bounds
+        i = max(0, min(n - 1, i))
+        j = max(0, min(n - 1, j))
+        fraction = idx - i
+        return float(s[i] * (1.0 - fraction) + s[j] * fraction)
+
+def evaluate_audio_buffer(snapshot: AudioStreamSnapshot, p: float) -> Dict[str, Any]:
+    val = compute_buffer_percentile(snapshot, p)
+    return format_buffer_stat(snapshot.channel_count(), val)
+=== END ===

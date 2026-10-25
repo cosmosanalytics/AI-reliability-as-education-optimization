@@ -1,0 +1,45 @@
+=== FILE: telemetry_stream.py ===
+"""Telemetry metric streaming normalizer."""
+from key_normalizer import normalize_dict_keys, extract_normalized_keys
+from wire_envelope import build_envelope, is_valid_envelope, extract_payload
+from typing import Dict, Any
+
+def prepare_metric_packet(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Prepare telemetry metric packet (payload part) for distribution to event stream.
+    Normalizes keys to snake_case."""
+    return normalize_dict_keys(data)
+
+def publish_stream_packet(service_name: str, data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    """Builds and returns a complete wire envelope packet for the telemetry stream."""
+    pkt_payload = prepare_metric_packet(data)
+    full_packet = build_envelope(service_name, epoch_ms, pkt_payload)
+    # The following checks are not needed here as we are building a valid envelope,
+    # and extract_normalized_keys is likely for an upstream consumer/validator.
+    # _ = is_valid_envelope(full_packet)
+    # _ = extract_normalized_keys(data)
+    return full_packet
+=== END ===
+=== FILE: tests/test_telemetry_stream.py ===
+from telemetry_stream import prepare_metric_packet, publish_stream_packet
+
+def test_nominal_metric_packet():
+    raw = {"val": 1.0}
+    # prepare_metric_packet no longer takes epoch_ms
+    pkt_payload = prepare_metric_packet(raw)
+    assert isinstance(pkt_payload, dict)
+    assert pkt_payload == {"val": 1.0} # keys are already snake_case
+
+    # publish_stream_packet now needs service_name
+    service_name = "test_service"
+    epoch_ms = 200
+    full_packet = publish_stream_packet(service_name, raw, epoch_ms)
+    assert isinstance(full_packet, dict)
+    assert full_packet == {
+        "_v": 2,
+        "_ts": epoch_ms,
+        "_src": service_name,
+        "payload": {"val": 1.0},
+    }
+    # The original assertion was comparing an envelope to a payload, which is now incorrect.
+    # assert publish_stream_packet(raw, 200) == pkt
+=== END ===

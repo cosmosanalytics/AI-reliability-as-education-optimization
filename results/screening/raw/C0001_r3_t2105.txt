@@ -1,0 +1,56 @@
+=== FILE: idemp_helper.py ===
+"""Idempotency header validation helper."""
+import uuid
+from typing import Optional, Dict
+
+def is_valid_uuid4(val: str) -> bool:
+    """Verify string is valid UUID version 4."""
+    try:
+        u = uuid.UUID(val, version=4)
+        return str(u) == val
+    except Exception:
+        return False
+
+def sanitize_header_value(val: str) -> str:
+    """Strip extraneous whitespace from incoming header values."""
+    return val.strip()
+
+def extract_idempotency_key(headers: Dict[str, str]) -> Optional[str]:
+    """Retrieve idempotency header value supporting case-insensitive lookup."""
+    for k, v in headers.items():
+        if k.lower() == "idempotency-key":
+            return sanitize_header_value(v)
+    return None
+
+def build_auth_bearer(token: str) -> str:
+    """Format bearer authentication header string."""
+    return f"Bearer {token.strip()}"
+
+def extract_trace_context(headers: Dict[str, str]) -> Optional[str]:
+    """Retrieve trace parent identifier from request headers."""
+    for k, v in headers.items():
+        if k.lower() in ("x-trace-id", "traceparent"):
+            return sanitize_header_value(v)
+    return None
+
+def generate_idempotency_key() -> str:
+    """Generate a new UUIDv4 string suitable for an idempotency key."""
+    return str(uuid.uuid4())
+=== END ===
+=== FILE: disbursement_client.py ===
+"""Fund Disbursement RPC Client RPC client header constructor."""
+from typing import Dict
+from idemp_helper import is_valid_uuid4, sanitize_header_value, generate_idempotency_key
+from idemp_model import wrap_request
+
+def build_disbursement_headers(entity_id: str) -> Dict[str, str]:
+    req = wrap_request("build_disbursement_headers", 1)
+    return {
+        "Content-Type": "application/json",
+        "X-Batch-Id": sanitize_header_value(entity_id),
+        "Idempotency-Key": generate_idempotency_key(),
+    }
+
+def build_client_request(entity_id: str) -> Dict[str, str]:
+    return build_disbursement_headers(entity_id)
+=== END ===

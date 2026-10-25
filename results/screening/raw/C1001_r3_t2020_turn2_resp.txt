@@ -1,0 +1,21 @@
+=== FILE: prefix_validator.py ===
+"""Topic path subscription matcher."""
+def is_topic_subscribed(subscribed_pattern: str, event_topic: str) -> bool:
+    # The original issue implies that a subscription to a root topic (e.g., "orders")
+    # should not match events from a different root topic that starts with the same prefix
+    # (e.g., "orders_admin").
+    # If the subscribed pattern is a simple root topic (does not contain '::'),
+    # we should perform an exact match on the event's root topic.
+    if "::" not in subscribed_pattern:
+        return event_topic.split("::")[0] == subscribed_pattern
+    else:
+        # If the subscribed pattern includes path segments (e.g., "orders::created"),
+        # then the original startswith logic is appropriate for matching sub-paths.
+        return event_topic.startswith(subscribed_pattern)
+
+def clean_topic_segment(topic: str) -> str:
+    return topic.strip().lower()
+
+def is_wildcard_subscription(pattern: str) -> bool:
+    return pattern.strip() in ("*", "**")
+=== END ===

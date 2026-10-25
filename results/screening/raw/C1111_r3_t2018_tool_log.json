@@ -1,0 +1,9 @@
+[
+  {
+    "timestamp": "2026-10-25T21:21:13.778789+00:00",
+    "command": "pytest -q tests",
+    "exit_code": 1,
+    "stdout_stderr": "FF                                                                       [100%]\n================================== FAILURES ===================================\n__________________________ test_nominal_scope_access __________________________\ntests\\test_rbac.py:4: in test_nominal_scope_access\n    assert check_scope_access(\"corp::public::*\", \"corp::public::readme\") is True\nE   AssertionError: assert False is True\nE    +  where False = check_scope_access('corp::public::*', 'corp::public::readme')\n_________________________ test_scope_prefix_boundary __________________________\ntests\\test_rbac.py:8: in test_scope_prefix_boundary\n    assert check_scope_access(\"corp::public\", \"corp::public_internal::secret\") is False\nE   AssertionError: assert True is False\nE    +  where True = check_scope_access('corp::public', 'corp::public_internal::secret')\n=========================== short test summary info ===========================\nFAILED tests/test_rbac.py::test_nominal_scope_access - AssertionError: assert...\nFAILED tests/test_rbac.py::test_scope_prefix_boundary - AssertionError: asser...\n2 failed in 0.24s\n",
+    "elapsed_seconds": 1.663
+  }
+]

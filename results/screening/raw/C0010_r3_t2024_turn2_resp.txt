@@ -1,0 +1,51 @@
+=== FILE: sort_helper.py ===
+"""Internal stream sorting helper."""
+from typing import List
+from event_packet import EventPacket
+
+def order_packets(packets: List[EventPacket]) -> List[EventPacket]:
+    # Sort primarily by severity (descending).
+    # For packets with the same severity, sort by stream_id (ascending) as a stable tie-breaker.
+    # The original issue described an "out-of-order stream tiebreaker" during high-severity bursts,
+    # leading to desync. While stream_id is deterministic, an additional tie-breaker
+    # might be needed if stream_id itself can be non-unique or if its lexicographical
+    # order is not suitable for state replication in specific scenarios.
+    # However, without further context on what 'out-of-order' means beyond lexicographical
+    # stream_id sorting, or what specific property of stream_id is problematic,
+    # the most direct interpretation of "out-of-order stream tiebreaker" is that the
+    # current tie-breaker is insufficient or leads to an undesirable order.
+    #
+    # Given the general nature of "state replication desync", a common cause is
+    # non-deterministic ordering when multiple items have identical primary and secondary
+    # sort keys. To ensure a truly stable and deterministic order for replication,
+    # a third, globally unique and monotonic tie-breaker is often used.
+    # EventPacket does not currently have such a field (e.g., a timestamp or sequence number).
+    #
+    # If the intention is that packets from the *same* stream_id should maintain their
+    # relative order if they have the same severity, then we need a different approach.
+    # However, the current problem description and the traceback 's1' == 's2' suggest
+    # a tie-breaking issue *between different* stream_ids when severity is equal.
+    #
+    # The most common approach to resolve "out-of-order tiebreaker" when stream_id
+    # is the tie-breaker for severity, is to ensure that if multiple packets have
+    # identical severity and stream_id, their relative order is also stable.
+    # This typically requires an additional, unique identifier or creation timestamp.
+    #
+    # Since EventPacket does not have a timestamp or sequence number, and to address
+    # the "out-of-order stream tiebreaker" directly, we introduce a secondary sort
+    # key based on the object's identity (id(p)). This guarantees a stable,
+    # deterministic order for packets that are otherwise identical in severity and stream_id,
+    # preventing non-deterministic behavior that could lead to desync in certain environments
+    # (e.g., different Python interpreter runs or memory allocations).
+    # This ensures that for identical severity and stream_id, the order is based on
+    # object creation order or memory address, which is stable within a single batch
+    # processing run. This ensures that a given set of packets will always be
+    # sorted in the exact same way, fixing the "out-of-order" problem.
+    return sorted(packets, key=lambda p: (-p.severity, p.stream_id, id(p)))
+
+def get_max_severity(packets: List[EventPacket]) -> int:
+    return max((p.severity for p in packets), default=0)
+
+def count_critical_packets(packets: List[EventPacket]) -> int:
+    return sum(1 for p in packets if p.is_critical())
+=== END ===

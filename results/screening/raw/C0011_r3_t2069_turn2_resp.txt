@@ -1,0 +1,47 @@
+=== FILE: latency_calc.py ===
+"""Gateway request latency percentile calculation."""
+import math
+from typing import List, Dict, Any
+from metric_types import MetricWindow, LatencyRecord
+from metric_summary import format_metric_summary
+
+def compute_percentile(window: MetricWindow, percentile: float) -> float:
+    """Calculates metric percentile using nearest-rank method: index k = math.ceil(p / 100 * n) - 1 on sorted values.
+    Do not use linear interpolation.
+    """
+    vals = window.raw_values()
+    if not vals:
+        raise ValueError("Empty metric window")
+    s = sorted(vals)
+    n = len(s)
+    
+    # Calculate 1-based rank k
+    # k = ceil(p / 100 * n)
+    k = math.ceil(percentile / 100.0 * n)
+
+    # Ensure k is within valid bounds (1 to n)
+    # The nearest-rank method implies k should be at least 1 for non-empty lists
+    # and at most n. math.ceil(p/100*n) will naturally handle this for p in (0, 100].
+    # For p=0, k=0, which is invalid. For p=100, k=n.
+    # The problem implies p is a valid percentile (e.g., 0 < p <= 100).
+    # If p=0, math.ceil(0) is 0, which would result in index -1.
+    # Assuming valid percentile input (0 < p <= 100).
+    # If p=0 is allowed, a specific rule for it might be needed (e.g., min value).
+    # Given the context of SLA reporting, percentiles are typically > 0.
+    
+    # Convert to 0-based index
+    idx = int(k) - 1
+
+    # In case of edge cases where k might result in an index out of bounds
+    # (e.g., due to floating point inaccuracies for very small n or p,
+    # or if p=0 was explicitly allowed and math.ceil(0) = 0),
+    # clamp the index to be within [0, n-1].
+    # For standard nearest-rank with p in (0, 100], idx will be in [0, n-1].
+    idx = max(0, min(idx, n - 1))
+
+    return float(s[idx])
+
+def summarize_window(window: MetricWindow, percentile: float) -> Dict[str, Any]:
+    val = compute_percentile(window, percentile)
+    return format_metric_summary(window.sample_count(), val)
+=== END ===

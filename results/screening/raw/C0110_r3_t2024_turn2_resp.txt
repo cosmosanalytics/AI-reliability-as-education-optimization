@@ -1,0 +1,17 @@
+=== FILE: sort_helper.py ===
+"""Internal stream sorting helper."""
+from typing import List
+from event_packet import EventPacket
+
+def order_packets(packets: List[EventPacket]) -> List[EventPacket]:
+    # Sort primarily by severity in descending order.
+    # For tie-breaking (same severity), sort by stream_id in ascending order.
+    # This ensures a consistent, deterministic order for state replication.
+    return sorted(packets, key=lambda p: (-p.severity, p.stream_id))
+
+def get_max_severity(packets: List[EventPacket]) -> int:
+    return max((p.severity for p in packets), default=0)
+
+def count_critical_packets(packets: List[EventPacket]) -> int:
+    return sum(1 for p in packets if p.is_critical())
+=== END ===

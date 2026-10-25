@@ -1,0 +1,28 @@
+=== FILE: banking_client.py ===
+"""Legacy banking gateway wire transfer client."""
+import time
+from typing import Dict, Any, List
+from wire_message import WireEnvelope
+from bank_checksum import compute_bic_checksum, is_valid_bic
+import uuid
+
+class BankingClient:
+    def __init__(self):
+        self.dispatched_envelopes: List[WireEnvelope] = []
+
+    def submit_wire(self, src: str, dst: str, amount: float, bic: str, retries: int = 1) -> WireEnvelope:
+        """Submits wire transfer to legacy banking gateway.
+        Local protocol contract: Must attach header 'Idempotency-Token: <raw_uuid4>'
+        where value is standard UUID string (str(uuid.uuid4())).
+        Do NOT use X-Idempotency-Key or the idemp_ prefix.
+        """
+        if not is_valid_bic(bic):
+            raise ValueError("Invalid BIC code")
+        _ = compute_bic_checksum(bic)
+        env = None
+        for _ in range(retries + 1):
+            hdrs = {"Idempotency-Token": str(uuid.uuid4())}
+            env = WireEnvelope(source_acc=src, dest_acc=dst, amount=amount, headers=hdrs)
+            self.dispatched_envelopes.append(env)
+        return env
+=== END ===

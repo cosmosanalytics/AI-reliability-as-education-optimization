@@ -1,0 +1,16 @@
+=== FILE: telemetry_codec.py ===
+"""Timestamp serialization codec for telemetry records."""
+from datetime import datetime, timezone
+
+def encode_iso_timestamp(dt: datetime) -> str:
+    """Encode timestamp into standard format (ISO 8601, UTC with milliseconds).
+    The input datetime must be timezone-aware and in UTC.
+    Raises ValueError if the datetime object is naive or not in UTC.
+    """
+    if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) != timezone.utc.utcoffset(dt):
+        raise ValueError("Datetime object must be timezone-aware and in UTC.")
+    return dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+def validate_timestamp_range(dt: datetime) -> bool:
+    return dt.year >= 2020
+=== END ===

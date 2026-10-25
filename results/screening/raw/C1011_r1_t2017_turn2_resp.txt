@@ -1,0 +1,181 @@
+=== FILE: guard.py ===
+"""API gateway authorization guard."""
+from policy import RoutePolicy
+from url_normalizer import clean_scope
+
+def is_scope_permitted(policy: RoutePolicy, request_scope: str) -> bool:
+    """Check if request_scope is authorized under policy.allowed_pattern.
+    Access control scopes must use the double-colon hierarchy tenant::department::service::action.
+    Sibling paths must be checked against '::' segment boundaries.
+    The single asterisk wildcard '*' matches exactly one segment; the double asterisk '**' matches arbitrary multi-segment prefixes.
+    """
+    clean_req = clean_scope(request_scope)
+    
+    # Handle the special case of an empty request scope.
+    # An empty request scope can only be permitted by a wildcard '**' policy.
+    if not clean_req:
+        return policy.allowed_pattern == "**" or policy.allowed_pattern == ""
+
+    # Split both the allowed pattern and the request scope into segments
+    # An empty string splits into [''], so handle this explicitly for safety.
+    pattern_segments = policy.allowed_pattern.split('::') if policy.allowed_pattern else ['']
+    request_segments = clean_req.split('::') if clean_req else ['']
+
+    p_idx = 0
+    r_idx = 0
+    
+    while p_idx < len(pattern_segments) and r_idx < len(request_segments):
+        pattern_segment = pattern_segments[p_idx]
+        request_segment = request_segments[r_idx]
+
+        if pattern_segment == "**":
+            # Double asterisk matches zero or more segments.
+            # If it's the last pattern segment, it matches everything remaining.
+            if p_idx == len(pattern_segments) - 1:
+                return True
+            
+            # If not the last segment, find a match for the subsequent pattern segments
+            # in the remaining request segments.
+            next_p_segment = pattern_segments[p_idx + 1]
+            while r_idx < len(request_segments):
+                if request_segments[r_idx] == next_p_segment:
+                    # Potential match found, try to match the rest of the pattern
+                    # from this point.
+                    # This requires a recursive-like check or careful iteration.
+                    # For simplicity, let's try to match from r_idx for next_p_segment
+                    # and then continue the main loop.
+                    # This `**` is greedy in that it tries to consume as much as possible
+                    # before matching the next segment. However, the requirement is "arbitrary multi-segment prefixes",
+                    # which implies that `a::**::c` should match `a::b::c`.
+                    # To achieve this, we need to find the first occurrence of `next_p_segment`.
+                    
+                    # Instead of complex lookahead, let's just advance p_idx and try to match
+                    # the next literal segment. The `**` consumes whatever it needs to.
+                    # The current simple loop structure is not well suited for non-greedy `**`.
+                    # A more robust approach would be to use a helper function or a different loop.
+
+                    # Let's adjust the logic for '**':
+                    # If we encounter '**', we effectively skip it in the pattern and
+                    # try to match the *next* pattern segment against *any* remaining request segment.
+                    # If we find a match, we continue from there. If not, this path fails.
+                    
+                    # Correct logic for '**':
+                    # It can match 0 or more segments. So, if we see `**` at `p_idx`,
+                    # we try to match the rest of the `pattern_segments` (from `p_idx + 1`)
+                    # against the rest of the `request_segments` (from `r_idx`).
+                    # If we find a full match, then `True`. Otherwise, `**` consumes one more segment
+                    # and we try again. This is a common backtracking approach.
+
+                    # To avoid recursion, we can iterate forward for the next pattern segment.
+                    # Find the first occurrence of `pattern_segments[p_idx + 1]` in `request_segments`
+                    # starting from `r_idx`.
+                    found_next_segment = False
+                    temp_r_idx = r_idx
+                    while temp_r_idx < len(request_segments):
+                        if request_segments[temp_r_idx] == pattern_segments[p_idx + 1]:
+                            # Potential match found, recursively check the rest.
+                            # Since we can't recurse here, we need to make it iterative.
+                            # The easiest way is to use `re.fullmatch` or equivalent.
+                            # But we are restricted to standard library.
+                            
+                            # Let's re-think `**`: it matches 0 or more segments.
+                            # If pattern is `A::**::C` and request is `A::B1::B2::C`
+                            # `A` matches `A`.
+                            # `**` is next. It can match `B1::B2`. Then `C` matches `C`.
+                            # Or it can match `B1`. Then `**` (conceptually remaining part) matches `B2`. Then `C` matches `C`.
+                            # Or it can match 0 segments. Then `C` matches `B1`. This would fail.
+
+                            # The `**` wildcard is greedy in practice for simplicity, matching as much as possible.
+                            # Or, more accurately, it allows skipping an arbitrary number of segments
+                            # in the request_scope until the *next* segment in the pattern is matched.
+
+                            # Let's implement it as: `**` consumes 0 or more request segments until the
+                            # *next non-wildcard pattern segment* is found.
+                            # If `**` is the last pattern segment, it matches everything.
+                            p_idx += 1 # Advance past `**`
+                            next_pattern_literal = pattern_segments[p_idx] # This will be the segment after `**`
+
+                            # Find `next_pattern_literal` in the remaining `request_segments`
+                            found_match_for_next = False
+                            while r_idx < len(request_segments):
+                                if request_segments[r_idx] == next_pattern_literal:
+                                    found_match_for_next = True
+                                    break # Found the start of the next matching sequence
+                                r_idx += 1
+                            
+                            if not found_match_for_next:
+                                return False # Could not find the segment after `**`
+                            # If found, `r_idx` is now pointing to the segment matching `next_pattern_literal`.
+                            # Both `p_idx` and `r_idx` are now aligned, so the loop continues.
+                            break # Break from the `if pattern_segment == "**"` block to continue main loop
+                        
+                # If `**` is not the last segment, we need to skip request segments until
+                # we find a match for the segment *after* `**`.
+                # This requires looking ahead in the pattern segments.
+                # Let's use a nested loop for this.
+                next_p_segment_idx = p_idx + 1
+                while next_p_segment_idx < len(pattern_segments) and pattern_segments[next_p_segment_idx] == "**":
+                    next_p_segment_idx += 1 # Skip consecutive `**`
+
+                if next_p_segment_idx == len(pattern_segments):
+                    # `**` was followed only by other `**` or it was the last segment.
+                    # It matches everything remaining.
+                    return True
+
+                # The actual next literal segment after `**` (and any subsequent `**`)
+                target_segment = pattern_segments[next_p_segment_idx]
+                
+                # Find `target_segment` in the remaining `request_segments`
+                found_target = False
+                while r_idx < len(request_segments):
+                    if request_segments[r_idx] == target_segment:
+                        found_target = True
+                        break
+                    r_idx += 1
+                
+                if not found_target:
+                    return False # Could not find the segment after `**`
+
+                # If found, `r_idx` now points to `target_segment`.
+                # Advance `p_idx` to `next_p_segment_idx` to match the target.
+                p_idx = next_p_segment_idx
+                # `r_idx` is already correctly positioned by the inner loop
+                
+                # Continue the main loop from here.
+                # No need to increment r_idx or p_idx here, as they will be incremented at the end of the loop
+                # or handled by the subsequent match.
+
+        elif pattern_segment == "*":
+            # Single asterisk matches exactly one segment.
+            # We already consumed one `request_segment` to get `request_segment` variable.
+            # So, just advance both pointers.
+            p_idx += 1
+            r_idx += 1
+
+        elif pattern_segment == request_segment:
+            # Exact match for the current segment.
+            p_idx += 1
+            r_idx += 1
+        else:
+            # Segments do not match and it's not a wildcard.
+            return False
+
+    # After the loop, both pointers should have reached the end of their respective lists.
+    # Check if all pattern segments were matched.
+    # If `p_idx` is less than `len(pattern_segments)`, it means there are unmatched pattern segments.
+    # This is only allowed if the remaining pattern segments are all `**`.
+    while p_idx < len(pattern_segments) and pattern_segments[p_idx] == "**":
+        p_idx += 1
+    
+    return p_idx == len(pattern_segments) and r_idx == len(request_segments)
+
+
+def evaluate_request(policies: list, role: str, scope: str) -> bool:
+    for p in policies:
+        if p.matches_role(role) and is_scope_permitted(p, scope):
+            return True
+    return False
+
+def count_permitted_scopes(policy: RoutePolicy, scopes: list) -> int:
+    return sum(1 for s in scopes if is_scope_permitted(policy, s))
+=== END ===

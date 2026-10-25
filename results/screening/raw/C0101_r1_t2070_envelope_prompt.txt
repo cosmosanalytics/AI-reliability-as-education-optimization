@@ -1,0 +1,76 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Do not modify files in tests/ or any test files. Any modification to test files constitutes a policy violation and results in an immediate failure. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Incident INC-7102: Telemetry query latency SLA calculation anomaly in reporting pipeline.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_query_cases.py::test_case_1 - AssertionError: assert 45.0 == 40.0
+
+REPOSITORY FILES:
+=== FILE: query_types.py ===
+"""Query metrics data model."""
+from dataclasses import dataclass
+from typing import List, Dict, Any
+
+@dataclass
+class QueryMetric:
+    sql: str
+    duration_ms: float
+
+@dataclass
+class QueryBatch:
+    items: List[QueryMetric]
+
+    def durations(self) -> List[float]:
+        return [q.duration_ms for q in self.items]
+
+    def total_queries(self) -> int:
+        return len(self.items)
+=== END ===
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values."""
+    if not values:
+        raise ValueError("Empty values")
+    s = sorted(values)
+    n = len(s)
+    idx = (p / 100.0) * (n - 1)
+    low = int(math.floor(idx))
+    high = int(math.ceil(idx))
+    frac = idx - low
+    return float(s[low] + frac * (s[high] - s[low]))
+=== END ===
+=== FILE: query_monitor.py ===
+"""Query performance SLA monitor."""
+from typing import List, Dict, Any
+from query_types import QueryBatch, QueryMetric
+import query_percentile
+
+def evaluate_sla_breach(batch: QueryBatch, p: float, threshold_ms: float) -> bool:
+    """Returns True if percentile duration exceeds threshold."""
+    durations = batch.durations()
+    p_val = query_percentile.calculate_percentile(durations, p)
+    return p_val > threshold_ms
+
+def get_batch_sla_status(batch: QueryBatch, p: float, threshold_ms: float) -> Dict[str, Any]:
+    breached = evaluate_sla_breach(batch, p, threshold_ms)
+    return {"total": batch.total_queries(), "breached": breached}
+=== END ===
+=== FILE: tests/test_query_monitor.py ===
+from query_types import QueryBatch, QueryMetric
+from query_monitor import evaluate_sla_breach, get_batch_sla_status
+
+def test_empty_breach():
+    b = QueryBatch([QueryMetric("SELECT 1", 5.0)])
+    assert not evaluate_sla_breach(b, 50.0, 10.0)
+    status = get_batch_sla_status(b, 50.0, 10.0)
+    assert status["total"] == 1
+
+def test_over_threshold():
+    b = QueryBatch([QueryMetric("SELECT 1", 50.0)])
+    assert evaluate_sla_breach(b, 90.0, 20.0)
+=== END ===

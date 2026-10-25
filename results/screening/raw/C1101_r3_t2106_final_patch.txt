@@ -1,0 +1,53 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values)
+    n = len(s)
+
+    # Validate percentile input
+    if not (0.0 <= p <= 100.0):
+        raise ValueError("Percentile 'p' must be between 0 and 100 inclusive.")
+
+    # Handle edge cases for number of samples
+    if n == 0:
+        # validate_metric_samples already raises ValueError for empty list,
+        # but this explicit check provides a more specific message for percentile.
+        raise ValueError("Samples list cannot be empty for percentile calculation.")
+    if n == 1:
+        return s[0]
+
+    # Implement the "nearest-rank house standard" for percentile calculation.
+    # The failing test traceback (expected 40.0, got 45.0 for 50th percentile)
+    # suggests that for an even number of samples, the lower of the two
+    # middle values is chosen if the index falls exactly between two ranks.
+    # For a 0-indexed sorted array 's' of length 'n', this typically corresponds
+    # to calculating the index as `math.floor((p / 100.0) * (n - 1))`.
+    #
+    # Example for d1 = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0], n=8, p=50.0:
+    # Original code (interpolation):
+    #   idx = (50.0 / 100.0) * (8 - 1) = 0.5 * 7 = 3.5
+    #   low = 3, high = 4
+    #   result = s[3] + (3.5 - 3) * (s[4] - s[3]) = 40.0 + 0.5 * (50.0 - 40.0) = 45.0
+    #
+    # Expected result from traceback: 40.0 (which is s[3]).
+    #
+    # New nearest-rank calculation:
+    #   idx = int(math.floor((p / 100.0) * (n - 1)))
+    #   For p=50.0, n=8:
+    #   idx = int(math.floor((50.0 / 100.0) * (8 - 1))) = int(math.floor(0.5 * 7))
+    #       = int(math.floor(3.5)) = int(3) = 3
+    #   result = s[3] = 40.0. This matches the expected value.
+    #
+    # This method also correctly handles p=0 (index 0) and p=100 (index n-1).
+    idx = int(math.floor((p / 100.0) * (n - 1)))
+    return s[idx]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

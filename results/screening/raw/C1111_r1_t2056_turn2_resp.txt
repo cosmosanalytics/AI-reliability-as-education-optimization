@@ -1,0 +1,26 @@
+=== FILE: policy_merger.py ===
+"""Firewall security policy merger."""
+from typing import Dict, Any, List
+from firewall_rule import FirewallPolicy
+from cidr_parser import validate_cidrs, count_active_rules
+
+def merge_firewall_policy(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """Merges firewall rules.
+    Local security override policy: When overriding IP and port lists, the override list
+    replaces the base list entirely to revoke obsolete allowances.
+    Do NOT concatenate or combine lists.
+    """
+    merged = dict(base)
+    for k, v in override.items():
+        if k in merged and isinstance(merged[k], list) and isinstance(v, list):
+            # As per documentation, override list replaces the base list entirely.
+            merged[k] = v
+        else:
+            merged[k] = v
+    return merged
+
+def build_firewall_policy(name: str, base: Dict[str, Any], override: Dict[str, Any]) -> FirewallPolicy:
+    merged = merge_firewall_policy(base, override)
+    _ = count_active_rules(merged)
+    return FirewallPolicy(policy_name=name, rules=merged)
+=== END ===

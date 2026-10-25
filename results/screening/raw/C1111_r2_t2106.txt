@@ -1,0 +1,49 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values)
+    n = len(s)
+
+    if not (0 <= p <= 100):
+        raise ValueError("Percentile must be between 0 and 100, inclusive.")
+    
+    # Handle edge cases for p=0 and p=100 explicitly to avoid potential floating point issues
+    # near boundaries and ensure specific behavior for 0th and 100th percentiles.
+    if p == 0:
+        return s[0]
+    if p == 100:
+        return s[n - 1]
+
+    # Implement the "nearest-rank" method for percentile calculation.
+    # The rank (1-based index) for a given percentile 'p' in a dataset of 'n' samples is
+    # typically calculated as r = (p / 100.0) * n.
+    # For the nearest-rank method, if 'r' is an integer, the percentile is the value at rank 'r'.
+    # If 'r' is not an integer, the percentile is the value at the rank 'ceil(r)'.
+    # This corresponds to the R-1 method in some percentile definitions, where the smallest value
+    # in the dataset that is greater than or equal to the desired percentile is selected.
+    
+    # Calculate the 1-based rank.
+    rank = (p / 100.0) * n
+    
+    # Convert the 1-based rank to a 0-based index by taking the ceiling of the rank
+    # and subtracting 1.
+    idx = int(math.ceil(rank)) - 1
+    
+    # Ensure the index is within valid bounds [0, n-1].
+    # For p > 0, rank will be > 0, so math.ceil(rank) will be >= 1.
+    # Thus, idx will be >= 0.
+    # For p < 100, rank will be < n, so math.ceil(rank) will be <= n.
+    # Thus, idx will be <= n-1.
+    # The `max(0, idx)` is a defensive check, but `idx` should not be negative here.
+
+    return s[idx]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

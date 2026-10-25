@@ -1,0 +1,56 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values.
+
+    This implementation uses the "nearest-rank" method (Type 3 or NIST method)
+    for percentile calculation, where the index is calculated as `p * N / 100`.
+    For non-integer indices, linear interpolation is applied. This method is
+    often preferred for SLA calculations as it provides a more direct
+    interpretation of the p-th element in a sorted list.
+    """
+    if not values:
+        raise ValueError("Empty values")
+    s = sorted(values)
+    n = len(s)
+
+    # Calculate the rank (1-based index) using the p*N/100 method.
+    # This method treats the p-th percentile as the value at rank p*N/100.
+    rank = (p / 100.0) * n
+
+    # Handle edge cases for p=0 and p=100 explicitly or implicitly.
+    # If rank is 0 or less, it's the first element.
+    if rank <= 0:
+        return float(s[0])
+    # If rank is equal to or greater than n, it's the last element.
+    if rank >= n:
+        return float(s[n - 1])
+
+    # Convert rank to 0-based index for array access.
+    # The 'rank' value is a float, e.g., for 50th percentile in 10 items, rank = 5.0.
+    # For interpolation, we need the lower and upper indices.
+    # If rank is an integer (e.g., 5.0), the value is s[rank - 1].
+    # If rank is not an integer (e.g., 5.5), interpolate between s[floor(rank)-1] and s[ceil(rank)-1].
+
+    # Determine the 0-based indices for interpolation.
+    low_idx = int(math.floor(rank)) - 1
+    high_idx = int(math.ceil(rank)) - 1
+
+    # Ensure indices are within valid bounds (0 to n-1).
+    low_idx = max(0, low_idx)
+    high_idx = min(n - 1, high_idx)
+
+    # If the rank is an exact integer, or if low_idx and high_idx are the same,
+    # no interpolation is needed. Return the value at low_idx (which is rank-1).
+    if low_idx == high_idx:
+        return float(s[low_idx])
+
+    # Perform linear interpolation.
+    # The fractional part for interpolation is based on the rank.
+    frac = rank - math.floor(rank)
+
+    return float(s[low_idx] + frac * (s[high_idx] - s[low_idx]))
+=== END ===

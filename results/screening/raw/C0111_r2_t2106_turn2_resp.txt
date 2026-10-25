@@ -1,0 +1,40 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values)
+    # The "nearest-rank house standard" for percentiles typically uses the
+    # definition where the index is calculated as (p/100 * N), rounded up,
+    # and then adjusting for 0-indexing. This is often referred to as the
+    # "nearest rank" method or a variant of the R-1 method.
+    # The original implementation used a linear interpolation method.
+    # To align with the "nearest-rank" standard, we calculate the index
+    # based on (p/100 * N) and use math.ceil to find the rank.
+    n = len(s)
+    if n == 0:
+        raise ValueError("Cannot calculate percentile for empty samples list")
+    
+    # Calculate the 1-based rank (index)
+    rank = math.ceil((p / 100.0) * n)
+    
+    # Adjust to 0-based index for list access
+    # Ensure rank is within valid bounds [1, n]
+    # If p=0, rank can be 0, but ceil((0/100)*N) is 0, which gives index -1.
+    # The smallest rank is 1 (index 0), the largest is N (index N-1).
+    if rank < 1:
+        idx = 0
+    elif rank > n:
+        idx = n - 1
+    else:
+        idx = int(rank) - 1
+        
+    return s[idx]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

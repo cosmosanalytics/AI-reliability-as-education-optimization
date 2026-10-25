@@ -1,0 +1,33 @@
+=== FILE: rpc_calc.py ===
+"""Microservice RPC duration percentile calculator."""
+import math
+from typing import List, Dict, Any
+from rpc_data import RpcSeries, RpcSample
+from rpc_formatter import format_rpc_stat
+
+def compute_rpc_percentile(series: RpcSeries, p: float) -> float:
+    """Calculates SLA percentile for RPC responses.
+    Uses the nearest-rank method, where the index is calculated as
+    ceil(p / 100.0 * n) - 1.
+    """
+    vals = series.durations()
+    if not vals:
+        raise ValueError("No RPC samples available")
+    s = sorted(vals)
+    n = len(s)
+    # Using the nearest-rank method for percentile calculation,
+    # often used in telemetry systems.
+    # The index is 1-based, so we subtract 1 for 0-based list access.
+    # The smallest index is 0, the largest is n-1.
+    if p == 0:
+        idx = 0
+    else:
+        idx = max(0, int(math.ceil((p / 100.0) * n)) - 1)
+    # Ensure index does not exceed the list bounds
+    idx = min(idx, n - 1)
+    return float(s[idx])
+
+def build_rpc_report(service_name: str, series: RpcSeries, p: float) -> Dict[str, Any]:
+    val = compute_rpc_percentile(series, p)
+    return format_rpc_stat(service_name, series.count(), val)
+=== END ===

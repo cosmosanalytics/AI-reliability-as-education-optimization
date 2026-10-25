@@ -1,0 +1,60 @@
+=== FILE: rpc_calc.py ===
+"""Microservice RPC duration percentile calculator."""
+import math
+from typing import List, Dict, Any
+from rpc_data import RpcSeries, RpcSample
+from rpc_formatter import format_rpc_stat
+
+def compute_rpc_percentile(series: RpcSeries, p: float) -> float:
+    """Calculates SLA percentile for RPC responses.
+
+    This function uses the "linear interpolation between closest ranks" method (R-7).
+    The rank is calculated as L = (p / 100.0) * (n - 1), and the percentile is
+    interpolated between the two closest values. This method is commonly used in
+    statistical software and provides a more robust percentile calculation than
+    simple nearest rank, especially for smaller datasets.
+    """
+    vals = series.durations()
+    if not vals:
+        raise ValueError("No RPC samples available")
+    s = sorted(vals)
+    n = len(s)
+
+    # Handle edge cases for p=0 and p=100 explicitly for clarity and to avoid
+    # floating point issues with interpolation at boundaries.
+    if p == 0:
+        return float(s[0])
+    if p == 100:
+        return float(s[n - 1])
+
+    # Calculate the rank (L) for the percentile using the (n-1) denominator
+    # consistent with 0-indexed arrays and common interpolation methods.
+    # The percentile index is calculated as L = p/100 * (N-1).
+    # This is equivalent to method R-7 (linear interpolation between closest ranks).
+    index_float = (p / 100.0) * (n - 1)
+
+    # Determine the lower and upper indices for interpolation
+    # math.floor gives the lower rank, math.ceil gives the upper rank
+    # Note: L can be an integer, e.g., for p=50, n=5, L=2.0
+    # In this case, i = 2, j = 2.
+    i = math.floor(index_float)
+    j = math.ceil(index_float)
+
+    # If i and j are the same (L is an integer), no interpolation is needed.
+    # Otherwise, interpolate between s[i] and s[j].
+    if i == j:
+        return float(s[int(index_float)])
+    else:
+        # Ensure indices are within bounds, though they should be for p in [0, 100]
+        i = max(0, min(i, n - 1))
+        j = max(0, min(j, n - 1))
+
+        # Perform linear interpolation
+        # P_p = V_i + (L - i) * (V_j - V_i)
+        return float(s[i] + (index_float - i) * (s[j] - s[i]))
+
+
+def build_rpc_report(service_name: str, series: RpcSeries, p: float) -> Dict[str, Any]:
+    val = compute_rpc_percentile(series, p)
+    return format_rpc_stat(service_name, series.count(), val)
+=== END ===

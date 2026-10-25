@@ -1,0 +1,48 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values)
+    n = len(s)
+
+    # The incident report INC-2106 specifies adherence to a "nearest-rank house standard"
+    # for percentile calculation. This standard selects an actual data point rather than
+    # interpolating. The common interpretation for "nearest rank" (often R-1)
+    # calculates `rank = p/100 * n` and uses the element at `ceil(rank) - 1` (0-indexed).
+    # This aligns with the expected value from the failing test.
+
+    if not (0.0 <= p <= 100.0):
+        raise ValueError("Percentile 'p' must be between 0.0 and 100.0")
+
+    if n == 0:
+        # validate_metric_samples already handles this, but explicit check for clarity.
+        raise ValueError("Samples list cannot be empty for percentile calculation")
+
+    if p == 0.0:
+        return s[0]
+    if p == 100.0:
+        return s[-1]
+
+    # Calculate the 1-indexed rank based on p/100 * n
+    rank = (p / 100.0) * n
+    # Convert to 0-indexed position by taking the ceiling of the rank and subtracting 1.
+    index = int(math.ceil(rank)) - 1
+
+    # Ensure the calculated index is within valid bounds for the list.
+    # This is primarily a safeguard; the logic for p=0 and p=100 handles extremes.
+    # For 0 < p < 100, index should naturally fall between 0 and n-1.
+    if index < 0:
+        index = 0 # Should only happen if p is very close to 0 but not 0
+    if index >= n:
+        index = n - 1 # Should only happen if p is very close to 100 but not 100
+
+    return s[index]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

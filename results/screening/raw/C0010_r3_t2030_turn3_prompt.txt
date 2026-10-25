@@ -1,0 +1,16 @@
+=== TOOL_OUTPUT (exit code: 1) ===
+F.                                                                       [100%]
+================================== FAILURES ===================================
+___________________________ test_service_execution ____________________________
+tests\test_tenant_cases.py:11: in test_service_execution
+    authorize_tenant_action(ctx, required_scope)
+tenant_guard.py:11: in authorize_tenant_action
+    raise ValueError(f"Scope {required_scope} denied for tenant {ctx.tenant_id}")
+E   ValueError: Scope admin:write denied for tenant t1
+=========================== short test summary info ===========================
+FAILED tests/test_tenant_cases.py::test_service_execution - ValueError: Scope...
+1 failed, 1 passed in 0.31s
+
+=== END_TOOL_OUTPUT ===
+
+If further modifications or tests are needed, output revised tool blocks or file blocks. When you are finished, output your complete final patch in === FILE === format.

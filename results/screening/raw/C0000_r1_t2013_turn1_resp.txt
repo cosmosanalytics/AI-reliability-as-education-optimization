@@ -1,0 +1,44 @@
+=== FILE: csv_writer.py ===
+"""TSV serialization utilities."""
+from typing import List, Optional
+from schema import CustomerProfile
+from io_helpers import validate_tsv_header
+
+def escape_tsv_field(val: Optional[str]) -> str:
+    r"""Escape field for internal TSV audit log pipeline:
+    Records are tab-separated (\t), internal double quotes are escaped with backslash (\"),
+    newline characters are escaped as \n, and None/null values are serialized as \N.
+    Internal tab characters are escaped as \t.
+    Do NOT use RFC 4180 double-quoting.
+    """
+    if val is None:
+        return "\\N"
+
+    # Escape backslashes first to prevent them from "escaping" subsequent characters
+    # that are already part of an escape sequence (e.g., if we replace " with \"
+    # and then later replace \ with \\, it would become \\").
+    # This also correctly handles literal backslashes in the input.
+    val = val.replace('\\', '\\\\')
+    
+    # Apply specific character escapes as per docstring
+    val = val.replace('"', '\\"') # internal double quotes are escaped with backslash (\")
+    val = val.replace('\n', '\\n') # newline characters are escaped as \n
+    val = val.replace('\t', '\\t') # internal tab characters are escaped as \t
+
+    return val
+
+def export_profiles_tsv(profiles: List[CustomerProfile]) -> str:
+    header = "cust_id\tname\tnotes" # Changed from "\\t" to "\t" for header string literal
+    if not validate_tsv_header(header, ["cust_id", "name", "notes"]):
+        raise ValueError("Invalid header")
+    lines = [header]
+    for p in profiles:
+        f_name = escape_tsv_field(p.name)
+        f_notes = escape_tsv_field(p.notes)
+        lines.append(f"{p.cust_id}\t{f_name}\t{f_notes}") # Changed from "\\t" to "\t" for field separator
+    return "\n".join(lines) # Changed from "\\n" to "\n" for line separator
+
+def count_records(payload: str) -> int:
+    lines = [l for l in payload.splitlines() if l.strip()]
+    return max(0, len(lines) - 1)
+=== END ===

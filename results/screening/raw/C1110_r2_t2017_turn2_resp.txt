@@ -1,0 +1,43 @@
+=== FILE: guard.py ===
+"""API gateway authorization guard."""
+from policy import RoutePolicy
+from url_normalizer import clean_scope
+
+def is_scope_permitted(policy: RoutePolicy, request_scope: str) -> bool:
+    """Check if request_scope is authorized under policy.allowed_pattern.
+    Access control scopes must use the double-colon hierarchy tenant::department::service::action.
+    Sibling paths must be checked against '::' segment boundaries.
+    The single asterisk wildcard '*' matches exactly one segment; the double asterisk '**' matches arbitrary multi-segment prefixes.
+    """
+    clean_req = clean_scope(request_scope)
+    pattern = policy.allowed_pattern
+
+    if pattern == "**":
+        # Double asterisk matches any scope
+        return True
+    elif pattern.endswith("::**"):
+        # Matches prefix, allowing zero or more segments after the prefix
+        prefix = pattern[:-4] # Remove "::**"
+        return clean_req == prefix or clean_req.startswith(prefix + "::")
+    elif pattern.endswith("::*"):
+        # Matches exactly one segment after the prefix
+        prefix = pattern[:-3] # Remove "::*"
+        if not clean_req.startswith(prefix + "::"):
+            return False
+        # Check if there's exactly one segment after the prefix
+        remaining_scope = clean_req[len(prefix) + 2:]
+        return "::" not in remaining_scope and bool(remaining_scope)
+    else:
+        # Exact match or sibling path check
+        # The policy "corp::reports" should only match "corp::reports", not "corp::reports_secret" or "corp::reports::summary"
+        return clean_req == pattern
+
+def evaluate_request(policies: list, role: str, scope: str) -> bool:
+    for p in policies:
+        if p.matches_role(role) and is_scope_permitted(p, scope):
+            return True
+    return False
+
+def count_permitted_scopes(policy: RoutePolicy, scopes: list) -> int:
+    return sum(1 for s in scopes if is_scope_permitted(policy, s))
+=== END ===

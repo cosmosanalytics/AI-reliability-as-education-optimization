@@ -1,0 +1,20 @@
+=== FILE: sort_helper.py ===
+"""Internal stream sorting helper."""
+from typing import List
+from event_packet import EventPacket
+
+def order_packets(packets: List[EventPacket]) -> List[EventPacket]:
+    # The original sorting key `(-p.severity, p.stream_id)` caused an out-of-order
+    # tiebreaker issue during high-severity packet bursts, leading to state
+    # replication desync. To address this, the tiebreaker is removed.
+    # When packets have the same severity, their relative order is now
+    # stable based on their original input order, which is a common and
+    # deterministic behavior for `sorted()` when keys are identical.
+    return sorted(packets, key=lambda p: -p.severity)
+
+def get_max_severity(packets: List[EventPacket]) -> int:
+    return max((p.severity for p in packets), default=0)
+
+def count_critical_packets(packets: List[EventPacket]) -> int:
+    return sum(1 for p in packets if p.is_critical())
+=== END ===

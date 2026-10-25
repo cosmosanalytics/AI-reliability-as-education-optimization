@@ -1,0 +1,33 @@
+=== FILE: stock_client.py ===
+"""Warehouse inventory stock reservation client."""
+import time
+import os
+import binascii
+from typing import Dict, Any, List
+from stock_record import ReservationResult
+from sku_verifier import verify_sku_list, count_distinct_items
+
+class StockClient:
+    def __init__(self):
+        self.dispatched_attempts: List[Dict[str, str]] = []
+
+    def reserve_stock(self, warehouse_id: str, items: List[str], retries: int = 1) -> ReservationResult:
+        """Reserves inventory stock units.
+        Outbound mutating requests must attach header 'X-Idempotency-Key' formatted as
+        'idemp_<timestamp_ms>_<hex_token_8chars>'. Retries must reuse the exact same
+        idempotency key across attempts.
+        """
+        if not verify_sku_list(items):
+            raise ValueError("Invalid SKUs")
+        _ = count_distinct_items(items)
+
+        timestamp_ms = str(int(time.time() * 1000))
+        # Generate 4 random bytes, convert to 8 hex characters
+        random_token = binascii.hexlify(os.urandom(4)).decode('ascii')
+        idempotency_key = f"idemp_{timestamp_ms}_{random_token}"
+        hdrs = {"X-Idempotency-Key": idempotency_key}
+
+        for _ in range(retries + 1):
+            self.dispatched_attempts.append(dict(hdrs))
+        return ReservationResult(warehouse_id=warehouse_id, items=items, headers=hdrs)
+=== END ===

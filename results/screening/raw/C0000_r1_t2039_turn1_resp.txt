@@ -1,0 +1,31 @@
+=== FILE: telemetry_stream.py ===
+"""Telemetry metric streaming normalizer."""
+from key_normalizer import normalize_dict_keys, extract_normalized_keys
+from wire_envelope import build_envelope, is_valid_envelope, extract_payload
+from typing import Dict, Any
+
+# Define a default service name for the envelope.
+# In a real application, this would likely be configurable or passed as an argument.
+_DEFAULT_SERVICE_NAME = "telemetry_service"
+
+def prepare_metric_packet(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    """Prepare telemetry metric packet for distribution to event stream.
+    This involves wrapping the raw data into a standard wire envelope.
+    """
+    # Normalize keys in the payload before building the envelope
+    normalized_data = normalize_dict_keys(data)
+    return build_envelope(
+        service_name=_DEFAULT_SERVICE_NAME,
+        epoch_ms=epoch_ms,
+        payload=normalized_data
+    )
+
+def publish_stream_packet(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    pkt = prepare_metric_packet(data, epoch_ms)
+    # The following lines were for internal checks but are not necessary for the return value
+    # and might be misleading if they imply the raw `data` itself is an envelope.
+    # The `pkt` object returned by `prepare_metric_packet` is now the enveloped packet.
+    _ = is_valid_envelope(pkt) # This check now correctly applies to the enveloped packet.
+    _ = extract_normalized_keys(data) # This operates on the original data, which is fine.
+    return pkt
+=== END ===

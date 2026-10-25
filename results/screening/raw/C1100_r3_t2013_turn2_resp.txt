@@ -1,0 +1,45 @@
+=== FILE: csv_writer.py ===
+"""TSV serialization utilities."""
+from typing import List, Optional
+from schema import CustomerProfile
+from io_helpers import validate_tsv_header
+
+def escape_tsv_field(val: Optional[str]) -> str:
+    r"""Escape field for internal TSV audit log pipeline:
+    Records are tab-separated (\t), internal double quotes are escaped with backslash (\"),
+    newline characters are escaped as \n, and None/null values are serialized as \N.
+    Do NOT use RFC 4180 double-quoting.
+    """
+    if val is None:
+        return r"\N"
+
+    # Replace actual newline characters with the literal escape sequence "\n"
+    escaped_val = val.replace("\n", r"\n")
+    # Replace actual double quotes with the literal escape sequence "\""
+    escaped_val = escaped_val.replace('"', r'\"')
+
+    return escaped_val
+
+def export_profiles_tsv(profiles: List[CustomerProfile]) -> str:
+    # The header for the TSV file should use actual tab characters as delimiters.
+    header_cols = ["cust_id", "name", "notes"]
+    header = "\t".join(header_cols)
+
+    if not validate_tsv_header(header, header_cols):
+        raise ValueError("Invalid header")
+
+    lines = [header]
+    for p in profiles:
+        f_name = escape_tsv_field(p.name)
+        f_notes = escape_tsv_field(p.notes)
+        # Fields are joined by actual tab characters.
+        lines.append(f"{p.cust_id}\t{f_name}\t{f_notes}")
+    # Lines are joined by actual newline characters.
+    return "\n".join(lines)
+
+def count_records(payload: str) -> int:
+    # `splitlines()` correctly handles various newline characters, including '\n'.
+    # This is appropriate for counting actual lines in the payload.
+    lines = [l for l in payload.splitlines() if l.strip()]
+    return max(0, len(lines) - 1)
+=== END ===

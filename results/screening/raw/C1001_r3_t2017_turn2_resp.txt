@@ -1,0 +1,73 @@
+=== FILE: guard.py ===
+"""API gateway authorization guard."""
+from policy import RoutePolicy
+from url_normalizer import clean_scope
+
+def is_scope_permitted(policy: RoutePolicy, request_scope: str) -> bool:
+    """Check if request_scope is authorized under policy.allowed_pattern.
+    Access control scopes must use the double-colon hierarchy tenant::department::service::action.
+    Sibling paths must be checked against '::' segment boundaries.
+    The single asterisk wildcard '*' matches exactly one segment; the double asterisk '**' matches arbitrary multi-segment prefixes.
+    """
+    clean_req = clean_scope(request_scope)
+    policy_pattern = policy.allowed_pattern
+
+    policy_segments = policy_pattern.split('::')
+    request_segments = clean_req.split('::')
+
+    # Handle the full wildcard policy (matches anything)
+    if policy_pattern == "**":
+        return True
+    
+    # Special case for empty policy pattern matching empty request
+    if policy_pattern == "" and clean_req == "":
+        return True
+
+    # If the policy pattern is empty but request is not, it cannot match
+    if policy_pattern == "" and clean_req != "":
+        return False
+    
+    # If the request is empty but policy is not, it cannot match (unless policy is '**')
+    if clean_req == "" and policy_pattern != "**":
+        return False
+
+    # Iterate through segments for matching
+    for i, p_segment in enumerate(policy_segments):
+        # If request segments run out before policy segments (and it's not a '**' match)
+        if i >= len(request_segments):
+            return False
+
+        r_segment = request_segments[i]
+
+        if p_segment == "**":
+            # Double asterisk matches arbitrary multi-segment prefixes (0 or more segments)
+            # If "**" is encountered, it means the rest of the request is covered.
+            return True
+
+        elif p_segment == "*":
+            # Single asterisk matches exactly one segment.
+            # It matches the current request segment. We continue to the next policy segment.
+            # However, if '*' is the last policy segment, the request must also end at this segment.
+            if i == len(policy_segments) - 1 and i < len(request_segments) - 1:
+                # '*' is the last policy segment, but there are more request segments. No match.
+                return False
+            continue # '*' matches current segment, move to next.
+
+        elif p_segment != r_segment:
+            # Segments don't match and it's not a wildcard
+            return False
+
+    # All policy segments have been processed.
+    # For a match, the request must not have any extra segments unless the policy ended with '**' (which would have returned True already).
+    # So, the number of segments must be equal.
+    return len(policy_segments) == len(request_segments)
+
+def evaluate_request(policies: list, role: str, scope: str) -> bool:
+    for p in policies:
+        if p.matches_role(role) and is_scope_permitted(p, scope):
+            return True
+    return False
+
+def count_permitted_scopes(policy: RoutePolicy, scopes: list) -> int:
+    return sum(1 for s in scopes if is_scope_permitted(policy, s))
+=== END ===

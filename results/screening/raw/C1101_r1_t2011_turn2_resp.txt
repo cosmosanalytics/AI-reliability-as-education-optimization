@@ -1,0 +1,28 @@
+=== FILE: maintenance.py ===
+"""Cluster maintenance scheduler."""
+from typing import List
+from slots import MaintenanceSlot
+from audit import validate_all_approved
+
+def has_window_overlap(slot_a: MaintenanceSlot, slot_b: MaintenanceSlot) -> bool:
+    """Detect if two maintenance slots overlap.
+    Interval contract: slots are half-open intervals [start, end). Adjacent slots sharing
+    a boundary (e.g. [2, 4) and [4, 6)) do NOT overlap.
+    """
+    # Two half-open intervals [A_start, A_end) and [B_start, B_end) do not overlap if
+    # A_end <= B_start or B_end <= A_start.
+    # The original condition used strict inequality (<), which incorrectly identified
+    # adjacent slots (where A_end == B_start or B_end == A_start) as overlapping.
+    # Changing '<' to '<=' correctly implements the half-open interval contract.
+    return not (slot_a.end_hour <= slot_b.start_hour or slot_b.end_hour <= slot_a.start_hour)
+
+def can_schedule_slot(existing_slots: List[MaintenanceSlot], candidate: MaintenanceSlot) -> bool:
+    if not validate_all_approved(existing_slots):
+        raise ValueError("Existing slots contain unapproved reservations")
+    return not any(has_window_overlap(s, candidate) for s in existing_slots)
+
+def get_slot_bounds(slots: List[MaintenanceSlot]) -> tuple:
+    if not slots:
+        return (0, 0)
+    return (min(s.start_hour for s in slots), max(s.end_hour for s in slots))
+=== END ===

@@ -1,0 +1,60 @@
+=== FILE: csv_writer.py ===
+"""TSV serialization utilities."""
+from typing import List, Optional
+from schema import CustomerProfile
+from io_helpers import validate_tsv_header
+
+def escape_tsv_field(val: Optional[str]) -> str:
+    r"""Escape field for internal TSV audit log pipeline:
+    Records are tab-separated (\t), internal double quotes are escaped with backslash (\"),
+    newline characters are escaped as \n, and None/null values are serialized as \N.
+    Do NOT use RFC 4180 double-quoting.
+    """
+    if val is None:
+        return r"\N"
+
+    # Replace special characters with their escaped string representations.
+    # The order of replacement matters: replace backslashes first to avoid
+    # escaping newly introduced backslashes or misinterpreting existing ones.
+    # However, the specification only mentions escaping `"` and `\n`.
+    # If a literal backslash is present, and we escape `"` to `\"`, then
+    # a literal `\` followed by `"` would become `\\"` which isn't specified.
+    # Assuming standard behavior where the escape character itself is also escaped if it's literal.
+    # The docstring implies `\` is the escape character, so it should be escaped.
+    # Let's follow the strict interpretation of the docstring: only `"` and `\n` are specified.
+    # However, if `\t` is a delimiter, it must also be escaped within a field.
+    # The ticket mentions "internal audit pipeline". Usually, these formats are precise.
+
+    # Based on the failing test and the requirement "internal double quotes are escaped with backslash (\")"
+    # and "newline characters are escaped as \n", and "tab-separated (\t)" for records,
+    # it's implied that `\` is the escape character.
+    # Therefore, a literal backslash `\` should be escaped as `\\`.
+    # A literal tab `\t` should be escaped as `\t` (literal backslash t).
+    # A literal newline `\n` should be escaped as `\n` (literal backslash n).
+    # A literal double quote `"` should be escaped as `\"` (literal backslash quote).
+
+    escaped_val = val.replace("\\", "\\\\") # Escape backslashes first
+    escaped_val = escaped_val.replace('"', '\\"') # Escape double quotes
+    escaped_val = escaped_val.replace('\n', '\\n') # Escape newlines
+    escaped_val = escaped_val.replace('\t', '\\t') # Escape tabs (internal delimiter)
+
+    return escaped_val
+
+def export_profiles_tsv(profiles: List[CustomerProfile]) -> str:
+    # Use actual tab characters in the header string, not escaped backslash-t.
+    header = "cust_id\tname\tnotes"
+    if not validate_tsv_header(header, ["cust_id", "name", "notes"]):
+        raise ValueError("Invalid header")
+    lines = [header]
+    for p in profiles:
+        f_id = escape_tsv_field(str(p.cust_id)) # cust_id is int, but needs to be string for field escaping
+        f_name = escape_tsv_field(p.name)
+        f_notes = escape_tsv_field(p.notes)
+        lines.append(f"{f_id}\t{f_name}\t{f_notes}")
+    # Use actual newline characters to join lines, not escaped backslash-n.
+    return "\n".join(lines)
+
+def count_records(payload: str) -> int:
+    lines = [l for l in payload.splitlines() if l.strip()]
+    return max(0, len(lines) - 1)
+=== END ===

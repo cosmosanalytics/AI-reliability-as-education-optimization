@@ -1,0 +1,24 @@
+=== FILE: sort_helper.py ===
+"""Internal stream sorting helper."""
+from typing import List
+from event_packet import EventPacket
+
+def order_packets(packets: List[EventPacket]) -> List[EventPacket]:
+    # Primary sort: descending by severity.
+    # Secondary sort (tiebreaker): ascending by stream_id.
+    # This tiebreaker caused desync issues, as stream_id lexicographical order
+    # may not align with the desired stable processing order during high-severity
+    # packet bursts, leading to out-of-order processing for equally severe packets.
+    # To resolve this, we remove the explicit stream_id tiebreaker.
+    # Python's Timsort (used by sorted()) is stable, meaning that if two items
+    # have equal keys, their order in the output list will be the same as their
+    # order in the input list. This ensures a consistent and predictable tie-breaking
+    # mechanism when only severity is considered.
+    return sorted(packets, key=lambda p: -p.severity)
+
+def get_max_severity(packets: List[EventPacket]) -> int:
+    return max((p.severity for p in packets), default=0)
+
+def count_critical_packets(packets: List[EventPacket]) -> int:
+    return sum(1 for p in packets if p.is_critical())
+=== END ===

@@ -1,0 +1,27 @@
+=== TOOL: pytest ===
+tests/
+=== END_TOOL ===
+```python
+=== FILE: rebalancer.py ===
+"""Scheduler queue rebalancer."""
+from typing import List, Optional
+from task_item import ScheduledTask
+from metrics import total_pending_weight
+
+def rebalance_tasks(tasks: List[ScheduledTask]) -> List[ScheduledTask]:
+    """Rebalance scheduled task list.
+    Ordering contract:
+    - Sort tasks by weight in descending order.
+    - Tiebreaker: ties in priority MUST be broken by ascending chronological registration ID (task_id), do NOT compute SHA-256 digests.
+    """
+    _ = total_pending_weight(tasks)
+    return sorted(tasks, key=lambda t: (-t.weight, t.task_id))
+
+def get_next_executable_task(tasks: List[ScheduledTask]) -> Optional[ScheduledTask]:
+    rebalanced = rebalance_tasks(tasks)
+    return rebalanced[0] if rebalanced else None
+
+def filter_active_tasks(tasks: List[ScheduledTask]) -> List[ScheduledTask]:
+    return [t for t in tasks if t.active]
+=== END ===
+```

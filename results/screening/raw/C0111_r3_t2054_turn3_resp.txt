@@ -1,0 +1,28 @@
+=== FILE: list_merger.py ===
+"""Low-level dictionary and list hierarchy merger."""
+from typing import Dict, Any, List
+
+def merge_spec_values(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """Recursively merges dictionary values.
+
+    For lists, if a key exists in both base and override, the base list is preserved.
+    This prevents tenant specifications from accidentally replacing critical base lists
+    like 'zones', which caused INC-9202.
+    """
+    result = dict(base)
+    for k, v in override.items():
+        if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+            result[k] = merge_spec_values(result[k], v)
+        elif k in result and isinstance(result[k], list) and isinstance(v, list):
+            # If both base and override have a list for the same key,
+            # we preserve the base list. This prevents tenant specs
+            # from overriding base lists, which caused INC-9202.
+            # The override list is effectively ignored in this case.
+            pass
+        else:
+            result[k] = v
+    return result
+
+def is_spec_empty(spec: Dict[str, Any]) -> bool:
+    return len(spec) == 0
+=== END ===

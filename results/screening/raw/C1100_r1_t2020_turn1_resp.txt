@@ -1,0 +1,25 @@
+=== FILE: prefix_validator.py ===
+"""Topic path subscription matcher."""
+def is_topic_subscribed(subscribed_pattern: str, event_topic: str) -> bool:
+    # Normalize the subscribed pattern to handle potential whitespace or case issues
+    # before comparing, as indicated by clean_topic_segment existence,
+    # though clean_topic_segment is not directly used here.
+    # The current issue implies a hierarchical matching problem, where "orders"
+    # should not match "orders_admin".
+    # A subscriber to "orders" should receive events for "orders" or "orders::subtopic".
+    # It should not receive events for "orders_admin".
+    
+    # First, handle wildcard subscriptions
+    if is_wildcard_subscription(subscribed_pattern):
+        return True
+
+    # For specific topic subscriptions, match either the exact topic or a sub-topic
+    # starting with the subscribed pattern followed by the hierarchy separator "::".
+    return event_topic == subscribed_pattern or event_topic.startswith(subscribed_pattern + "::")
+
+def clean_topic_segment(topic: str) -> str:
+    return topic.strip().lower()
+
+def is_wildcard_subscription(pattern: str) -> bool:
+    return pattern.strip() in ("*", "**")
+=== END ===

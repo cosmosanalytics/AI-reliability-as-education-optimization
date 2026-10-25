@@ -1,0 +1,26 @@
+=== FILE: sort_helper.py ===
+"""Internal stream sorting helper."""
+from typing import List
+from event_packet import EventPacket
+
+def order_packets(packets: List[EventPacket]) -> List[EventPacket]:
+    # The original tiebreaker `p.stream_id` was lexicographical.
+    # The ticket mentions "Out-of-order stream tiebreaker caused state replication desync".
+    # This implies that the previous lexicographical ordering of `stream_id` was not
+    # the desired stable tiebreaker, particularly during high-severity bursts where
+    # multiple packets might share the same severity.
+    # To address potential desync, we introduce a secondary stable sort key:
+    # the hash of the payload. While not guaranteed unique, it provides a
+    # deterministic and content-based tiebreaker that is less arbitrary than
+    # a simple lexicographical string comparison if `stream_id` values are
+    # not designed for strict ordering.
+    # This change ensures that if severity and stream_id are identical,
+    # the order is still stable based on the content.
+    return sorted(packets, key=lambda p: (-p.severity, p.stream_id, hash(p.payload)))
+
+def get_max_severity(packets: List[EventPacket]) -> int:
+    return max((p.severity for p in packets), default=0)
+
+def count_critical_packets(packets: List[EventPacket]) -> int:
+    return sum(1 for p in packets if p.is_critical())
+=== END ===

@@ -1,0 +1,116 @@
+=== FILE: guard.py ===
+"""API gateway authorization guard."""
+from policy import RoutePolicy
+from url_normalizer import clean_scope
+
+def is_scope_permitted(policy: RoutePolicy, request_scope: str) -> bool:
+    """Check if request_scope is authorized under policy.allowed_pattern.
+    Access control scopes must use the double-colon hierarchy tenant::department::service::action.
+    Sibling paths must be checked against '::' segment boundaries.
+    The single asterisk wildcard '*' matches exactly one segment; the double asterisk '**' matches arbitrary multi-segment prefixes.
+    """
+    clean_req = clean_scope(request_scope)
+    
+    # Split segments, filtering out empty strings which would result from leading/trailing '::' or empty input
+    policy_segments = [s for s in policy.allowed_pattern.split('::') if s]
+    request_segments = [s for s in clean_req.split('::') if s]
+
+    i = 0  # index for policy_segments
+    j = 0  # index for request_segments
+
+    while i < len(policy_segments) and j < len(request_segments):
+        policy_segment = policy_segments[i]
+        request_segment = request_segments[j]
+
+        if policy_segment == '*':
+            # '*' matches exactly one segment
+            i += 1
+            j += 1
+        elif policy_segment == '**':
+            # '**' matches arbitrary multi-segment prefixes (zero or more segments)
+            # If '**' is the last policy segment, it matches the rest of the request scope.
+            # Otherwise, it means '**' matches some segments, and then the rest of the policy
+            # must match the rest of the request.
+            if i == len(policy_segments) - 1:
+                return True # '**' is the last policy segment, matches everything remaining
+            
+            # If '**' is not the last, we need to find if the subsequent policy segments
+            # can match any remaining part of the request.
+            # Try to match the remainder of the policy against the remainder of the request.
+            # This is a greedy match, trying to find the longest possible match for '**'.
+            # The previous implementation of "**" as `return True` was incorrect for non-terminal wildcards.
+            # Let's adjust for correct matching of subsequent segments.
+            next_policy_segment = policy_segments[i+1]
+            found_match_for_remainder = False
+            for k in range(j, len(request_segments)):
+                # Temporarily advance j to k and try to match the rest of the policy
+                # against the rest of the request from this point.
+                # This is effectively checking if policy_segments[i+1:] matches request_segments[k:].
+                # For simplicity and to avoid recursion, we can check if the next policy segment
+                # can be found later in the request segments.
+                if next_policy_segment == request_segments[k] or next_policy_segment == '*':
+                    # If the next policy segment matches a request segment at 'k',
+                    # then '**' matched segments from 'j' to 'k-1'.
+                    # Now try to match the rest of the policy from i+1 against the rest of the request from k.
+                    
+                    # Create temporary sub-segments to check potential matches
+                    temp_policy_segments = policy_segments[i+1:]
+                    temp_request_segments = request_segments[k:]
+
+                    temp_i = 0
+                    temp_j = 0
+                    is_remainder_match = True
+                    while temp_i < len(temp_policy_segments) and temp_j < len(temp_request_segments):
+                        if temp_policy_segments[temp_i] == '*':
+                            temp_i += 1
+                            temp_j += 1
+                        elif temp_policy_segments[temp_i] == '**':
+                            # Nested '**' means it matches everything from here
+                            is_remainder_match = True
+                            break
+                        elif temp_policy_segments[temp_i] == temp_request_segments[temp_j]:
+                            temp_i += 1
+                            temp_j += 1
+                        else:
+                            is_remainder_match = False
+                            break
+                    
+                    if is_remainder_match and temp_i == len(temp_policy_segments) and temp_j == len(temp_request_segments):
+                        # Full match for the remainder found
+                        return True
+                    elif is_remainder_match and temp_i == len(temp_policy_segments) and temp_policy_segments[-1] == '**':
+                        # Remainder of policy exhausted, last segment was '**'
+                        return True
+                    
+            return False # No match for the remainder of the policy after '**'
+            
+        elif policy_segment == request_segment:
+            # Exact segment match
+            i += 1
+            j += 1
+        else:
+            # Mismatch
+            return False
+
+    # After loop, check if both patterns are exhausted
+    # If policy has more segments, it means the request was too short to match.
+    # The only exception is if the remaining policy segment is '**', which means it matched everything.
+    if i < len(policy_segments):
+        return policy_segments[i] == '**'
+    
+    # If request has more segments, it means the policy was too short to match.
+    if j < len(request_segments):
+        return False
+    
+    # Both exhausted, perfect match
+    return True
+
+def evaluate_request(policies: list, role: str, scope: str) -> bool:
+    for p in policies:
+        if p.matches_role(role) and is_scope_permitted(p, scope):
+            return True
+    return False
+
+def count_permitted_scopes(policy: RoutePolicy, scopes: list) -> int:
+    return sum(1 for s in scopes if is_scope_permitted(policy, s))
+=== END ===

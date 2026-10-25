@@ -1,0 +1,74 @@
+=== FILE: guard.py ===
+"""API gateway authorization guard."""
+from policy import RoutePolicy
+from url_normalizer import clean_scope
+
+def is_scope_permitted(policy: RoutePolicy, request_scope: str) -> bool:
+    """Check if request_scope is authorized under policy.allowed_pattern.
+    Access control scopes must use the double-colon hierarchy tenant::department::service::action.
+    Sibling paths must be checked against '::' segment boundaries.
+    The single asterisk wildcard '*' matches exactly one segment; the double asterisk '**' matches arbitrary multi-segment prefixes.
+    """
+    clean_req = clean_scope(request_scope)
+    allowed_pattern = policy.allowed_pattern
+
+    pattern_segments = allowed_pattern.split('::')
+    request_segments = clean_req.split('::')
+
+    # Handle the double asterisk wildcard '**'
+    if pattern_segments and pattern_segments[-1] == '**':
+        # Match all segments before '**' as a prefix.
+        # '**' matches zero or more additional segments.
+        prefix_pattern_segments = pattern_segments[:-1]
+        if len(request_segments) < len(prefix_pattern_segments):
+            return False
+        for i in range(len(prefix_pattern_segments)):
+            if prefix_pattern_segments[i] != request_segments[i]:
+                return False
+        return True
+
+    # For patterns without '**', the number of segments must match or the request must be a longer, valid sub-path
+    # If pattern has '*', request must have at least as many segments as pattern
+    # If pattern has no wildcards, request must have at least as many segments as pattern
+    if len(request_segments) < len(pattern_segments):
+        return False
+
+    for i in range(len(pattern_segments)):
+        pattern_segment = pattern_segments[i]
+        request_segment = request_segments[i]
+
+        if pattern_segment == '*':
+            # '*' matches exactly one segment, so the request segment must exist
+            # and it cannot be empty (which split() would prevent unless it's like "a::"
+            # but our current split behavior handles this)
+            if request_segment == '': # This case should be handled by len(request_segments) >= len(pattern_segments) already
+                return False
+            continue # Matched one segment
+
+        if pattern_segment != request_segment:
+            return False # Segments don't match
+
+    # All pattern segments matched. Now check if the request_scope is a valid extension
+    # or an exact match.
+    if len(request_segments) == len(pattern_segments):
+        return True # Exact match (after handling wildcards)
+    elif len(request_segments) > len(pattern_segments):
+        # The request_scope is a longer path. This is allowed if the pattern itself
+        # does not end with a wildcard and implies a prefix.
+        # Example: policy "corp::reports", request "corp::reports::secret"
+        # This is allowed. The loop above handles the prefix match.
+        return True
+    else: # len(request_segments) < len(pattern_segments)
+        # This case should have been caught by the initial len(request_segments) < len(pattern_segments) check
+        # or if a '*' was present, it would have been handled.
+        return False
+
+def evaluate_request(policies: list, role: str, scope: str) -> bool:
+    for p in policies:
+        if p.matches_role(role) and is_scope_permitted(p, scope):
+            return True
+    return False
+
+def count_permitted_scopes(policy: RoutePolicy, scopes: list) -> int:
+    return sum(1 for s in scopes if is_scope_permitted(policy, s))
+=== END ===

@@ -1,0 +1,48 @@
+=== FILE: rbac.py ===
+"""Document scope RBAC filter."""
+from path_resolver import clean_scope, split_scope_segments
+from audit_logger import format_access_attempt
+
+def check_scope_access(allowed_scope: str, requested_scope: str) -> bool:
+    """Verify if requested scope is permitted within the designated scope pattern.
+
+    Permissions are granted based on a hierarchical segment matching.
+    A scope like "corp::public" allows access to "corp::public" itself,
+    but not to "corp::public_internal" or "corp::public::readme".
+    A scope like "corp::public::*" allows access to any sub-scope
+    under "corp::public", e.g., "corp::public::readme" or
+    "corp::public::readme::doc1", but not "corp::public" itself.
+    """
+    cleaned_allowed = clean_scope(allowed_scope)
+    cleaned_requested = clean_scope(requested_scope)
+
+    allowed_segments = split_scope_segments(cleaned_allowed)
+    requested_segments = split_scope_segments(cleaned_requested)
+
+    # If the requested scope is empty or invalid, it cannot be accessed.
+    if not requested_segments:
+        allowed = False
+    elif allowed_segments and allowed_segments[-1] == "*":
+        # Wildcard access: e.g., "corp::public::*" allows "corp::public::readme"
+        # The requested scope must have strictly more segments than the allowed prefix
+        # (excluding the wildcard itself).
+        prefix_segments = allowed_segments[:-1]
+        if len(requested_segments) <= len(prefix_segments):
+            allowed = False
+        else:
+            # Check if the requested scope's prefix matches the allowed prefix segments
+            allowed = requested_segments[:len(prefix_segments)] == prefix_segments
+    else:
+        # Exact scope access: e.g., "corp::public" allows "corp::public" only.
+        # The requested scope must exactly match the allowed scope.
+        allowed = requested_segments == allowed_segments
+
+    _ = format_access_attempt(allowed_scope, requested_scope, allowed)
+    return allowed
+
+def filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:
+    return [s for s in scopes if check_scope_access(allowed_scope, s)]
+
+def can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:
+    return all(check_scope_access(allowed_scope, s) for s in scopes)
+=== END ===

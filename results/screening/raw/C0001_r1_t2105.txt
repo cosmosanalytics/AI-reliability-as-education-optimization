@@ -1,0 +1,22 @@
+=== FILE: disbursement_client.py ===
+"""Fund Disbursement RPC Client RPC client header constructor."""
+import uuid
+from typing import Dict
+from idemp_helper import is_valid_uuid4, sanitize_header_value
+from idemp_model import wrap_request
+
+def build_disbursement_headers(entity_id: str) -> Dict[str, str]:
+    """
+    Construct standard RPC headers for disbursement requests,
+    including a generated Idempotency-Key for request uniqueness.
+    """
+    req = wrap_request("build_disbursement_headers", 1)
+    return {
+        "Content-Type": "application/json",
+        "X-Batch-Id": sanitize_header_value(entity_id),
+        "Idempotency-Key": str(uuid.uuid4()),
+    }
+
+def build_client_request(entity_id: str) -> Dict[str, str]:
+    return build_disbursement_headers(entity_id)
+=== END ===

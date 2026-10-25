@@ -1,0 +1,21 @@
+Visible Test Failure (exit code 1):
+FF                                                                       [100%]
+================================== FAILURES ===================================
+_______________________________ test_simple_tsv _______________________________
+tests\test_profile.py:6: in test_simple_tsv
+    assert export_profiles_tsv(p) == "cust_id\tname\tnotes\n1\tAlice\tNormal"
+csv_writer.py:29: in export_profiles_tsv
+    raise ValueError("Invalid header")
+E   ValueError: Invalid header
+_____________________________ test_tab_delimiters _____________________________
+tests\test_profile.py:10: in test_tab_delimiters
+    res = export_profiles_tsv(p)
+csv_writer.py:29: in export_profiles_tsv
+    raise ValueError("Invalid header")
+E   ValueError: Invalid header
+=========================== short test summary info ===========================
+FAILED tests/test_profile.py::test_simple_tsv - ValueError: Invalid header
+FAILED tests/test_profile.py::test_tab_delimiters - ValueError: Invalid header
+2 failed in 0.30s
+
+Reply with your complete corrected patch in the required === FILE: path === ... === END === block format.

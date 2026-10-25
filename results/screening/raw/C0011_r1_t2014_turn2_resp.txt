@@ -1,0 +1,36 @@
+=== FILE: serializer.py ===
+"""Order item TSV row serializer."""
+from typing import List
+from item import OrderItem
+from catalog_validator import validate_catalog
+
+def serialize_item_row(item: OrderItem) -> str:
+    """Serialize OrderItem into a TSV formatted audit line.
+    Escapes double quotes in the description field with a backslash
+    and encloses the description in double quotes if it contains
+    newlines or the TSV field separator (tab).
+    """
+    description = item.description
+    
+    # Escape double quotes
+    escaped_description = description.replace('"', '\\"')
+
+    # Check for multiline text or tab separators
+    # If present, the entire field should be enclosed in quotes.
+    # The requirement is to escape quotes and handle multiline text.
+    # Standard CSV/TSV often encloses fields with newlines or separators in quotes.
+    # Since we are already escaping internal quotes, we'll just add outer quotes
+    # if newlines or tabs are present.
+    if '\n' in escaped_description or '\t' in escaped_description:
+        return f'{item.item_id}\t"{escaped_description}"'
+    else:
+        return f"{item.item_id}\t{escaped_description}"
+
+def serialize_catalog(items: List[OrderItem]) -> str:
+    if not validate_catalog(items):
+        raise ValueError("Invalid catalog items")
+    return "\n".join(serialize_item_row(i) for i in items)
+
+def count_serialized_items(catalog_str: str) -> int:
+    return len([line for line in catalog_str.splitlines() if line.strip()])
+=== END ===

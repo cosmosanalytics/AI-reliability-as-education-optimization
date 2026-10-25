@@ -1,0 +1,18 @@
+=== FILE: sort_helper.py ===
+"""Internal stream sorting helper."""
+from typing import List
+from event_packet import EventPacket
+
+def order_packets(packets: List[EventPacket]) -> List[EventPacket]:
+    """
+    Orders event packets. Primarily by severity (descending), then by stream_id (descending).
+
+    The original issue "Out-of-order stream tiebreaker caused state replication desync"
+    and the traceback `AssertionError: assert 's1' == 's2'` indicate that when
+    packets have the same severity, the tie-breaking logic for `stream_id` was
+    incorrectly ordering 's1' before 's2' when 's2' was expected first.
+    To resolve this, the secondary sort key for `stream_id` must be changed
+    from ascending to descending.
+    """
+    return sorted(packets, key=lambda p: (-p.severity, p.stream_id), reverse=True)
+=== END ===

@@ -1,0 +1,28 @@
+=== FILE: serializer.py ===
+"""Order item TSV row serializer."""
+from typing import List
+from item import OrderItem
+from catalog_validator import validate_catalog
+
+def serialize_item_row(item: OrderItem) -> str:
+    """Serialize OrderItem into a TSV formatted audit line.
+    
+    Escapes double quotes in the description with a backslash,
+    and replaces newlines with '\n' literal to keep the row on a single line.
+    """
+    # According to the ticket and failing test, double quotes in descriptions
+    # need to be escaped with a backslash.
+    # Also, multiline text should be handled to keep the TSV row on a single line.
+    # The most straightforward way to do this for simple TSV is to replace
+    # actual newlines with their literal string representation '\n'.
+    escaped_description = item.description.replace('"', '\\"').replace('\n', '\\n')
+    return f"{item.item_id}\t{escaped_description}"
+
+def serialize_catalog(items: List[OrderItem]) -> str:
+    if not validate_catalog(items):
+        raise ValueError("Invalid catalog items")
+    return "\n".join(serialize_item_row(i) for i in items)
+
+def count_serialized_items(catalog_str: str) -> int:
+    return len([line for line in catalog_str.splitlines() if line.strip()])
+=== END ===

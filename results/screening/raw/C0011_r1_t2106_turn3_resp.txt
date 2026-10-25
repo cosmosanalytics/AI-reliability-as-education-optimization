@@ -1,0 +1,64 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    """
+    Calculate the p-th percentile of a list of samples using the nearest-rank method.
+
+    This method is consistent with the R-7 standard (NIST method) for percentile calculation.
+    It determines the rank 'k' such that k = ceil(P/100 * N), where P is the percentile
+    and N is the number of samples. The value at this rank (0-indexed) is returned.
+
+    Args:
+        samples: A list of numeric telemetry samples.
+        p: The desired percentile (0.0 to 100.0).
+
+    Returns:
+        The calculated percentile value.
+
+    Raises:
+        ValueError: If samples list is empty or p is outside the valid range [0, 100].
+    """
+    if not (0.0 <= p <= 100.0):
+        raise ValueError("Percentile 'p' must be between 0.0 and 100.0")
+
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values) # s is sorted samples
+
+    n = len(s)
+    if n == 0:
+        raise ValueError("Samples list cannot be empty for percentile calculation")
+
+    if p == 0.0:
+        return s[0]
+    if p == 100.0:
+        # For 100th percentile, return the maximum value.
+        # This handles the case where ceil((100/100)*N) might be N,
+        # leading to an index of N-1 for 0-indexed lists.
+        return s[n - 1]
+
+    # Calculate rank using the nearest-rank method (R-7 standard)
+    # k = ceil(P/100 * N)
+    # For 0-indexed list, the index is k-1
+    # Note: math.ceil(x) for x=0.0 returns 0. For P=0, this would lead to k=0, index=-1.
+    # We already handle p=0.0 explicitly.
+    rank = math.ceil((p / 100.0) * n)
+    index = int(rank) - 1
+
+    # Ensure index is within bounds, especially for edge cases where rank calculation
+    # might result in an index outside [0, n-1] for non-0/100 percentiles if N is small.
+    # However, for p in (0, 100), rank will be at least 1 and at most N,
+    # so index will be at least 0 and at most N-1.
+    # This line is mostly for robustness, but conceptually rank >= 1 and rank <= n
+    # ensures index >= 0 and index <= n-1.
+    index = max(0, min(index, n - 1))
+
+    return s[index]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

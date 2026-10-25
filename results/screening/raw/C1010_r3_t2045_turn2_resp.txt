@@ -1,0 +1,41 @@
+=== FILE: audit_service.py ===
+"""Audit event serialization service."""
+from datetime import datetime
+from models import AuditRecord
+from formatter import sanitize_action_name, build_audit_tag
+
+def format_audit_event(event_id: str, action: str, dt: datetime) -> AuditRecord:
+    """Formats an audit event record.
+    Timestamps must be formatted strictly in ISO 8601 UTC with explicit millisecond
+    precision and uppercase 'Z' suffix: YYYY-MM-DDTHH:MM:SS.sssZ (e.g. 2026-10-25T12:00:00.000Z).
+    """
+    clean_action = sanitize_action_name(action)
+    tag = build_audit_tag(clean_action)
+
+    # Format timestamp to ISO 8601 with millisecond precision and 'Z' suffix
+    # dt.isoformat(timespec='milliseconds') produces 'YYYY-MM-DDTHH:MM:SS.sss+00:00' for UTC
+    # We need to replace '+00:00' with 'Z'
+    if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+        raise ValueError("Datetime object must be timezone-aware (UTC) for audit log formatting.")
+    
+    iso_str = dt.isoformat(timespec='milliseconds')
+    if iso_str.endswith('+00:00'):
+        ts = iso_str[:-6] + 'Z'
+    else:
+        # Fallback for other UTC offsets, although the spec implies +00:00
+        # If it's already Z, keep it. Otherwise, error.
+        if iso_str.endswith('Z'):
+            ts = iso_str
+        else:
+            raise ValueError(f"Unexpected timezone offset in datetime: {iso_str}")
+
+    record = AuditRecord(
+        event_id=event_id,
+        action=clean_action,
+        timestamp_str=ts,
+        metadata={"tag": tag}
+    )
+    if not record.is_valid():
+        raise ValueError("Invalid record generated")
+    return record
+=== END ===

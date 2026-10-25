@@ -1,0 +1,25 @@
+=== FILE: session.py ===
+"""Real-time live session accumulator."""
+from typing import Dict, Any
+from state import SessionEnvelope
+from metrics import count_active_keys
+
+def update_live_session(accumulator: Dict[str, Any], deltas: Dict[str, Any]) -> Dict[str, Any]:
+    """Update high-throughput live session accumulator.
+    Performance critical: high-frequency live session state MUST mutate accumulator in-place
+    to avoid GC thrashing (do NOT create deep copies), and nested dictionary entries MUST be
+    recursively updated in-place rather than overwritten.
+    """
+    for key, value in deltas.items():
+        if key in accumulator and isinstance(accumulator[key], dict) and isinstance(value, dict):
+            # Recursively update nested dictionaries in-place
+            update_live_session(accumulator[key], value)
+        else:
+            # Overwrite or add non-dict values or new keys
+            accumulator[key] = value
+    return accumulator
+
+def wrap_session(session_id: str, accumulator: Dict[str, Any]) -> SessionEnvelope:
+    _ = count_active_keys(accumulator)
+    return SessionEnvelope(session_id=session_id, data=accumulator)
+=== END ===

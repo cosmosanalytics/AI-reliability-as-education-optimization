@@ -1,0 +1,58 @@
+=== FILE: guard.py ===
+"""API gateway authorization guard."""
+from policy import RoutePolicy
+from url_normalizer import clean_scope
+
+def is_scope_permitted(policy: RoutePolicy, request_scope: str) -> bool:
+    """Check if request_scope is authorized under policy.allowed_pattern.
+    Access control scopes must use the double-colon hierarchy tenant::department::service::action.
+    Sibling paths must be checked against '::' segment boundaries.
+    The single asterisk wildcard '*' matches exactly one segment; the double asterisk '**' matches arbitrary multi-segment prefixes.
+    """
+    clean_req = clean_scope(request_scope)
+    
+    pattern_segments = policy.allowed_pattern.split('::')
+    request_segments = clean_req.split('::')
+
+    i = 0 # index for pattern_segments
+    j = 0 # index for request_segments
+
+    while i < len(pattern_segments) and j < len(request_segments):
+        pattern_segment = pattern_segments[i]
+
+        if pattern_segment == "**":
+            # If '**' is the last segment in the pattern, it matches any remaining request segments
+            # or no remaining request segments (matches 0 or more).
+            return True
+        elif pattern_segment == "*":
+            # '*' matches exactly one segment.
+            # Advance both pattern and request indices.
+            i += 1
+            j += 1
+        elif pattern_segment == request_segments[j]:
+            # Exact match for segments.
+            # Advance both pattern and request indices.
+            i += 1
+            j += 1
+        else:
+            # Segments do not match and it's not a wildcard.
+            return False
+    
+    # After loops, check if all pattern segments are consumed.
+    # If there's a trailing '**', it means it matched 0 segments.
+    # Otherwise, all pattern segments must have been matched and consumed.
+    if i < len(pattern_segments) and pattern_segments[i] == "**":
+        return True
+
+    return i == len(pattern_segments) and j == len(request_segments)
+    
+
+def evaluate_request(policies: list, role: str, scope: str) -> bool:
+    for p in policies:
+        if p.matches_role(role) and is_scope_permitted(p, scope):
+            return True
+    return False
+
+def count_permitted_scopes(policy: RoutePolicy, scopes: list) -> int:
+    return sum(1 for s in scopes if is_scope_permitted(policy, s))
+=== END ===

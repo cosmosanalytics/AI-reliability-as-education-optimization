@@ -1,0 +1,41 @@
+=== FILE: jitter_core.py ===
+"""Low-level jitter percentile calculation engine."""
+import math
+from typing import List
+
+def evaluate_jitter_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile values across observed samples using nearest-rank estimation.
+    For a given percentile p and sorted list of values s with n items, the 0-indexed
+    rank (k) is calculated as math.ceil(p / 100 * n) - 1.
+    """
+    if not values:
+        raise ValueError("No jitter values")
+    s = sorted(values)
+    n = len(s)
+
+    # Calculate the 1-indexed rank as per the nearest-rank estimation definition.
+    # The formula provided in the docstring of check_jitter_sla is:
+    # 0-indexed rank = math.ceil(p / 100 * n) - 1.
+    # Let's derive the 1-indexed rank first:
+    # 1-indexed rank = math.ceil(p / 100 * n).
+    # This matches the common "nearest-rank" method (e.g., NIST method, or R-1).
+    k_1_indexed = math.ceil((p / 100.0) * n)
+
+    # Convert 1-indexed rank to 0-indexed list index.
+    # The 0-indexed index should be k_1_indexed - 1.
+    # We also need to handle boundary conditions for p=0 and p=100.
+    # If p=0, k_1_indexed will be 0 (if n>0), leading to index -1.
+    # If p=100, k_1_indexed will be n, leading to index n-1.
+    # The minimum index is 0 (for the smallest value), max is n-1 (for the largest value).
+    index = int(k_1_indexed) - 1
+
+    # Ensure the index is within valid bounds [0, n-1].
+    # For p=0, k_1_indexed is 0, index becomes -1. We want s[0].
+    # For p>0 and k_1_indexed is 0 (e.g., p=0.01, n=1, ceil(0.0001)=1, index=0),
+    # this case is implicitly handled.
+    # For p=100, k_1_indexed is n, index becomes n-1. We want s[n-1].
+    # Clamp the index to be within [0, n-1].
+    index = max(0, min(index, n - 1))
+
+    return float(s[index])
+=== END ===

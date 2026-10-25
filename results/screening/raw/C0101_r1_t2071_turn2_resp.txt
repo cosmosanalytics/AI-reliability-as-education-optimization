@@ -1,0 +1,51 @@
+=== FILE: rpc_calc.py ===
+"""Microservice RPC duration percentile calculator."""
+import math
+from typing import List, Dict, Any
+from rpc_data import RpcSeries, RpcSample
+from rpc_formatter import format_rpc_stat
+
+def compute_rpc_percentile(series: RpcSeries, p: float) -> float:
+    """Calculates SLA percentile for RPC responses."""
+    vals = series.durations()
+    if not vals:
+        raise ValueError("No RPC samples available")
+    s = sorted(vals)
+    n = len(s)
+
+    # The original formula `int(round((p / 100.0) * (n - 1)))` is one method
+    # for calculating percentiles (e.g., used for type R-7 in SciPy or linear
+    # interpolation of the empirical distribution function).
+    # However, for discrete data and to match common statistical interpretations
+    # (like the "nearest rank" method, or similar to how NumPy's `percentile`
+    # with `interpolation='lower'` or `interpolation='higher'` might behave
+    # depending on rounding), a different index calculation is often preferred
+    # to ensure consistency, especially for small datasets or specific percentiles.
+
+    # The issue `assert 20.0 == 30.0` implies the original calculation returned
+    # a value that was too low (20.0 when 30.0 was expected). This means the
+    # index was likely off by one, pointing to an earlier element in the sorted list.
+
+    # A widely used "nearest rank" method for percentile calculation, which
+    # ensures the 0th percentile is the minimum and the 100th percentile is
+    # the maximum, often uses an index derived from `(p / 100.0) * n`.
+    # Specifically, `math.ceil((p / 100.0) * n) - 1` gives a 0-based index
+    # that is robust for many cases and aligns with the intuitive "k-th element"
+    # interpretation. We must also clamp the index to `[0, n-1]` to handle
+    # edge cases like `p=0` or `p=100` gracefully, or `p` slightly out of range.
+
+    # Calculate 1-based rank 'r'
+    r = (p / 100.0) * n
+    # Convert to 0-based index by ceiling r and subtracting 1.
+    # Clamp the index to be within the valid range [0, n-1].
+    # For example:
+    # If p=0, r=0, ceil(0)-1=-1, idx=max(0, -1)=0. (Returns min value)
+    # If p=100, r=n, ceil(n)-1=n-1, idx=min(n-1, n-1)=n-1. (Returns max value)
+    idx = max(0, min(n - 1, math.ceil(r) - 1))
+
+    return float(s[idx])
+
+def build_rpc_report(service_name: str, series: RpcSeries, p: float) -> Dict[str, Any]:
+    val = compute_rpc_percentile(series, p)
+    return format_rpc_stat(service_name, series.count(), val)
+=== END ===

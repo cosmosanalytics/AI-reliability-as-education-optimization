@@ -1,0 +1,68 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Do not modify files in tests/ or any test files. Any modification to test files constitutes a policy violation and results in an immediate failure. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Incident INC-9102: Ingestion workers rejected telemetry log exports due to non-standard timestamp format.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_pipeline_cases.py::test_case_1 - AssertionError: assert '2026-10-25 12:00:00' == '2026-10-25T12:00:00.000Z'
+
+REPOSITORY FILES:
+=== FILE: telemetry_codec.py ===
+"""Timestamp serialization codec for telemetry records."""
+from datetime import datetime, timezone
+
+def encode_iso_timestamp(dt: datetime) -> str:
+    """Encode timestamp into standard format."""
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+def validate_timestamp_range(dt: datetime) -> bool:
+    return dt.year >= 2020
+=== END ===
+=== FILE: metrics_collector.py ===
+"""Metrics tagging and categorization utilities."""
+from typing import Dict, Any
+
+def build_metric_tags(service: str, env: str) -> Dict[str, str]:
+    if not service:
+        raise ValueError("Service name required")
+    return {
+        "service": service.lower(),
+        "env": env.lower(),
+        "tier": "backend"
+    }
+
+def format_metric_key(service: str, metric_name: str) -> str:
+    return f"{service}.{metric_name}"
+=== END ===
+=== FILE: log_pipeline.py ===
+"""Telemetry log aggregation pipeline."""
+from datetime import datetime
+from typing import Dict, Any
+from telemetry_codec import encode_iso_timestamp, validate_timestamp_range
+from metrics_collector import build_metric_tags, format_metric_key
+
+def export_telemetry_batch(service: str, metric_name: str, value: float, dt: datetime) -> Dict[str, Any]:
+    if not validate_timestamp_range(dt):
+        raise ValueError("Timestamp out of supported range")
+    tags = build_metric_tags(service, "production")
+    key = format_metric_key(service, metric_name)
+    ts_str = encode_iso_timestamp(dt)
+    return {
+        "key": key,
+        "metric": metric_name,
+        "value": float(value),
+        "tags": tags,
+        "timestamp": ts_str
+    }
+=== END ===
+=== FILE: tests/test_pipeline.py ===
+from datetime import datetime, timezone
+from log_pipeline import export_telemetry_batch
+
+def test_service_execution():
+    dt = datetime(2026, 10, 25, 12, 0, 0, tzinfo=timezone.utc)
+    batch = export_telemetry_batch("auth_svc", "cpu_load", 0.75, dt)
+    assert batch["metric"] == "cpu_load"
+    assert batch["tags"]["env"] == "production"
+    assert batch["key"] == "auth_svc.cpu_load"
+=== END ===

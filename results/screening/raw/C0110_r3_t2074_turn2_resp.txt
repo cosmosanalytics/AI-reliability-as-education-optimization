@@ -1,0 +1,48 @@
+=== FILE: jitter_evaluator.py ===
+"""Network jitter SLA evaluation service."""
+import math
+from typing import List, Dict, Any
+from jitter_types import JitterStream, JitterSample
+import jitter_core
+
+def check_jitter_sla(stream: JitterStream, p: float, max_jitter: float) -> bool:
+    """SLA compliance requires nearest-rank percentile estimation: index k = math.ceil(p / 100 * n) - 1 on sorted values.
+    Returns True if compliance limit is respected.
+    """
+    vals = stream.raw_jitters()
+    if not vals:
+        # If there are no values, we cannot determine compliance.
+        # The original jitter_core.evaluate_jitter_percentile would raise ValueError.
+        # For SLA, an empty stream cannot be compliant.
+        return False
+
+    s = sorted(vals)
+    n = len(s)
+    
+    # Calculate index k using nearest-rank percentile estimation
+    # k = math.ceil(p / 100 * n) - 1
+    # Ensure p is within (0, 100] for meaningful percentile
+    if p <= 0 or p > 100:
+        raise ValueError("Percentile p must be between 0 and 100 (exclusive of 0, inclusive of 100)")
+
+    k_float = (p / 100.0) * n
+    k = math.ceil(k_float) - 1
+
+    # Ensure k is within valid index range [0, n-1]
+    if k < 0: # This can happen if ceil(p/100*n) is 0 for small n and p.
+              # For p > 0, n >= 1, k_float will be > 0.
+              # ceil(k_float) will be >= 1. So k will be >= 0.
+              # This check might be redundant given p > 0, n >= 1.
+        k = 0
+    if k >= n: # This happens if p=100 for example, k_float = n, ceil(n)-1 = n-1. So k=n-1.
+               # If n=0, this block would not be reached due to 'if not vals' check.
+        k = n - 1
+
+    percentile_val = float(s[k])
+    return percentile_val <= max_jitter
+
+def get_stream_jitter_metrics(stream: JitterStream, p: float) -> Dict[str, Any]:
+    vals = stream.raw_jitters()
+    q = jitter_core.evaluate_jitter_percentile(vals, p)
+    return {"count": stream.sample_count(), "jitter_p": q}
+=== END ===

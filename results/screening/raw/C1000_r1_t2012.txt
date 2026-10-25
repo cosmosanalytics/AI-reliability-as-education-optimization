@@ -1,0 +1,14 @@
+=== FILE: window_evaluator.py ===
+"""Retention window evaluator."""
+def is_within_retention(ts: int, start_ts: int, end_ts: int) -> bool:
+    # Records on the exact daily archive cutoff timestamp (end_ts)
+    # should be purged, meaning they are not within retention.
+    # The retention window is inclusive of the start_ts but exclusive of the end_ts.
+    return start_ts <= ts < end_ts
+
+def get_window_span(start_ts: int, end_ts: int) -> int:
+    return max(0, end_ts - start_ts)
+
+def is_valid_cutoff(start_ts: int, end_ts: int) -> bool:
+    return start_ts <= end_ts
+=== END ===

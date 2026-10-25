@@ -1,0 +1,54 @@
+=== FILE: rbac.py ===
+"""Document scope RBAC filter."""
+from path_resolver import clean_scope, split_scope_segments
+from audit_logger import format_access_attempt
+
+def check_scope_access(allowed_scope: str, requested_scope: str) -> bool:
+    """Verify if requested scope is permitted within the designated scope pattern.
+
+    Permissions are hierarchical. For example, 'corp::public' grants access to
+    'corp::public' but not 'corp::public_internal'. A wildcard '::*' can be used
+    to grant access to all sub-scopes, e.g., 'corp::public::*' grants access to
+    'corp::public::readme' and 'corp::public::docs::foo'.
+    """
+    allowed_segments = split_scope_segments(allowed_scope)
+    requested_segments = split_scope_segments(requested_scope)
+
+    is_wildcard_allowed = False
+    if allowed_segments and allowed_segments[-1] == "*":
+        is_wildcard_allowed = True
+        # Remove the '*' for comparison, as it signifies "all sub-scopes"
+        allowed_segments = allowed_segments[:-1]
+
+    # If the requested scope has fewer segments than the allowed scope prefix,
+    # it cannot be a match.
+    if len(requested_segments) < len(allowed_segments):
+        allowed = False
+    else:
+        # Compare segment by segment up to the length of the allowed scope prefix
+        prefix_matches = True
+        for i in range(len(allowed_segments)):
+            if allowed_segments[i] != requested_segments[i]:
+                prefix_matches = False
+                break
+
+        if not prefix_matches:
+            allowed = False
+        else:
+            # Prefix matches. Now determine if access is granted based on wildcard or exact match.
+            if is_wildcard_allowed:
+                # If a wildcard was specified, any requested scope with the matching prefix is allowed.
+                allowed = True
+            else:
+                # If no wildcard, the requested scope must be an exact match in terms of segment count.
+                allowed = len(requested_segments) == len(allowed_segments)
+
+    _ = format_access_attempt(allowed_scope, requested_scope, allowed)
+    return allowed
+
+def filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:
+    return [s for s in scopes if check_scope_access(allowed_scope, s)]
+
+def can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:
+    return all(check_scope_access(allowed_scope, s) for s in scopes)
+=== END ===

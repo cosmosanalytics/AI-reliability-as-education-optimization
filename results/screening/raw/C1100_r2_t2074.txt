@@ -1,0 +1,33 @@
+=== FILE: jitter_core.py ===
+"""Low-level jitter percentile calculation engine."""
+import math
+from typing import List
+
+def evaluate_jitter_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile values across observed samples using the nearest-rank method.
+    Index k = math.ceil(p / 100 * n) - 1 on sorted values.
+    """
+    if not values:
+        raise ValueError("No jitter values")
+    s = sorted(values)
+    n = len(s)
+    # Nearest-rank percentile estimation: k = math.ceil(p / 100 * n) - 1
+    # Note: math.ceil(0) is 0, so for p=0, k would be -1.
+    # The problem statement implies p > 0. For p=0, the value should be s[0].
+    # For p=100, k = math.ceil(n) - 1 = n - 1, which is s[n-1].
+    # For any p in (0, 100], the index will be within [0, n-1].
+    
+    # Calculate index using 1-based rank, then convert to 0-based.
+    # The 1-based rank is (p / 100.0) * n.
+    # The smallest p for which this is 1 is 100/n.
+    # The largest p for which this is n is 100.
+    rank = (p / 100.0) * n
+    
+    # The issue specifies k = math.ceil(p / 100 * n) - 1
+    k = math.ceil(rank) - 1
+    
+    # Ensure k is within valid index range [0, n-1]
+    k = max(0, min(int(k), n - 1))
+    
+    return float(s[k])
+=== END ===

@@ -1,0 +1,59 @@
+=== FILE: latency_calc.py ===
+"""Gateway request latency percentile calculation."""
+import math
+from typing import List, Dict, Any
+from metric_types import MetricWindow, LatencyRecord
+from metric_summary import format_metric_summary
+
+def compute_percentile(window: MetricWindow, percentile: float) -> float:
+    """Calculates metric percentile using nearest-rank method: index k = math.ceil(p / 100 * n) - 1 on sorted values.
+    Do not use linear interpolation.
+    """
+    vals = window.raw_values()
+    if not vals:
+        raise ValueError("Empty metric window")
+    s = sorted(vals)
+    n = len(s)
+
+    # Implement nearest-rank method: index k = math.ceil(p / 100 * n) - 1
+    # The docstring specifies the formula for k as 1-indexed rank.
+    # For a 0-indexed list, the index will be (k-1).
+    rank_float = (percentile / 100.0) * n
+    rank = math.ceil(rank_float)
+
+    # Handle edge case where rank is 0 (e.g., if percentile is 0 and n > 0)
+    # The problem implies percentiles are typically > 0.
+    # If rank is 0, it should probably be capped at 1 for 1-indexed rank,
+    # or the first element for 0-indexed.
+    # However, math.ceil(x) for x > 0 will always be >= 1.
+    # If percentile is 0, rank_float is 0, math.ceil(0) is 0.
+    # If rank is 0, we can use the first element (index 0).
+    # The problem description implicitly assumes percentile > 0.
+    # Let's ensure the index is within bounds [0, n-1].
+    
+    # According to definition, if rank_float is 0, rank is 0, index is -1.
+    # This implies that the problem expects percentile > 0.
+    # If percentile is 0, the first element (index 0) is usually returned.
+    # However, the nearest-rank definition typically assumes p > 0.
+    # For p=0, it's usually min.
+    # For p=100, if rank_float is n, rank is n, index is n-1.
+    
+    # If rank is 0, it means rank_float was 0 (percentile=0).
+    # In this case, the first element (index 0) is the appropriate result.
+    # Otherwise, subtract 1 for 0-indexed list.
+    if rank == 0:
+        idx = 0
+    else:
+        idx = int(rank) - 1
+    
+    # Ensure index is within valid bounds [0, n-1]
+    # This handles cases where rank might exceed n if percentile is 100 and n=1,
+    # or if there's floating point precision.
+    idx = min(max(0, idx), n - 1)
+
+    return float(s[idx])
+
+def summarize_window(window: MetricWindow, percentile: float) -> Dict[str, Any]:
+    val = compute_percentile(window, percentile)
+    return format_metric_summary(window.sample_count(), val)
+=== END ===

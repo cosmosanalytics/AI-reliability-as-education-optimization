@@ -1,0 +1,18 @@
+=== FILE: webhook_sender.py ===
+"""Webhook delivery payload construction."""
+from datetime import datetime, timezone
+from typing import Dict, Any
+from envelope_schema import WebhookEnvelope
+from signature_utils import generate_delivery_headers
+
+def build_webhook_payload(topic: str, data: Dict[str, Any], dt: datetime) -> WebhookEnvelope:
+    hdrs = generate_delivery_headers(topic)
+    # Format timestamp to ISO 8601 with millisecond precision (3 decimal places) and 'Z' for UTC.
+    # The default '%f' specifier includes 6 digits for microseconds, but the subscriber gateways
+    # expect 3 digits (milliseconds).
+    ts = dt.strftime("%Y-%m-%dT%H:%M:%S") + ".{:03d}Z".format(dt.microsecond // 1000)
+    env = WebhookEnvelope(topic=topic, body=data, sent_at=ts, headers=hdrs)
+    if not env.is_dispatched():
+        raise ValueError("Invalid envelope state")
+    return env
+=== END ===

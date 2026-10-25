@@ -1,0 +1,64 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+    The sum of allocated discounts will exactly match total_discount_cents,
+    distributing any remainder pennies one by one to the lines that had the
+    largest fractional remainders from the initial proportional calculation.
+    In case of ties in fractional remainders, pennies are distributed to
+    lines appearing earlier in the input list.
+
+    line_totals: list of integer cents.
+    Returns list of discount cents per line.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+    total = sum(line_totals)
+    num_lines = len(line_totals)
+
+    if total == 0:
+        return [0] * num_lines
+
+    # Calculate initial prorated amounts and their fractional remainders
+    # We store tuples of (fractional_remainder, original_index, initial_allocation)
+    # The negative fractional_remainder ensures sorting in descending order for the largest remainder.
+    # The original_index ensures stable sorting (tie-breaking) for lines appearing earlier.
+    alloc_details = []
+    for i, cents in enumerate(line_totals):
+        # Calculate full proportional value using float for precision
+        proportional_value = (cents * total_discount_cents) / total
+        initial_allocation = int(proportional_value)
+        fractional_remainder = proportional_value - initial_allocation
+        alloc_details.append((-fractional_remainder, i, initial_allocation))
+
+    # Sort by fractional remainder (descending) then by original index (ascending)
+    alloc_details.sort()
+
+    # Extract initial integer allocations
+    allocs = [0] * num_lines
+    for neg_frac, original_idx, initial_alloc in alloc_details:
+        allocs[original_idx] = initial_alloc
+    
+    current_total_allocated = sum(allocs)
+    remainder = total_discount_cents - current_total_allocated
+
+    # Distribute the remainder pennies to lines with the largest fractional remainders
+    # based on the sorted alloc_details
+    for i in range(remainder):
+        # The sorted alloc_details list has the lines that should receive a penny first
+        # We use the original_idx from the sorted list to update the correct position in `allocs`
+        target_line_original_idx = alloc_details[i % num_lines][1] # Use modulo to cycle if remainder > num_lines
+        allocs[target_line_original_idx] += 1
+
+    return allocs
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===

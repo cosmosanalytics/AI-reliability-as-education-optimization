@@ -1,0 +1,61 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values)
+    # The "nearest-rank house standard" typically implies using the
+    # definition where the index is calculated as ceil(p * N / 100)
+    # and the value at that index (0-based) is returned.
+    # For a 0-based index, this means index = max(0, ceil(p * len(s) / 100) - 1).
+    if not s: # validate_metric_samples already checks for empty, but defensive here.
+        raise ValueError("Samples list cannot be empty for percentile calculation")
+    
+    # Ensure p is within valid range [0, 100]
+    if not (0 <= p <= 100):
+        raise ValueError("Percentile 'p' must be between 0 and 100 inclusive")
+
+    # Handle edge cases for p=0 and p=100
+    if p == 0:
+        return s[0]
+    if p == 100:
+        return s[-1]
+
+    # Calculate rank based on "nearest-rank" method: L = N * P / 100
+    # The index will be ceil(L) - 1 for 0-based indexing.
+    # This is equivalent to `statistics.quantiles(s, n=100, method='inclusive')[p-1]` for p > 0.
+    # Or for a more direct formula:
+    # index = math.ceil(p / 100.0 * len(s)) - 1
+    # Note: Some definitions use floor(L) or round(L). The traceback suggests ceil(L)-1.
+    # Example: [10, 20, 30, 40, 50, 60]
+    # 50th percentile: L = 6 * 50 / 100 = 3.0. Index = ceil(3.0) - 1 = 3 - 1 = 2. s[2] = 30.0.
+    # The failing test `assert calculate_cache_percentile(d1, 50.0) == 40.0`
+    # and current returning 45.0 for d1= [10, 20, 30, 40, 50, 60, 70, 80]
+    # N=8, P=50. L = 8 * 50 / 100 = 4.0. Index = ceil(4.0) - 1 = 3. s[3] = 40.0. This matches.
+    # The previous calculation (len(s)-1) for index is often for linear interpolation.
+    
+    # The formula for the k-th order statistic (percentile) for a dataset of size N,
+    # often referred to as "nearest rank" or "type 1" in some contexts (e.g., R's quantile),
+    # is to find the smallest integer k such that p <= 100 * k / N.
+    # This gives k = ceil(N * p / 100). The value is then the k-th smallest element.
+    # In 0-based indexing, this corresponds to index k-1.
+    
+    idx_float = (p / 100.0) * len(s)
+    # The index is 1-based, so subtract 1 for 0-based list access.
+    # Use max(0, ...) to handle p=0 gracefully if it weren't handled above,
+    # ensuring the index is never negative.
+    idx = max(0, math.ceil(idx_float) - 1)
+    
+    # Ensure the index is within bounds (e.g., for very small p or N=1)
+    idx = min(idx, len(s) - 1)
+    
+    return s[idx]
+
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

@@ -1,0 +1,29 @@
+=== FILE: env_loader.py ===
+"""Environment settings loader and merger."""
+from typing import Dict, Any
+import copy
+
+DEFAULT_CONN_TIMEOUT = 30
+
+def load_system_env() -> Dict[str, Any]:
+    return {"timeout": DEFAULT_CONN_TIMEOUT}
+
+def merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:
+    merged = copy.deepcopy(base_settings)
+    
+    # Perform a deep merge for nested dictionaries, specifically for the 'pool' key.
+    # If both base_settings and override_settings have a 'pool' key,
+    # and both values are dictionaries, merge them deeply.
+    if 'pool' in merged and isinstance(merged['pool'], dict) and \
+       'pool' in override_settings and isinstance(override_settings['pool'], dict):
+        merged_pool = copy.deepcopy(merged['pool'])
+        merged_pool.update(override_settings['pool'])
+        merged['pool'] = merged_pool
+    else:
+        # For other keys or if 'pool' is not a dictionary in both,
+        # or if one of them doesn't have a 'pool' key,
+        # update the top-level keys, which will replace entirely.
+        merged.update(override_settings)
+
+    return merged
+=== END ===

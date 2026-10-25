@@ -1,0 +1,78 @@
+=== FILE: jitter_core.py ===
+"""Low-level jitter percentile calculation engine."""
+import math
+from typing import List
+
+def evaluate_jitter_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile values across observed samples using linear interpolation.
+    For p < 0, returns the minimum value. For p > 100, returns the maximum value.
+    """
+    if not values:
+        raise ValueError("No jitter values")
+    s = sorted(values)
+    n = len(s)
+
+    # Clamp p to the valid range [0, 100] for linear interpolation
+    p_clamped = max(0.0, min(100.0, p))
+
+    # This is the linear interpolation method, which is distinct from nearest-rank.
+    # It calculates the index as p/100 * (n-1) and interpolates if it's not an integer.
+    idx = (p_clamped / 100.0) * (n - 1)
+    
+    # Ensure indices are within bounds [0, n-1]
+    low = int(math.floor(idx))
+    high = int(math.ceil(idx))
+
+    # In case of idx being an integer, or n=1, low and high will be the same.
+    # This also naturally handles p=0 (idx=0, low=0, high=0) and p=100 (idx=n-1, low=n-1, high=n-1).
+    if low == high:
+        return float(s[low])
+
+    frac = idx - low
+    return float(s[low] + frac * (s[high] - s[low]))
+
+def evaluate_jitter_percentile_nearest_rank(values: List[float], p: float) -> float:
+    """Calculates percentile values across observed samples using the nearest-rank method.
+    Index k = math.ceil(p / 100 * n) - 1 on sorted values.
+    For p <= 0, returns the minimum value. For p >= 100, returns the maximum value.
+    """
+    if not values:
+        raise ValueError("No jitter values")
+    s = sorted(values)
+    n = len(s)
+
+    # Handle boundary cases for p as per common percentile definitions
+    if p <= 0:
+        return s[0] # Smallest value for 0th or negative percentile
+    if p >= 100:
+        return s[n-1] # Largest value for 100th or greater percentile
+
+    # The nearest-rank method calculates the index and picks the value at that index.
+    # The problem statement specifies: k = math.ceil(p / 100 * n) - 1
+    idx = math.ceil((p / 100.0) * n) - 1
+    
+    # Ensure the calculated index k is within valid 0-based array bounds [0, n-1]
+    k = max(0, min(n - 1, int(idx)))
+    return float(s[k])
+=== END ===
+=== FILE: jitter_evaluator.py ===
+"""Network jitter SLA evaluation service."""
+from typing import List, Dict, Any
+from jitter_types import JitterStream, JitterSample
+import jitter_core
+
+def check_jitter_sla(stream: JitterStream, p: float, max_jitter: float) -> bool:
+    """SLA compliance requires nearest-rank percentile estimation: index k = math.ceil(p / 100 * n) - 1 on sorted values.
+    Returns True if compliance limit is respected.
+    """
+    vals = stream.raw_jitters()
+    # Use the specific nearest-rank percentile calculation required for SLA compliance.
+    percentile_val = jitter_core.evaluate_jitter_percentile_nearest_rank(vals, p)
+    return percentile_val <= max_jitter
+
+def get_stream_jitter_metrics(stream: JitterStream, p: float) -> Dict[str, Any]:
+    vals = stream.raw_jitters()
+    # This function uses the standard linear interpolation percentile calculation.
+    q = jitter_core.evaluate_jitter_percentile(vals, p)
+    return {"count": stream.sample_count(), "jitter_p": q}
+=== END ===

@@ -1,0 +1,68 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+    line_totals: list of integer cents.
+    Returns list of discount cents per line.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+    
+    num_lines = len(line_totals)
+    if num_lines == 0:
+        return []
+
+    total_line_value = sum(line_totals)
+    if total_line_value == 0:
+        return [0] * num_lines
+
+    # Calculate base allocations using integer division
+    allocations = [0] * num_lines
+    for i in range(num_lines):
+        allocations[i] = (line_totals[i] * total_discount_cents) // total_line_value
+
+    # Calculate the remainder
+    current_allocated_sum = sum(allocations)
+    remainder = total_discount_cents - current_allocated_sum
+
+    # Distribute the remainder cents.
+    # To ensure a stable and fair distribution, we can distribute to lines
+    # that have the largest fractional parts from the ideal proportional division.
+    # We can approximate this by sorting lines based on their original values
+    # or simply iterate through them. For simplicity and to match common behavior
+    # of distributing remaining pennies, we'll iterate and add 1 cent to the
+    # largest lines first, or by index if values are identical.
+    
+    # Calculate fractional parts or "remainder potential" for each line
+    # (line_value * total_discount_cents) % total_line_value
+    # This gives us a value proportional to the fractional part that was truncated.
+    
+    # Create a list of (remainder_potential, original_index) tuples
+    remainder_potential_tuples = []
+    for i in range(num_lines):
+        # The true remainder for each line before integer division is
+        # (line_totals[i] * total_discount_cents) % total_line_value
+        remainder_potential = (line_totals[i] * total_discount_cents) % total_line_value
+        remainder_potential_tuples.append((remainder_potential, i))
+    
+    # Sort in descending order of remainder_potential, then by original index for tie-breaking
+    remainder_potential_tuples.sort(key=lambda x: (x[0], x[1]), reverse=True)
+
+    # Distribute the remainder cents to the lines with the highest remainder potential
+    for i in range(remainder):
+        # Get the index of the line to receive an extra cent
+        original_index = remainder_potential_tuples[i % num_lines][1]
+        allocations[original_index] += 1
+
+    return allocations
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===

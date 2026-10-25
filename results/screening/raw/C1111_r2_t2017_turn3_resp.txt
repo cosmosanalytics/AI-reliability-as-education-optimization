@@ -1,0 +1,64 @@
+=== FILE: guard.py ===
+"""API gateway authorization guard."""
+from policy import RoutePolicy
+from url_normalizer import clean_scope
+
+def is_scope_permitted(policy: RoutePolicy, request_scope: str) -> bool:
+    """Check if request_scope is authorized under policy.allowed_pattern.
+    Access control scopes must use the double-colon hierarchy tenant::department::service::action.
+    Sibling paths must be checked against '::' segment boundaries.
+    The single asterisk wildcard '*' matches exactly one segment; the double asterisk '**' matches arbitrary multi-segment prefixes.
+    """
+    clean_req = clean_scope(request_scope)
+
+    policy_segments = policy.allowed_pattern.split("::")
+    request_segments = clean_req.split("::")
+
+    # If the policy pattern is empty, it only matches an empty request scope.
+    if not policy_segments or (len(policy_segments) == 1 and not policy_segments[0]):
+        return not request_segments or (len(request_segments) == 1 and not request_segments[0])
+
+    # If the request scope is empty but policy is not, it cannot match.
+    if not request_segments or (len(request_segments) == 1 and not request_segments[0]):
+        return False
+
+    i = 0  # index for policy_segments
+    j = 0  # index for request_segments
+
+    while i < len(policy_segments) and j < len(request_segments):
+        policy_segment = policy_segments[i]
+        request_segment = request_segments[j]
+
+        if policy_segment == "**":
+            # The "**" wildcard matches any remaining segments in the request scope.
+            # As per "arbitrary multi-segment prefixes", this means it matches everything
+            # from this point to the end of the request_scope.
+            return True
+        elif policy_segment == "*":
+            # The "*" wildcard matches exactly one segment.
+            # Consume one segment from both policy and request.
+            i += 1
+            j += 1
+        elif policy_segment == request_segment:
+            # Exact segment match.
+            # Consume one segment from both policy and request.
+            i += 1
+            j += 1
+        else:
+            # Mismatch: segments are different and no wildcard applies.
+            return False
+
+    # After the loop, both policy and request segments should be fully consumed for a complete match.
+    # If policy has remaining segments, but request does not, it's not a match (e.g., policy="a::b", request="a").
+    # If request has remaining segments, but policy does not, it's not a match (e.g., policy="a", request="a::b").
+    return i == len(policy_segments) and j == len(request_segments)
+
+def evaluate_request(policies: list, role: str, scope: str) -> bool:
+    for p in policies:
+        if p.matches_role(role) and is_scope_permitted(p, scope):
+            return True
+    return False
+
+def count_permitted_scopes(policy: RoutePolicy, scopes: list) -> int:
+    return sum(1 for s in scopes if is_scope_permitted(policy, s))
+=== END ===

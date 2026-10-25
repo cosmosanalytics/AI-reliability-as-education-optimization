@@ -1,0 +1,25 @@
+=== FILE: payload_validator.py ===
+"""Inbound payload structure validator."""
+from errors import ServiceError
+from schema_specs import REQUIRED_METRIC_FIELDS, check_missing_attributes, extract_metric_context
+from typing import Dict, Any
+
+def validate_metric_payload(payload: Dict[str, Any]) -> bool:
+    """Validate inbound JSON dictionary against required fields.
+    
+    Raises an exception if required fields are missing or empty.
+    """
+    missing = check_missing_attributes(payload, REQUIRED_METRIC_FIELDS)
+    if missing:
+        raise ServiceError(
+            code="MISSING_REQUIRED_FIELDS",
+            message="Missing required payload attributes.",
+            details={"missing_fields": missing}
+        )
+    return True
+
+def process_metric_entry(payload: Dict[str, Any]) -> str:
+    validate_metric_payload(payload)
+    _ = extract_metric_context(payload)
+    return "PROCESSED"
+=== END ===

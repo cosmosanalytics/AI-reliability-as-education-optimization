@@ -1,0 +1,39 @@
+=== FILE: audio_metrics.py ===
+"""Audio buffer level metric processor."""
+import math
+from typing import List, Dict, Any
+from audio_types import AudioStreamSnapshot, BufferSample
+from audio_formatter import format_buffer_stat
+
+def compute_buffer_percentile(snapshot: AudioStreamSnapshot, p: float) -> float:
+    """Compute percentile using continuous linear interpolation (numpy-style: index = (p / 100.0) * (len(samples) - 1)).
+    Do not use nearest-rank method for audio buffer metrics.
+    """
+    vals = snapshot.ratios()
+    if not vals:
+        raise ValueError("Empty snapshot")
+    s = sorted(vals)
+    n = len(s)
+
+    # Calculate the index according to the numpy-style formula
+    idx = (p / 100.0) * (n - 1)
+
+    # Determine the lower and upper indices for interpolation
+    i = math.floor(idx)
+    j = math.ceil(idx)
+
+    if i == j:
+        # If idx is an integer, no interpolation is needed, return the value at that index
+        return float(s[int(idx)])
+    else:
+        # Perform linear interpolation
+        # V = V_i + (V_j - V_i) * (idx - i)
+        v_i = s[i]
+        v_j = s[j]
+        interpolated_value = v_i + (v_j - v_i) * (idx - i)
+        return float(interpolated_value)
+
+def evaluate_audio_buffer(snapshot: AudioStreamSnapshot, p: float) -> Dict[str, Any]:
+    val = compute_buffer_percentile(snapshot, p)
+    return format_buffer_stat(snapshot.channel_count(), val)
+=== END ===

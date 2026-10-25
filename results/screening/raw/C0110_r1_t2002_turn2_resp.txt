@@ -1,0 +1,79 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+    line_totals: list of integer cents.
+    Returns list of discount cents per line.
+    The total allocated discount will sum up to total_discount_cents,
+    with any remainder distributed to lines with larger original proportions.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+    total = sum(line_totals)
+    num_lines = len(line_totals)
+
+    if total == 0:
+        return [0] * num_lines
+
+    # Calculate initial allocations using integer division
+    allocations = [0] * num_lines
+    for i in range(num_lines):
+        allocations[i] = (line_totals[i] * total_discount_cents) // total
+
+    # Calculate the remaining cents to distribute
+    current_sum = sum(allocations)
+    remainder = total_discount_cents - current_sum
+
+    if remainder == 0:
+        return allocations
+
+    # Distribute the remainder one cent at a time
+    # Prioritize lines with larger original values to distribute the remainder
+    # This ensures the total_discount_cents is fully allocated.
+    # To maintain proportionality as much as possible, we could sort by original
+    # fractional part or simply iterate. Iterating is simpler and common.
+    # For a more robust solution, one might sort by `(line_totals[i] * total_discount_cents) % total`
+    # to distribute to those with the largest fractional remainders.
+    # However, for simplicity and to address the "penny mismatch",
+    # we can just add to the first `remainder` lines.
+    # A more fair distribution would be to sort by the fractional part of the ideal allocation.
+    # Let's use a method that adds to lines with the largest initial values first.
+    
+    # Create a list of (original_value, index) tuples to sort by original value
+    indexed_lines = sorted(
+        [(line_totals[i], i) for i in range(num_lines)],
+        key=lambda x: x[0],
+        reverse=True
+    )
+
+    for _ in range(remainder):
+        if not indexed_lines: # Should not happen if remainder <= num_lines
+            break
+        # Distribute to the line with the largest original value
+        # If multiple lines have the same largest value, this will pick one stably
+        largest_value, original_index = indexed_lines.pop(0) # Pop from the start for largest
+        allocations[original_index] += 1
+        # Re-insert to maintain sorted order if necessary, but for simple distribution, just remove and add.
+        # If we need to distribute more than `num_lines` cents, we need to cycle through.
+        # A simpler way to handle remainder is to just iterate through the lines and add.
+        # Let's simplify and just iterate through the lines for the remainder.
+
+    # Simpler remainder distribution: just iterate through lines
+    for i in range(remainder):
+        allocations[i % num_lines] += 1 # Cycle through lines to add 1 cent until remainder is gone
+        
+    return allocations
+
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    # With the updated prorate_discount, total_allocated should always equal total_discount_cents
+    # unless total_discount_cents is negative, which is currently not handled by validation.
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===

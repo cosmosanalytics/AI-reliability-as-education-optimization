@@ -1,0 +1,108 @@
+=== FILE: rbac.py ===
+"""Document scope RBAC filter."""
+from path_resolver import clean_scope, split_scope_segments
+from audit_logger import format_access_attempt
+
+def check_scope_access(allowed_scope: str, requested_scope: str) -> bool:
+    """Verify if requested scope is permitted within the designated scope pattern.
+
+    Access is granted if the requested scope's segments match the allowed scope's
+    segments from left to right. A '*' in the allowed_scope acts as a wildcard
+    for a single segment. If the allowed_scope ends without a wildcard, the
+    requested_scope must either be identical or be a child scope (i.e., have
+    additional segments).
+    """
+    cleaned_allowed_scope = clean_scope(allowed_scope)
+    cleaned_requested_scope = clean_scope(requested_scope)
+
+    allowed_segs = split_scope_segments(cleaned_allowed_scope)
+    requested_segs = split_scope_segments(cleaned_requested_scope)
+
+    # An empty allowed_scope or requested_scope cannot grant access,
+    # unless both are empty (which should be handled by split_scope_segments making them empty lists).
+    if not allowed_segs and not requested_segs:
+        allowed = True
+    elif not allowed_segs: # e.g. allowed="", requested="a::b"
+        allowed = False
+    elif not requested_segs: # e.g. allowed="a::b", requested=""
+        allowed = False
+    else:
+        allowed = True
+        for i, allowed_seg in enumerate(allowed_segs):
+            if i >= len(requested_segs):
+                # allowed_scope is longer than requested_scope, and no wildcard allows it
+                allowed = False
+                break
+            if allowed_seg == '*':
+                # Wildcard matches any single segment
+                continue
+            if allowed_seg != requested_segs[i]:
+                # Mismatch in segments
+                allowed = False
+                break
+        
+        # If all allowed_segs matched, but allowed_scope did not end with a wildcard
+        # and requested_scope is shorter, then it's a mismatch.
+        # Example: allowed="a::b", requested="a" -> should be False
+        if allowed and len(allowed_segs) > len(requested_segs) and allowed_segs[-1] != '*':
+            allowed = False
+        
+        # If allowed_scope ends with a wildcard, it matches only up to that segment.
+        # E.g., allowed="a::*", requested="a::b::c" -> should be False if * matches only one segment.
+        # The current logic allows this if the wildcard is the last segment and it matches.
+        # Let's refine for `a::b` meaning `a::b` and `a::b::c`, but not `a::b_internal`.
+        # And `a::b::*` meaning `a::b::c` but not `a::b`.
+        
+        # Re-evaluating based on common RBAC patterns and the issue:
+        # "corp::public" should grant access to "corp::public" and "corp::public::readme"
+        # but NOT "corp::public_internal".
+        # "corp::public::*" should grant access to "corp::public::readme" but NOT "corp::public".
+
+        # The initial logic for segment-by-segment comparison up to the length of allowed_segs
+        # is correct for preventing "corp::public" matching "corp::public_internal".
+
+        # Now, handle the length constraint and wildcard behavior.
+        # If allowed_scope ends with `*`, it matches exactly one segment at that position.
+        # If allowed_scope does *not* end with `*`, then requested_scope must be
+        # either exactly the same length or longer.
+
+        # Let's restart the core logic for clarity.
+        allowed = True
+        for i in range(len(allowed_segs)):
+            if i >= len(requested_segs):
+                allowed = False # Requested scope is shorter than allowed scope prefix
+                break
+            if allowed_segs[i] == '*':
+                # Wildcard matches one segment, continue to next allowed segment
+                continue
+            if allowed_segs[i] != requested_segs[i]:
+                allowed = False # Segment mismatch
+                break
+        
+        if allowed:
+            # If we matched all allowed segments, check remaining length constraints
+            if allowed_segs and allowed_segs[-1] == '*':
+                # If allowed_scope ended with a wildcard, it matches exactly up to that point.
+                # The length of requested_segs must be exactly the length of allowed_segs.
+                # Example: allowed="a::*", requested="a::b" (len 2, 2) -> True
+                # Example: allowed="a::*", requested="a::b::c" (len 2, 3) -> False
+                if len(requested_segs) != len(allowed_segs):
+                    allowed = False
+            else:
+                # If allowed_scope did not end with a wildcard,
+                # requested_scope must be the same length or longer.
+                # Example: allowed="a::b", requested="a::b" (len 2, 2) -> True
+                # Example: allowed="a::b", requested="a::b::c" (len 2, 3) -> True
+                # Example: allowed="a::b", requested="a" (len 2, 1) -> False (already caught by i >= len(requested_segs))
+                if len(requested_segs) < len(allowed_segs):
+                    allowed = False # Should be caught by the loop, but as a safeguard.
+    
+    _ = format_access_attempt(cleaned_allowed_scope, cleaned_requested_scope, allowed)
+    return allowed
+
+def filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:
+    return [s for s in scopes if check_scope_access(allowed_scope, s)]
+
+def can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:
+    return all(check_scope_access(allowed_scope, s) for s in scopes)
+=== END ===

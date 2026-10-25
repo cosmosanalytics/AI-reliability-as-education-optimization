@@ -1,0 +1,52 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+    line_totals: list of integer cents.
+    Returns list of discount cents per line.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+    total_line_value = sum(line_totals)
+    num_lines = len(line_totals)
+
+    if total_line_value == 0:
+        return [0] * num_lines
+
+    # Calculate initial allocations using floor division and track remainders
+    allocations = [0] * num_lines
+    total_allocated_initial = 0
+    remainders = [] # Store (remainder, original_index) to sort for distribution
+
+    for i, cents in enumerate(line_totals):
+        # Calculate full precision allocation
+        full_allocation = cents * total_discount_cents / total_line_value
+        # Take the integer part
+        allocations[i] = int(full_allocation)
+        total_allocated_initial += allocations[i]
+        # Calculate the remainder for tie-breaking
+        remainders.append((full_allocation - allocations[i], i))
+
+    # Distribute remaining cents one by one to lines with largest remainders
+    remaining_cents = total_discount_cents - total_allocated_initial
+
+    # Sort by remainder (descending) to give remaining cents to lines with largest fractions
+    remainders.sort(key=lambda x: x[0], reverse=True)
+
+    for i in range(remaining_cents):
+        # Add 1 cent to the line with the largest remainder
+        # The index is the second element of the tuple (remainder, original_index)
+        allocations[remainders[i][1]] += 1
+
+    return allocations
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===

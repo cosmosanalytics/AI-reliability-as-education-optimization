@@ -1,0 +1,71 @@
+=== FILE: guard.py ===
+"""API gateway authorization guard."""
+from policy import RoutePolicy
+from url_normalizer import clean_scope
+
+def is_scope_permitted(policy: RoutePolicy, request_scope: str) -> bool:
+    """Check if request_scope is authorized under policy.allowed_pattern.
+    Access control scopes must use the double-colon hierarchy tenant::department::service::action.
+    Sibling paths must be checked against '::' segment boundaries.
+    The single asterisk wildcard '*' matches exactly one segment; the double asterisk '**' matches arbitrary multi-segment prefixes.
+    """
+    clean_req = clean_scope(request_scope)
+    pattern_parts = policy.allowed_pattern.split('::')
+    request_parts = clean_req.split('::')
+
+    p_idx = 0  # pattern index
+    r_idx = 0  # request index
+    p_len = len(pattern_parts)
+    r_len = len(request_parts)
+
+    # p_idx_star: index of the pattern part *after* the last '**' encountered
+    # r_idx_star: index of the request part *after* the last '**' encountered, where matching resumed
+    p_idx_star = -1
+    r_idx_star = -1
+
+    while p_idx < p_len:
+        if p_idx < p_len and r_idx < r_len and (pattern_parts[p_idx] == request_parts[r_idx] or pattern_parts[p_idx] == '*'):
+            # Exact match or single-segment wildcard '*'
+            p_idx += 1
+            r_idx += 1
+        elif p_idx < p_len and pattern_parts[p_idx] == '**':
+            # Double-asterisk wildcard '**'
+            p_idx_star = p_idx
+            r_idx_star = r_idx
+            p_idx += 1 # Advance pattern index past '**'
+            # If '**' is the last part of the pattern, it matches everything remaining.
+            if p_idx == p_len:
+                return True
+            # Otherwise, try to match the rest of the pattern from the current request position.
+            # If a match fails, we will backtrack 'r_idx' later.
+        elif p_idx_star != -1:
+            # Current parts don't match, and we have a previous '**' to backtrack to.
+            # Advance request index from where the last '**' left off.
+            r_idx_star += 1
+            # If we've exhausted request parts for '**' to consume, this path fails.
+            if r_idx_star > r_len:
+                return False
+            # Reset pattern index to the part *after* the '**'
+            p_idx = p_idx_star + 1
+            # Resume matching from the new request index
+            r_idx = r_idx_star
+        else:
+            # No match, no '*' or '**', and no '**' to backtrack to.
+            return False
+
+    # After iterating through the pattern, ensure we've consumed all request parts.
+    # If p_idx == p_len, it means the pattern has been fully matched.
+    # We also need to ensure that the request has been fully consumed (r_idx == r_len),
+    # unless the last pattern part was '**' (which is handled by the `if p_idx == p_len` check inside the `**` block).
+    return p_idx == p_len and r_idx == r_len
+
+
+def evaluate_request(policies: list, role: str, scope: str) -> bool:
+    for p in policies:
+        if p.matches_role(role) and is_scope_permitted(p, scope):
+            return True
+    return False
+
+def count_permitted_scopes(policy: RoutePolicy, scopes: list) -> int:
+    return sum(1 for s in scopes if is_scope_permitted(policy, s))
+=== END ===

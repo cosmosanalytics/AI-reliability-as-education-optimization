@@ -1,0 +1,104 @@
+=== FILE: guard.py ===
+"""API gateway authorization guard."""
+from policy import RoutePolicy
+from url_normalizer import clean_scope
+
+def is_scope_permitted(policy: RoutePolicy, request_scope: str) -> bool:
+    """Check if request_scope is authorized under policy.allowed_pattern.
+    Access control scopes must use the double-colon hierarchy tenant::department::service::action.
+    Sibling paths must be checked against '::' segment boundaries.
+    The single asterisk wildcard '*' matches exactly one segment; the double asterisk '**' matches arbitrary multi-segment prefixes.
+    """
+    clean_req = clean_scope(request_scope)
+
+    if policy.is_wildcard():  # Handles the "**" policy directly
+        return True
+
+    pattern_segments = policy.allowed_pattern.split('::')
+    request_segments = clean_req.split('::')
+
+    i = 0
+    j = 0
+
+    while i < len(pattern_segments) and j < len(request_segments):
+        p_seg = pattern_segments[i]
+        r_seg = request_segments[j]
+
+        if p_seg == "**":
+            # If "**" is the last segment, it matches any remaining request segments
+            if i == len(pattern_segments) - 1:
+                return True
+            # If "**" is not the last segment, find the next matching non-wildcard segment
+            # This is more complex, but the current problem definition implies ** as a prefix or full match.
+            # Let's assume for now that "**" can only appear as the last segment or as the only segment.
+            # If it's not the last segment, it should match 0 or more segments until the next pattern segment matches.
+            # For simplicity, if "**" is internal, it effectively means "match anything until the next segment of the pattern is found".
+            # The issue seems to imply "**" is more like a prefix wildcard, e.g., "corp::**"
+            # Given the existing tests and problem description, let's stick to the simplest interpretation of "**" as prefix wildcard or full match.
+            # The problem example "corp::reports_secret under standard corp::reports policy" implies strict segment matching.
+            # The docstring "double asterisk '**' matches arbitrary multi-segment prefixes" suggests "corp::**" matches "corp::a::b"
+            # A prefix match means if pattern is `A::**`, it matches `A::B::C`.
+            # If `A::B`, it only matches `A::B`, not `A::B::C`.
+            # The current interpretation is that `**` acts like a "match all remaining".
+            # If `pattern_segments[i]` is `**`, and it's not the last segment, this implies a more advanced matching
+            # that is not explicitly tested. For SEC-810, the problem is `corp::reports` matching `corp::reports_secret`.
+            # Let's assume `**` is only at the end or the whole pattern.
+            # The `policy.is_wildcard()` already handles `**` as the whole pattern.
+            # So, if `**` appears here, it must be like `prefix::**`.
+
+            # To correctly handle "corp::**" matching "corp::billing::invoices":
+            # If `p_seg` is `**`, and it's not the last segment, then the pattern is malformed or
+            # implies a more complex matching logic not described for this specific problem.
+            # The problem is about `corp::reports` NOT matching `corp::reports_secret`.
+            # The simple `startswith` is incorrect. The `**` rule needs to be handled.
+            # The current implementation of `is_wildcard()` handles the `allowed_pattern == "**"` case.
+            # If `**` is part of a longer pattern, like `corp::**`, it should match `corp::` and then everything after.
+            # This means if `p_seg` is `**`, and it's not the last segment, then it implies matching everything from this point.
+            # Let's re-evaluate: "double asterisk '**' matches arbitrary multi-segment prefixes".
+            # This means `corp::**` matches `corp`, and then `**` matches `billing::invoices`.
+            # So if `p_seg == "**"`, it matches everything remaining.
+            return True # If a `**` is encountered, and it's not already handled by policy.is_wildcard(),
+                        # it must be `prefix::**`. This implies matching all remaining request segments.
+
+        elif p_seg == "*":
+            # Matches exactly one segment
+            i += 1
+            j += 1
+        elif p_seg == r_seg:
+            # Exact segment match
+            i += 1
+            j += 1
+        else:
+            # Mismatch
+            return False
+
+    # After loop, check if both pattern and request segments were fully consumed
+    # Except for the case where the pattern ends with a wildcard that can match zero segments (e.g., "**" could)
+    # The docstring says "**" matches "arbitrary multi-segment prefixes", implying 0 or more.
+    # The docstring says "*" matches "exactly one segment".
+
+    # If all pattern segments are consumed and all request segments are consumed, it's a match.
+    # If the pattern still has segments left, it's a mismatch (unless the remaining pattern segments are `**` as the last segment)
+    # which is handled above by `p_seg == "**"` check.
+    # Or, if the request has segments left, but the pattern is fully consumed, it's a mismatch (e.g., policy `A::B` vs request `A::B::C`).
+    # This implies the policy must match the request exactly, or end with a wildcard that consumes the rest.
+
+    # The loop condition `while i < len(pattern_segments) and j < len(request_segments)` means we exit when one list is exhausted.
+    # If `i == len(pattern_segments)` and `j == len(request_segments)`, it's a match.
+    # If `i == len(pattern_segments)` but `j < len(request_segments)`, it means the request has more segments than the pattern (e.g., `A::B` vs `A::B::C`).
+    #   This should be `False` according to "sibling path boundary" and not matching children implicitly.
+    # If `i < len(pattern_segments)` but `j == len(request_segments)`, it means the pattern has more segments than the request (e.g., `A::B::C` vs `A::B`).
+    #   This should be `False`.
+
+    return i == len(pattern_segments) and j == len(request_segments)
+
+
+def evaluate_request(policies: list, role: str, scope: str) -> bool:
+    for p in policies:
+        if p.matches_role(role) and is_scope_permitted(p, scope):
+            return True
+    return False
+
+def count_permitted_scopes(policy: RoutePolicy, scopes: list) -> int:
+    return sum(1 for s in scopes if is_scope_permitted(policy, s))
+=== END ===

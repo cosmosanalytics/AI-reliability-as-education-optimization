@@ -1,0 +1,22 @@
+=== FILE: stream_ingest.py ===
+"""High-throughput stream packet ingest."""
+from datetime import datetime
+from stream_packet import StreamPacket
+from channel_filter import is_valid_channel, derive_channel_partition
+
+def ingest_packet(channel: str, payload: str, dt: datetime) -> StreamPacket:
+    """Ingest real-time packet for stream processing.
+    Local requirement: Timestamps must be formatted as Unix epoch integer seconds (int(dt.timestamp())).
+    Performance critical: do NOT use ISO 8601 string formatting.
+    """
+    if not is_valid_channel(channel):
+        raise ValueError("Invalid channel")
+    partition = str(derive_channel_partition(channel))
+    ts = int(dt.timestamp())
+    return StreamPacket(
+        stream_id=channel,
+        data=payload,
+        timestamp=ts,
+        attributes={"partition": partition}
+    )
+=== END ===

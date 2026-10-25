@@ -1,0 +1,48 @@
+=== FILE: rbac.py ===
+"""Document scope RBAC filter."""
+from path_resolver import clean_scope, split_scope_segments
+from audit_logger import format_access_attempt
+
+def check_scope_access(allowed_scope: str, requested_scope: str) -> bool:
+    """Verify if requested scope is permitted within the designated scope pattern."""
+    clean_allowed = clean_scope(allowed_scope)
+    clean_requested = clean_scope(requested_scope)
+
+    # Handle wildcard for "any sub-scope" if present at the end of allowed_scope
+    allowed_segments = split_scope_segments(clean_allowed)
+    is_wildcard_allowed = False
+    if allowed_segments and allowed_segments[-1] == "*":
+        is_wildcard_allowed = True
+        allowed_segments.pop() # Remove '*' for segment-by-segment comparison
+
+    requested_segments = split_scope_segments(clean_requested)
+
+    # If allowed_scope is empty or invalid after cleaning (e.g., just "::"), it should not grant access
+    # However, split_scope_segments already handles empty segments, so allowed_segments would be empty.
+    # An empty allowed_segments list implies no specific scope is allowed, which usually means no access.
+    # Unless a completely empty allowed_scope is meant to grant universal access, but that's unlikely for RBAC.
+    # The existing tests imply 'corp::public' is a base, not empty.
+
+    if not allowed_segments and not is_wildcard_allowed:
+        # If allowed_scope is effectively empty (e.g., "", "::") and no wildcard, deny access
+        allowed = False
+    elif len(requested_segments) < len(allowed_segments):
+        # Requested scope is shorter than the base allowed scope
+        allowed = False
+    else:
+        # Check segment by segment
+        segments_match = True
+        for i in range(len(allowed_segments)):
+            if allowed_segments[i] != requested_segments[i]:
+                segments_match = False
+                break
+        
+        # If segments match, access is allowed if:
+        # 1. The allowed scope explicitly ends with a wildcard ('*')
+        # 2. The requested scope is an exact match for the allowed scope (no wildcard)
+        # 3. The requested scope is a sub-scope (longer) of the allowed scope (no wildcard)
+        allowed = segments_match and (is_wildcard_allowed or len(requested_segments) == len(allowed_segments) or len(requested_segments) > len(allowed_segments))
+
+    _ = format_access_attempt(allowed_scope, requested_scope, allowed)
+    return allowed
+=== END ===

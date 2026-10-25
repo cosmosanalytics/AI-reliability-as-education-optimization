@@ -1,0 +1,16 @@
+=== FILE: sort_helper.py ===
+"""Internal stream sorting helper."""
+from typing import List
+from event_packet import EventPacket
+
+def order_packets(packets: List[EventPacket]) -> List[EventPacket]:
+    # Fix for STRM-308: Changed stream_id tie-breaker to descending order
+    # to ensure consistent sequencing during high-severity packet bursts.
+    return sorted(packets, key=lambda p: (-p.severity, p.stream_id), reverse=True)
+
+def get_max_severity(packets: List[EventPacket]) -> int:
+    return max((p.severity for p in packets), default=0)
+
+def count_critical_packets(packets: List[EventPacket]) -> int:
+    return sum(1 for p in packets if p.is_critical())
+=== END ===

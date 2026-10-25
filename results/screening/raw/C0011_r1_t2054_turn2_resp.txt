@@ -1,0 +1,79 @@
+=== FILE: list_merger.py ===
+"""Low-level dictionary and list hierarchy merger."""
+from typing import Dict, Any, List
+
+def merge_spec_values(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Recursively merges dictionary values.
+
+    For dictionary values, it performs a deep merge.
+    For list values, if both base and override values are lists, it performs
+    a union of unique elements. Otherwise, override values replace base values.
+    """
+    result = dict(base)
+    for k, v in override.items():
+        if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+            result[k] = merge_spec_values(result[k], v)
+        elif k in result and isinstance(result[k], list) and isinstance(v, list):
+            # For lists, perform a union of unique elements.
+            # The order of elements in the merged list is not guaranteed,
+            # but all unique elements from both lists will be present.
+            result[k] = list(set(result[k]) | set(v))
+        else:
+            result[k] = v
+    return result
+
+def is_spec_empty(spec: Dict[str, Any]) -> bool:
+    return len(spec) == 0
+=== END ===
+=== FILE: tests/test_list_merger.py ===
+from list_merger import merge_spec_values
+
+def test_merge_spec_values_list_union():
+    base = {"zones": ["zone-a", "zone-b"]}
+    override = {"zones": ["zone-b", "zone-c"]}
+    merged = merge_spec_values(base, override)
+    # The order of elements in the merged list is not guaranteed due to set conversion,
+    # but all unique elements must be present.
+    assert set(merged["zones"]) == {"zone-a", "zone-b", "zone-c"}
+
+def test_merge_spec_values_list_replacement_non_list_override():
+    base = {"zones": ["zone-a", "zone-b"]}
+    override = {"zones": "zone-c"} # Override with a non-list
+    merged = merge_spec_values(base, override)
+    assert merged["zones"] == "zone-c"
+
+def test_merge_spec_values_list_replacement_non_list_base():
+    base = {"zones": "zone-a"} # Base is not a list
+    override = {"zones": ["zone-b", "zone-c"]}
+    merged = merge_spec_values(base, override)
+    assert merged["zones"] == ["zone-b", "zone-c"]
+
+def test_merge_spec_values_deep_list_union():
+    base = {"network": {"subnets": ["s1", "s2"], "zones": ["az1", "az2"]}}
+    override = {"network": {"subnets": ["s2", "s3"], "zones": ["az2", "az3"]}}
+    merged = merge_spec_values(base, override)
+    assert set(merged["network"]["subnets"]) == {"s1", "s2", "s3"}
+    assert set(merged["network"]["zones"]) == {"az1", "az2", "az3"}
+
+def test_merge_spec_values_complex_mix():
+    base = {
+        "nodes": 3,
+        "zones": ["zone-a"],
+        "config": {"setting1": "value1", "setting2": "value2"},
+        "tags": ["tag1"]
+    }
+    tenant = {
+        "nodes": 5,
+        "zones": ["zone-b", "zone-c"],
+        "config": {"setting2": "new_value2", "setting3": "value3"},
+        "tags": ["tag2"]
+    }
+    manifest = merge_spec_values(base, tenant)
+    assert manifest["nodes"] == 5
+    assert set(manifest["zones"]) == {"zone-a", "zone-b", "zone-c"}
+    assert manifest["config"]["setting1"] == "value1"
+    assert manifest["config"]["setting2"] == "new_value2"
+    assert manifest["config"]["setting3"] == "value3"
+    assert set(manifest["tags"]) == {"tag1", "tag2"}
+=== END ===

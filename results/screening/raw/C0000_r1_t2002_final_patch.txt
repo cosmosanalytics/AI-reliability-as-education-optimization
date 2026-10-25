@@ -1,0 +1,86 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+    line_totals: list of integer cents.
+    Returns list of discount cents per line, ensuring the total discount
+    is fully allocated by distributing any remaining cents.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+
+    num_lines = len(line_totals)
+    if num_lines == 0:
+        return []
+
+    total_line_value = sum(line_totals)
+    if total_line_value == 0:
+        # If total line value is zero, distribute discount evenly or as zeros if discount is zero.
+        # Here we assume a discount cannot be applied if there's no value, so return zeros.
+        # If total_discount_cents > 0 and total_line_value == 0, this scenario might need
+        # specific business logic. For now, return zeros as per original intent.
+        return [0] * num_lines
+
+    # Calculate initial allocations using floor division and store remainders
+    allocations_with_remainders = []
+    for i, cents in enumerate(line_totals):
+        # Calculate proportional value multiplied by total_discount_cents
+        # to preserve precision before division.
+        proportional_value = cents * total_discount_cents
+        
+        initial_alloc = proportional_value // total_line_value
+        remainder = proportional_value % total_line_value
+        
+        allocations_with_remainders.append({
+            "index": i,
+            "allocated_cents": initial_alloc,
+            "remainder": remainder
+        })
+
+    # Calculate the sum of initially allocated cents
+    current_total_allocated = sum(item["allocated_cents"] for item in allocations_with_remainders)
+    
+    # Determine how many cents are still unallocated
+    remaining_cents_to_distribute = total_discount_cents - current_total_allocated
+
+    # Distribute the remaining cents to lines with the largest remainders
+    # Sort by remainder in descending order to prioritize lines that were "closest" to rounding up
+    allocations_with_remainders.sort(key=lambda x: x["remainder"], reverse=True)
+
+    for i in range(remaining_cents_to_distribute):
+        if i < num_lines: # Ensure we don't try to add to more lines than exist
+            allocations_with_remainders[i]["allocated_cents"] += 1
+        else:
+            # This case should ideally not be reached if total_discount_cents is reasonable
+            # relative to line_totals and number of lines.
+            # It means we need to add more cents than there are lines,
+            # so we'd wrap around and add to the lines with largest remainders again.
+            # For simplicity, we assume remaining_cents_to_distribute <= num_lines
+            # or that the problem context implies a distribution strategy that
+            # handles this by repeatedly adding to the largest remainders.
+            # A more robust solution might re-sort or use a heap.
+            # For typical penny-splitting, remaining_cents is usually small.
+            # To handle cases where remaining_cents_to_distribute > num_lines,
+            # we can add 1 cent to each of the top 'num_lines' items,
+            # then repeat for the next 'num_lines', etc.
+            # A simpler approach for small remaining_cents: just distribute sequentially.
+            # The current sort and loop handles this by adding to the top N items.
+            pass # The loop will naturally stop if i >= num_lines.
+
+    # Reconstruct the final list of allocations in original order
+    final_allocations = [0] * num_lines
+    for item in allocations_with_remainders:
+        final_allocations[item["index"]] = item["allocated_cents"]
+
+    return final_allocations
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===

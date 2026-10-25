@@ -1,0 +1,67 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+    Distributes any remainder pennies to ensure the total discount is fully allocated.
+    line_totals: list of integer cents.
+    Returns list of discount cents per line.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+
+    total_line_value = sum(line_totals)
+    num_lines = len(line_totals)
+
+    if total_line_value == 0:
+        return [0] * num_lines
+    if total_discount_cents == 0:
+        return [0] * num_lines
+
+    # Calculate base allocations and remainders
+    allocations = []
+    # Store (fractional_part, original_index) to sort for remainder distribution
+    remainder_candidates = []
+
+    for i, cents in enumerate(line_totals):
+        # Calculate full precision allocation
+        exact_allocation = (cents * total_discount_cents) / total_line_value
+        base_allocation = int(exact_allocation)
+        allocations.append(base_allocation)
+        
+        # Calculate fractional part for remainder distribution
+        fractional_part = exact_allocation - base_allocation
+        remainder_candidates.append((fractional_part, i))
+
+    # Distribute remaining pennies
+    current_allocated_sum = sum(allocations)
+    remaining_cents_to_distribute = total_discount_cents - current_allocated_sum
+
+    if remaining_cents_to_distribute > 0:
+        # Sort lines by their fractional part in descending order
+        # This ensures pennies are given to lines that were "closest" to getting an extra cent
+        remainder_candidates.sort(key=lambda x: x[0], reverse=True)
+
+        for _ in range(remaining_cents_to_distribute):
+            if not remainder_candidates: # Should not happen if total_discount_cents >= 0
+                break
+            # Give one penny to the line with the largest fractional part
+            _, original_index = remainder_candidates.pop(0) # Remove the top candidate
+            allocations[original_index] += 1
+            # Re-add to candidates if there are still pennies to distribute and it's not exhausted,
+            # but for simple penny distribution, we just iterate through the sorted list once.
+            # If we need to consider subsequent fractional parts for the *same* item,
+            # we'd need a more complex sort/heap, but for distributing 1-cent increments,
+            # a simple sort and pop is sufficient.
+
+    return allocations
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===

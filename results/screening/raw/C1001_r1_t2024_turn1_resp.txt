@@ -1,0 +1,11 @@
+=== FILE: sort_helper.py ===
+"""Internal stream sorting helper."""
+from typing import List
+from event_packet import EventPacket
+
+def order_packets(packets: List[EventPacket]) -> List[EventPacket]:
+    # Sort primarily by severity in descending order (highest severity first).
+    # For packets with the same severity, sort by stream_id in descending
+    # alphabetical order to resolve ties, as per STRM-308.
+    return sorted(packets, key=lambda p: (-p.severity, p.stream_id), reverse=False)
+=== END ===

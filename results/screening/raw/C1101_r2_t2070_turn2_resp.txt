@@ -1,0 +1,38 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values.
+
+    For non-integer ranks, the value is taken from the element at the floor of
+    the calculated 0-based index (effectively, 'lower' interpolation).
+
+    If the list is empty, raises ValueError.
+    For p <= 0, returns the smallest value. For p >= 100, returns the largest value.
+    """
+    if not values:
+        raise ValueError("Empty values")
+
+    s = sorted(values)
+    n = len(s)
+
+    # Handle edge cases for p to map to the first or last element
+    if p <= 0.0:
+        return float(s[0])
+    if p >= 100.0:
+        return float(s[n - 1])
+
+    # Calculate the 0-based index for the percentile using the (N-1) method.
+    # This method maps p=0 to index 0 and p=100 to index n-1, ensuring idx is
+    # within [0, n-1] for p in (0, 100).
+    idx = (p / 100.0) * (n - 1)
+
+    # The SLA calculation anomaly indicates that for non-integer ranks,
+    # the value at the lower bound of the interpolated interval should be used.
+    # This means taking s[floor(idx)], which corresponds to 'lower' interpolation.
+    low = int(math.floor(idx))
+
+    return float(s[low])
+=== END ===

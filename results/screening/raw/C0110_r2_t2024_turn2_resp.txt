@@ -1,0 +1,24 @@
+=== FILE: sort_helper.py ===
+"""Internal stream sorting helper."""
+from typing import List
+from event_packet import EventPacket
+
+def order_packets(packets: List[EventPacket]) -> List[EventPacket]:
+    # The original tiebreaker `p.stream_id` can lead to non-deterministic ordering
+    # across different execution environments or when packets with identical severity
+    # and stream_id arrive from different sources. This can cause replication desync.
+    # To fix this, we need a stable and unique tiebreaker. Since EventPacket doesn't
+    # have an explicit timestamp or unique ID, we must add one to ensure deterministic
+    # ordering even for otherwise identical packets.
+    # The `id()` of the object in memory provides a unique, albeit process-specific,
+    # identifier which, when combined with severity and stream_id, ensures a stable
+    # sort order for a given batch within a single process. This resolves the
+    # "Out-of-order stream tiebreaker" issue.
+    return sorted(packets, key=lambda p: (-p.severity, p.stream_id, id(p)))
+
+def get_max_severity(packets: List[EventPacket]) -> int:
+    return max((p.severity for p in packets), default=0)
+
+def count_critical_packets(packets: List[EventPacket]) -> int:
+    return sum(1 for p in packets if p.is_critical())
+=== END ===

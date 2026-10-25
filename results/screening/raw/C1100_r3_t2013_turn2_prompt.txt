@@ -1,0 +1,21 @@
+Visible Test Failure (exit code 1):
+FF                                                                       [100%]
+================================== FAILURES ===================================
+_______________________________ test_simple_tsv _______________________________
+tests\test_profile.py:6: in test_simple_tsv
+    assert export_profiles_tsv(p) == "cust_id\tname\tnotes\n1\tAlice\tNormal"
+E   AssertionError: assert 'cust_id\\tna...lice\\tNormal' == 'cust_id\tnam...Alice\tNormal'
+E     
+E     + cust_id\tname\tnotes\n1\tAlice\tNormal
+E     - cust_id	name	notes
+E     - 1	Alice	Normal
+_____________________________ test_tab_delimiters _____________________________
+tests\test_profile.py:11: in test_tab_delimiters
+    assert "\t" in res
+E   AssertionError: assert '\t' in 'cust_id\\tname\\tnotes\\n1\\tAlice\\tDeveloper'
+=========================== short test summary info ===========================
+FAILED tests/test_profile.py::test_simple_tsv - AssertionError: assert 'cust_...
+FAILED tests/test_profile.py::test_tab_delimiters - AssertionError: assert '\...
+2 failed in 0.28s
+
+Reply with your complete corrected patch in the required === FILE: path === ... === END === block format.

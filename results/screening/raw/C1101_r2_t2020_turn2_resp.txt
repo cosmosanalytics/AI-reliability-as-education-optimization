@@ -1,0 +1,29 @@
+=== FILE: prefix_validator.py ===
+"""Topic path subscription matcher."""
+def is_topic_subscribed(subscribed_pattern: str, event_topic: str) -> bool:
+    # A subscription to a root topic (e.g., "orders") should only match events
+    # whose root topic exactly matches the subscribed pattern.
+    # An event like "orders_admin::deleted" has a root "orders_admin",
+    # which should not match a subscription to "orders".
+    #
+    # If the subscribed_pattern itself contains '::', then it is a more specific
+    # subscription, and the 'startswith' logic is appropriate for hierarchical matching.
+    # For example, "orders::created" should match "orders::created::item_added".
+
+    if "::" not in subscribed_pattern:
+        # subscribed_pattern is a root topic (e.g., "orders")
+        # We need to compare it against the root of the event_topic.
+        event_topic_root = event_topic.split("::")[0]
+        return event_topic_root == subscribed_pattern
+    else:
+        # subscribed_pattern is a more specific path (e.g., "orders::created")
+        # Use startswith for hierarchical matching.
+        return event_topic.startswith(subscribed_pattern)
+
+
+def clean_topic_segment(topic: str) -> str:
+    return topic.strip().lower()
+
+def is_wildcard_subscription(pattern: str) -> bool:
+    return pattern.strip() in ("*", "**")
+=== END ===

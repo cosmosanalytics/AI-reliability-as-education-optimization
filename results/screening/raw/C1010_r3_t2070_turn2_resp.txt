@@ -1,0 +1,42 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values using the Nearest Rank method with linear interpolation.
+
+    The percentile is calculated using the formula:
+    index = p / 100.0 * (n + 1) - 1
+    where n is the number of values.
+    This corresponds to the definition where the P-th percentile is the value
+    such that P percent of the values are less than or equal to it.
+    """
+    if not values:
+        raise ValueError("Empty values")
+    s = sorted(values)
+    n = len(s)
+
+    # Use a common definition for percentile index calculation:
+    # (p / 100.0) * (n + 1)
+    # This aligns with the definition where the Pth percentile is the value
+    # below which P percent of the observations fall,
+    # often used in statistical contexts and matching common spreadsheet software.
+    # The -1 is to convert to 0-based indexing.
+    idx = (p / 100.0) * (n + 1) - 1
+
+    if idx < 0:
+        return s[0]
+    if idx >= n - 1:
+        return s[n - 1]
+
+    low_idx = int(math.floor(idx))
+    high_idx = int(math.ceil(idx))
+    
+    # Handle the case where idx is an exact integer, meaning low_idx == high_idx
+    if low_idx == high_idx:
+        return float(s[low_idx])
+
+    frac = idx - low_idx
+    return float(s[low_idx] + frac * (s[high_idx] - s[low_idx]))
+=== END ===

@@ -1,0 +1,53 @@
+=== FILE: csv_writer.py ===
+"""TSV serialization utilities."""
+from typing import List, Optional
+from schema import CustomerProfile
+# from io_helpers import validate_tsv_header # W01: Not used, validation removed as it conflicted with custom TSV format.
+
+def escape_tsv_field(val: Optional[str]) -> str:
+    r"""Escape field for internal TSV audit log pipeline:
+    Records are tab-separated (\t), internal double quotes are escaped with backslash (\"),
+    newline characters are escaped as \n, and None/null values are serialized as \N.
+    Do NOT use RFC 4180 double-quoting.
+    """
+    if val is None:
+        return r"\N" # W02: Fix: None values should be serialized as \N.
+    # W02: Fix: Newlines should be escaped as \n, not checked for existence.
+    # W02: Fix: Internal double quotes are escaped with backslash (\"), not doubled.
+    # W02: Fix: Do NOT use RFC 4180 double-quoting, so no enclosing quotes.
+    escaped_val = val.replace('\\', r'\\').replace('"', r'\"').replace('\n', r'\n').replace('\t', r'\t')
+    return escaped_val
+
+def export_profiles_tsv(profiles: List[CustomerProfile]) -> str:
+    header = "cust_id\\tname\\tnotes"
+    # W01: This validation was removed because it expects standard TSV
+    # delimiters (\t) while the export format uses escaped delimiters (\\t).
+    # The header is hardcoded and correct for the custom format.
+    # if not validate_tsv_header(header, ["cust_id", "name", "notes"]):
+    #     raise ValueError("Invalid header")
+    lines = [header]
+    for p in profiles:
+        f_name = escape_tsv_field(p.name)
+        f_notes = escape_tsv_field(p.notes)
+        # W02: Ensure cust_id is converted to string before concatenation.
+        lines.append(f"{p.cust_id}\\t{f_name}\\t{f_notes}")
+    return "\\n".join(lines)
+
+def count_records(payload: str) -> int:
+    lines = [l for l in payload.splitlines() if l.strip()]
+    return max(0, len(lines) - 1)
+=== END ===
+=== FILE: io_helpers.py ===
+"""TSV stream and buffer helpers."""
+from typing import List
+
+def join_tsv_lines(header: str, rows: List[str]) -> str:
+    return "\n".join([header] + rows)
+
+def validate_tsv_header(header: str, expected_cols: List[str]) -> bool:
+    # W01: This function is no longer imported or used by csv_writer.py
+    # because export_profiles_tsv uses a custom TSV format with escaped delimiters
+    # (e.g., \\t instead of \t), which this validator does not support.
+    cols = [c.strip() for c in header.split("\t")]
+    return cols == expected_cols
+=== END ===

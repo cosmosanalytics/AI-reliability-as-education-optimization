@@ -1,0 +1,20 @@
+=== FILE: idempotency_generator.py ===
+"""Idempotency token generation helpers."""
+import uuid
+
+def generate_outbound_key() -> str:
+    """Generates unique key for outbound request tracking.
+    
+    The key is prefixed with 'idemp_' to conform to gateway schema requirements.
+    """
+    return get_token_prefix() + str(uuid.uuid4())
+
+def is_valid_token_length(token: str) -> bool:
+    return len(token) > 0
+
+def get_token_prefix() -> str:
+    return "idemp_"
+=== END ===
+=== TOOL: pytest ===
+tests/
+=== END_TOOL ===

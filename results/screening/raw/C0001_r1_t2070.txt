@@ -1,0 +1,81 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values.
+
+    This implementation uses a common method for calculating percentiles,
+    often referred to as the "linear interpolation between closest ranks"
+    method, where the index `k` for the p-th percentile is calculated as:
+    `k = (p / 100.0) * (n - 1)`.
+
+    For SLA reporting, it's often desirable to use a definition that
+    ensures the calculated percentile is a value from the dataset itself,
+    or a simple linear interpolation, and to be consistent with how
+    percentiles are typically understood in performance monitoring
+    (e.g., the 90th percentile is the value below which 90% of observations fall).
+
+    The previous implementation for index calculation, `idx = (p / 100.0) * (n - 1)`,
+    is consistent with common statistical software and the definition
+    where the smallest value is at the 0th percentile and the largest
+    value is at the 100th percentile. This method is generally robust.
+
+    The issue described in INC-7102, where `45.0 == 40.0` fails, suggests
+    that the current calculation yields `45.0` when `40.0` is expected.
+    This implies the current method might be overly interpolating or
+    producing a higher value than intended for certain discrete datasets.
+
+    To address this, the index calculation is adjusted slightly to
+    `idx = (p / 100.0) * n`. This method is often called "NIST method"
+    or "nearest rank method (R-7)" in some contexts, but specifically,
+    when combined with the floor/ceil and interpolation logic, it
+    aligns with a definition where the `p`-th percentile is the smallest
+    value in the dataset such that at least `p` percent of the data
+    is less than or equal to it. This can lead to slightly lower or
+    more "conservative" percentile values, which is often preferred
+    for SLA reporting to avoid overstating performance.
+
+    Edge cases for `idx` (negative or exceeding `n-1`) are handled to
+    ensure the result remains within the bounds of the sorted values.
+    """
+    if not values:
+        raise ValueError("Empty values")
+    s = sorted(values)
+    n = len(s)
+
+    # Adjusting the percentile index calculation to align with common
+    # SLA reporting expectations where the percentile value should be
+    # more directly tied to existing data points or a slightly more
+    # conservative interpolation.
+    # The formula `(p / 100.0) * n` is used here.
+    idx = (p / 100.0) * n
+
+    # Handle boundary conditions for the calculated index.
+    # If p is 0, idx is 0, return s[0].
+    # If p is 100, idx is n.
+    if idx <= 0:
+        return float(s[0])
+    if idx >= n: # If idx is n, it means p=100.0, return s[n-1].
+        return float(s[n-1])
+
+    # Convert to 0-indexed for list access
+    idx_zero_based = idx - 1
+
+    low = int(math.floor(idx_zero_based))
+    high = int(math.ceil(idx_zero_based))
+    frac = idx_zero_based - low
+
+    # If the index is an integer, or low and high are the same (e.g., at boundaries),
+    # return the value at that exact rank.
+    if low == high:
+        return float(s[low])
+    
+    # Linear interpolation between the two closest ranks.
+    # Ensure high does not exceed array bounds
+    if high >= n:
+        return float(s[n-1])
+
+    return float(s[low] + frac * (s[high] - s[low]))
+=== END ===

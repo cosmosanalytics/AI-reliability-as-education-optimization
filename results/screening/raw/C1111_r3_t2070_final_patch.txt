@@ -1,0 +1,64 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values.
+
+    Uses the "linear interpolation between nearest ranks" method,
+    where the index is calculated as p/100 * n. This method is often
+    referred to as the C = 1 method or `numpy.percentile` with `interpolation='linear'`
+    and `axis=None`, assuming a 0-indexed array and using `p/100 * n` for the rank.
+    It returns the smallest value if p=0 and the largest value if p=100.
+
+    This function previously used `p/100 * (n-1)` for the index calculation,
+    which is a different common method. The change aligns the calculation
+    with the expected behavior for the telemetry system's SLA definition,
+    as indicated by the incident report.
+    """
+    if not values:
+        raise ValueError("Empty values")
+    if not (0 <= p <= 100):
+        raise ValueError("Percentile p must be between 0 and 100, inclusive")
+
+    s = sorted(values)
+    n = len(s)
+
+    # Handle edge cases for p=0 and p=100 explicitly for clarity and robustness.
+    # For p=0, the 0th percentile is the minimum value.
+    if p == 0:
+        return float(s[0])
+    # For p=100, the 100th percentile is the maximum value.
+    if p == 100:
+        return float(s[n - 1])
+
+    # Calculate the rank (index) using the p/100 * n method.
+    # This formula is commonly used when the percentile is defined such that
+    # the p-th percentile is a value greater than or equal to p% of the data.
+    # The result `idx` can range from 0 (exclusive) to n (exclusive).
+    idx = (p / 100.0) * n
+    
+    # The rank is 1-indexed in many definitions, so we convert to 0-indexed for array access.
+    # The floor of (idx - 1) gives the lower index.
+    low_idx = int(math.floor(idx - 1))
+    # The ceil of (idx - 1) gives the higher index.
+    high_idx = int(math.ceil(idx - 1))
+
+    # Ensure indices are within bounds [0, n-1].
+    # This is particularly important if idx is very close to 0 or n.
+    low_idx = max(0, min(low_idx, n - 1))
+    high_idx = max(0, min(high_idx, n - 1))
+
+    # If low_idx and high_idx are the same, or if idx is an integer,
+    # the percentile value is simply the value at that index.
+    if low_idx == high_idx:
+        return float(s[low_idx])
+    
+    # Calculate the fractional part for linear interpolation.
+    # The `idx` here is effectively the 1-based rank.
+    # `frac` represents how far between s[low_idx] and s[high_idx] the percentile lies.
+    frac = idx - (low_idx + 1) # (low_idx + 1) is the 1-based rank for s[low_idx]
+
+    return float(s[low_idx] + frac * (s[high_idx] - s[low_idx]))
+=== END ===

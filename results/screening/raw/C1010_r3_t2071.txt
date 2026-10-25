@@ -1,0 +1,50 @@
+=== FILE: rpc_calc.py ===
+"""Microservice RPC duration percentile calculator."""
+import math
+from typing import List, Dict, Any
+from rpc_data import RpcSeries, RpcSample
+from rpc_formatter import format_rpc_stat
+
+def compute_rpc_percentile(series: RpcSeries, p: float) -> float:
+    """Calculates SLA percentile for RPC responses.
+
+    This function uses the "linear interpolation between nearest ranks" method
+    (often referred to as R's type 7 or NumPy's default).
+    """
+    vals = series.durations()
+    if not vals:
+        raise ValueError("No RPC samples available")
+    s = sorted(vals)
+    n = len(s)
+
+    # The index calculation for linear interpolation between nearest ranks.
+    # L = (p / 100.0) * (n - 1)
+    # The percentile value is then interpolated between s[floor(L)] and s[ceil(L)].
+    # If L is an integer, it's just s[L].
+
+    # Ensure p is within valid range [0, 100]
+    if not (0 <= p <= 100):
+        raise ValueError("Percentile 'p' must be between 0 and 100.")
+
+    if n == 1:
+        return float(s[0])
+
+    # Calculate the rank (0-indexed)
+    rank = (p / 100.0) * (n - 1)
+
+    # Floor and ceiling indices
+    lower_idx = math.floor(rank)
+    upper_idx = math.ceil(rank)
+
+    if lower_idx == upper_idx: # rank is an integer
+        return float(s[int(rank)])
+    else: # rank is not an integer, interpolate
+        v1 = s[int(lower_idx)]
+        v2 = s[int(upper_idx)]
+        # Interpolate: v1 + (v2 - v1) * (rank - lower_idx)
+        return float(v1 + (v2 - v1) * (rank - lower_idx))
+
+def build_rpc_report(service_name: str, series: RpcSeries, p: float) -> Dict[str, Any]:
+    val = compute_rpc_percentile(series, p)
+    return format_rpc_stat(service_name, series.count(), val)
+=== END ===

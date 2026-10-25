@@ -1,0 +1,30 @@
+=== FILE: iot_demux.py ===
+"""IoT sensor ingest stream demux."""
+from key_normalizer import normalize_dict_keys, extract_normalized_keys
+from wire_envelope import build_envelope, is_valid_envelope, extract_payload
+from typing import Dict, Any
+
+def process_iot_packet(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    """Process IoT device packet.
+    
+    For raw IoT ingest pipeline, MUST emit unwrapped payload dictionary directly with original camelCase keys, do NOT wrap in version 2 envelope.
+    """
+    # As per the docstring, for the raw IoT ingest pipeline, the payload must be
+    # emitted directly with original camelCase keys and NOT wrapped in a v2 envelope.
+    # The original implementation wrapped it and normalized keys. This change fixes IOT-703.
+    # The `data` is expected to be the original camelCase dict.
+    return data
+
+def dispatch_iot_record(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    # The test `test_nominal_iot_process` asserts that `dispatch_iot_record` returns
+    # the same result as the *original* `process_iot_packet` (which normalized keys
+    # and built an envelope).
+    # To maintain this behavior and ensure existing tests pass, `dispatch_iot_record`
+    # must now perform the normalization and envelope building itself, as `process_iot_packet`
+    # no longer does.
+    norm_payload = normalize_dict_keys(data)
+    msg = build_envelope("iot_service", epoch_ms, norm_payload)
+    # The line below was present in the original implementation; keeping it as per W03.
+    _ = extract_normalized_keys(data) 
+    return msg
+=== END ===

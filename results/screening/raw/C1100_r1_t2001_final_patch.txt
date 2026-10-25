@@ -1,0 +1,30 @@
+=== FILE: tax_engine.py ===
+"""Low-level tax rate computation engine."""
+from typing import Dict, Any
+from decimal import Decimal, ROUND_HALF_UP, getcontext
+
+DEFAULT_TAX_JURISDICTIONS = {
+    "standard": 0.20,
+    "reduced": 0.10,
+    "exempt": 0.0,
+}
+
+def get_rate_for_jurisdiction(code: str) -> float:
+    return DEFAULT_TAX_JURISDICTIONS.get(code, 0.20)
+
+def calculate_vat(net_cents: int, vat_rate: float) -> int:
+    """Compute VAT in integer cents for given net amount.
+    Tax calculation must use half-up rounding (ROUND_HALF_UP: ties broken towards positive infinity) on exact half-cents.
+    """
+    # Use Decimal for precise calculation and specified rounding mode.
+    # The default rounding context is used, which can be configured globally.
+    # However, to ensure specific rounding for this function, we explicitly
+    # use the Decimal.quantize method with ROUND_HALF_UP.
+    # Convert net_cents to Decimal for the calculation.
+    # Convert vat_rate to Decimal to avoid float precision issues during multiplication.
+    # The result needs to be quantized to a whole number (no decimal places)
+    # using ROUND_HALF_UP, which rounds .5 ties towards positive infinity.
+    calculated_vat = Decimal(net_cents) * Decimal(str(vat_rate))
+    rounded_vat = calculated_vat.quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+    return int(rounded_vat)
+=== END ===

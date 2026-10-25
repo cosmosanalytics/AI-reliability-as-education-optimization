@@ -1,0 +1,15 @@
+=== FILE: window_evaluator.py ===
+"""Retention window evaluator."""
+def is_within_retention(ts: int, start_ts: int, end_ts: int) -> bool:
+    """Returns True if `ts` is within the retention period [start_ts, end_ts).
+
+    Records at `end_ts` are considered expired and are not retained.
+    """
+    return start_ts <= ts < end_ts
+
+def get_window_span(start_ts: int, end_ts: int) -> int:
+    return max(0, end_ts - start_ts)
+
+def is_valid_cutoff(start_ts: int, end_ts: int) -> bool:
+    return start_ts <= end_ts
+=== END ===

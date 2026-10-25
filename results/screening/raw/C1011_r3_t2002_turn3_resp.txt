@@ -1,0 +1,71 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+
+    The discount is first distributed using integer truncation, then any
+    remaining cents are allocated one by one to the lines with the largest
+    unallocated fractional portions (remainders from the proportional calculation),
+    to ensure the total discount is fully allocated.
+
+    line_totals: list of integer cents. Each value must be non-negative.
+    total_discount_cents: total discount amount in cents.
+    Returns list of discount cents per line.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+    
+    total_line_value = sum(line_totals)
+    num_lines = len(line_totals)
+
+    if total_line_value == 0:
+        return [0] * num_lines
+    
+    # Calculate base allocations using integer truncation and store fractional remainders
+    base_allocations = []
+    # Store (fractional_remainder, original_index) for tie-breaking
+    indexed_remainders = [] 
+    for i, cents in enumerate(line_totals):
+        # Calculate the exact proportional allocation using float division
+        exact_allocation = (cents * total_discount_cents) / total_line_value
+        base_allocations.append(int(exact_allocation))
+        indexed_remainders.append((exact_allocation - int(exact_allocation), i))
+
+    # Calculate total allocated so far from the base allocations
+    current_total_allocated = sum(base_allocations)
+    
+    # Determine how many cents still need to be distributed
+    remaining_cents_to_distribute = total_discount_cents - current_total_allocated
+
+    # Distribute remaining cents one by one to lines with the largest fractional remainders
+    if remaining_cents_to_distribute > 0:
+        # Sort by fractional remainder in descending order.
+        # If remainders are equal, the original index will act as a stable tie-breaker
+        # (though Python's sort is stable anyway, this makes the tie-breaking explicit
+        # if needed, e.g., for specific rounding rules, but here any consistent tie-break is fine).
+        indexed_remainders.sort(key=lambda x: x[0], reverse=True)
+
+        # Iterate through the sorted remainders and add 1 cent to the corresponding line
+        # for each remaining cent. If remaining_cents_to_distribute is larger than num_lines,
+        # cents will be added to the same lines multiple times, cycling through the top remainders.
+        for i in range(remaining_cents_to_distribute):
+            # Use modulo num_lines to cycle through the lines if more cents than lines need distributing.
+            # This ensures that if, for example, 3 cents need to be added to 2 lines,
+            # the line with the largest remainder gets 2 cents and the second largest gets 1 cent.
+            line_idx_to_add = indexed_remainders[i % num_lines][1]
+            base_allocations[line_idx_to_add] += 1
+
+    return base_allocations
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    # Due to the rounding logic in prorate_discount, total_allocated will always
+    # equal total_discount_cents if total_discount_cents is non-negative.
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===

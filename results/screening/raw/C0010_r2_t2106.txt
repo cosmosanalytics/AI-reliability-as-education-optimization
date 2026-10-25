@@ -1,0 +1,37 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values)
+    # The nearest-rank method for percentile calculation.
+    # This method finds the value at the rank corresponding to the given percentile.
+    # The rank is calculated as (p/100.0) * N, where N is the number of samples.
+    # The index is 0-based, so we take ceil((p/100.0) * N) - 1.
+    if not s:
+        raise ValueError("Samples list cannot be empty for percentile calculation.")
+    
+    # Handle p=0 separately to avoid math.ceil(0) which is 0, leading to index -1 for N=1.
+    # For p=0, the 0th percentile is typically the minimum value.
+    if p == 0.0:
+        return s[0]
+
+    # Calculate the 1-based rank
+    rank = (p / 100.0) * len(s)
+    
+    # Convert to 0-based index by taking the ceiling and subtracting 1.
+    # This effectively picks the smallest value in the dataset that is greater than or equal to the percentile.
+    idx = int(math.ceil(rank)) - 1
+    
+    # Ensure index is within bounds [0, len(s) - 1]
+    idx = max(0, min(idx, len(s) - 1))
+    
+    return s[idx]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

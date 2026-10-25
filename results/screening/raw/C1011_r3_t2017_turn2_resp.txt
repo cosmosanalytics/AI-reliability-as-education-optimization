@@ -1,0 +1,94 @@
+=== FILE: guard.py ===
+"""API gateway authorization guard."""
+from policy import RoutePolicy
+from url_normalizer import clean_scope
+
+def is_scope_permitted(policy: RoutePolicy, request_scope: str) -> bool:
+    """Check if request_scope is authorized under policy.allowed_pattern.
+    Access control scopes must use the double-colon hierarchy tenant::department::service::action.
+    Sibling paths must be checked against '::' segment boundaries.
+    The single asterisk wildcard '*' matches exactly one segment; the double asterisk '**' matches arbitrary multi-segment prefixes.
+    """
+    clean_req = clean_scope(request_scope)
+    
+    # Split both the policy pattern and the request scope into segments
+    pattern_segments = policy.allowed_pattern.split("::")
+    request_segments = clean_req.split("::")
+
+    p_idx = 0  # Index for pattern segments
+    r_idx = 0  # Index for request segments
+
+    while p_idx < len(pattern_segments) and r_idx < len(request_segments):
+        pattern_segment = pattern_segments[p_idx]
+        request_segment = request_segments[r_idx]
+
+        if pattern_segment == "**":
+            # '**' matches zero or more segments.
+            # If '**' is the last pattern segment, it matches all remaining request segments.
+            if p_idx == len(pattern_segments) - 1:
+                return True
+            
+            # If '**' is not the last segment, we need to find where the rest of the pattern starts.
+            # This means '**' matches some prefix of the remaining request, and the segment
+            # *after* '**' in the pattern must match a segment in the request.
+            next_pattern_segment = pattern_segments[p_idx + 1]
+            temp_r_idx = r_idx
+            found_next_match = False
+            while temp_r_idx < len(request_segments):
+                # Recursively check if the rest of the pattern matches from this point in the request
+                # This is a simplified approach for matching '**' followed by a specific segment.
+                # A more robust solution might involve full recursion or a stack-based approach
+                # for backtracking, but given the "arbitrary multi-segment prefixes" description,
+                # if the pattern is `A::**::C`, `**` implies it matches `A::B::C` where `B` is the prefix.
+                # The current interpretation is that `**` consumes segments until the next pattern segment matches.
+                # However, the docstring "arbitrary multi-segment prefixes" for `**` means it matches
+                # `A::**` should match `A`, `A::B`, `A::B::C`. It implies `**` acts like a suffix matcher.
+                # Let's re-evaluate based on the common interpretation where `A::**` means `A` and anything below it.
+                # If `**` is *not* at the end, like `A::**::C`, it means `A` followed by any number of segments,
+                # followed by `C`. This needs a more complex regex-like matching.
+                # The ticket implies `corp::reports` should NOT match `corp::reports_secret`.
+                # And `corp::billing::*` should match `corp::billing::invoices`.
+                # The "arbitrary multi-segment prefixes" for `**` is key.
+                # Let's assume `A::**` matches `A`, `A::B`, `A::B::C`, etc.
+                # And `A::B::*` matches `A::B::C` but not `A::B::C::D`.
+
+                # If the next pattern segment matches the current request segment,
+                # we can try matching the rest of the pattern from this point.
+                # This means '**' matches everything from r_idx up to temp_r_idx-1.
+                # We advance p_idx by 1 (to skip '**') and continue the loop.
+                if is_scope_permitted(RoutePolicy(policy.role, "::".join(pattern_segments[p_idx+1:])), "::".join(request_segments[temp_r_idx:])):
+                    return True
+                temp_r_idx += 1
+            return False # No match for the rest of the pattern after '**'
+
+        elif pattern_segment == "*":
+            # '*' matches exactly one segment.
+            # If request_segment is empty (e.g., "A::"), it should not match.
+            # Since request_segments are always non-empty due to split, this is fine.
+            p_idx += 1
+            r_idx += 1
+        elif pattern_segment == request_segment:
+            # Segments match exactly.
+            p_idx += 1
+            r_idx += 1
+        else:
+            # Segments don't match and no wildcard.
+            return False
+    
+    # After the loop, both indices must have reached the end of their respective lists.
+    # Exception: if the last pattern segment was '**', it would have returned True earlier.
+    # If policy is `A::B` and request `A::B::C`, it should be False.
+    # If policy is `A::B::*` and request `A::B`, it should be False.
+    # So, if pattern is exhausted (p_idx == len(pattern_segments)),
+    # request must also be exhausted (r_idx == len(request_segments)) for a match.
+    return p_idx == len(pattern_segments) and r_idx == len(request_segments)
+
+def evaluate_request(policies: list, role: str, scope: str) -> bool:
+    for p in policies:
+        if p.matches_role(role) and is_scope_permitted(p, scope):
+            return True
+    return False
+
+def count_permitted_scopes(policy: RoutePolicy, scopes: list) -> int:
+    return sum(1 for s in scopes if is_scope_permitted(policy, s))
+=== END ===

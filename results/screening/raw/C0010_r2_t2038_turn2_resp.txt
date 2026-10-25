@@ -1,0 +1,30 @@
+=== FILE: billing_emitter.py ===
+"""Billing transaction message emitter."""
+from key_normalizer import normalize_dict_keys, extract_normalized_keys
+from wire_envelope import build_envelope, is_valid_envelope, extract_payload
+from typing import Dict, Any
+
+# Define a constant for the service name as it's required by build_envelope
+SERVICE_NAME = "billing_service"
+
+def emit_billing_record(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    """
+    Emit billing transaction message for downstream consumers.
+    The payload keys are normalized to snake_case, and the entire message
+    is enveloped according to the wire specification.
+    """
+    normalized_payload = normalize_dict_keys(data)
+    enveloped_message = build_envelope(SERVICE_NAME, epoch_ms, normalized_payload)
+    return enveloped_message
+
+def broadcast_billing_event(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    record = emit_billing_record(data, epoch_ms)
+    # The following checks were for validation, but the primary issue
+    # was ensuring the record is enveloped. Now that emit_billing_record
+    # handles enveloping, these explicit checks are less critical for the
+    # core functionality of broadcasting, but could be used for logging/monitoring.
+    # We remove the unused assignment to '_' as it's no longer necessary.
+    # _ = is_valid_envelope(record)
+    # _ = extract_normalized_keys(data) # This was checking keys of original data, not the emitted record
+    return record
+=== END ===

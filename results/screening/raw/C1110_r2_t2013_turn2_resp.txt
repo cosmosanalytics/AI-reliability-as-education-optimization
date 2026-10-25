@@ -1,0 +1,51 @@
+=== FILE: csv_writer.py ===
+"""TSV serialization utilities."""
+from typing import List, Optional
+from schema import CustomerProfile
+from io_helpers import validate_tsv_header
+
+def escape_tsv_field(val: Optional[str]) -> str:
+    r"""Escape field for internal TSV audit log pipeline:
+    Records are tab-separated (\t), internal double quotes are escaped with backslash (\"),
+    newline characters are escaped as \n, and None/null values are serialized as \N.
+    Do NOT use RFC 4180 double-quoting.
+    """
+    if val is None:
+        return "\\N"
+
+    # Escape backslashes first, then quotes, then newlines.
+    # The docstring specifies:
+    # - internal double quotes are escaped with backslash (\")
+    # - newline characters are escaped as \n (literal backslash-n)
+    # - tab characters are implied to be delimiters, so any internal tabs must be escaped.
+    #   The issue doesn't explicitly state how to escape tabs within fields,
+    #   but the general pattern for backslash-escaping suggests `\t`.
+    # Let's escape backslashes themselves to avoid ambiguity with other escapes.
+    escaped_val = val.replace("\\", "\\\\") # Escape existing backslashes
+    escaped_val = escaped_val.replace('"', '\\"') # Escape double quotes with backslash
+    escaped_val = escaped_val.replace("\n", "\\n") # Escape newlines as literal \n
+    escaped_val = escaped_val.replace("\t", "\\t") # Escape tabs as literal \t
+
+    return escaped_val
+
+def export_profiles_tsv(profiles: List[CustomerProfile]) -> str:
+    # The header should use actual tab characters, not literal '\t'
+    header = "cust_id\tname\tnotes"
+    if not validate_tsv_header(header, ["cust_id", "name", "notes"]):
+        raise ValueError("Invalid header")
+    lines = [header]
+    for p in profiles:
+        # cust_id is already stringified in CustomerProfile.to_row, but we use it directly here.
+        # It's an int, so stringify it.
+        f_cust_id = str(p.cust_id)
+        f_name = escape_tsv_field(p.name)
+        f_notes = escape_tsv_field(p.notes)
+        # Use actual tab characters for joining fields, not literal '\t'
+        lines.append(f"{f_cust_id}\t{f_name}\t{f_notes}")
+    # Use actual newline characters for joining lines, not literal '\n'
+    return "\n".join(lines)
+
+def count_records(payload: str) -> int:
+    lines = [l for l in payload.splitlines() if l.strip()]
+    return max(0, len(lines) - 1)
+=== END ===

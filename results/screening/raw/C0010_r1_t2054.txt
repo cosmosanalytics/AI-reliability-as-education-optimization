@@ -1,0 +1,28 @@
+=== FILE: list_merger.py ===
+"""Low-level dictionary and list hierarchy merger."""
+from typing import Dict, Any, List
+
+def merge_spec_values(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """Recursively merges dictionary values and lists (union of unique elements)."""
+    result = dict(base)
+    for k, v in override.items():
+        if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+            # Both are dictionaries, recurse
+            result[k] = merge_spec_values(result[k], v)
+        elif k in result and isinstance(result[k], list) and isinstance(v, list):
+            # Both are lists, merge unique elements
+            # Convert to set for union, then back to list to preserve order
+            # (though order might not be strictly guaranteed after set conversion)
+            # The intent is to keep all unique elements from both lists.
+            merged_list = list(set(result[k]) | set(v))
+            # Sort for deterministic output if order isn't critical
+            merged_list.sort()
+            result[k] = merged_list
+        else:
+            # Otherwise, override the value
+            result[k] = v
+    return result
+
+def is_spec_empty(spec: Dict[str, Any]) -> bool:
+    return len(spec) == 0
+=== END ===

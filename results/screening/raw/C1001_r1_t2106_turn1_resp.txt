@@ -1,0 +1,61 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values)
+    n = len(s)
+    # The "nearest-rank house standard" for percentile calculation often uses
+    # an index that is 1-based. For a Pth percentile in a list of N sorted samples,
+    # the rank (position) is typically calculated as ceil(P/100 * N).
+    # Since Python lists are 0-indexed, we subtract 1 from the 1-based rank.
+    # The current implementation uses (p / 100.0) * (n - 1) which is for linear
+    # interpolation between ranks and does not align with a "nearest-rank" definition
+    # unless specified as such.
+    # To meet the expectation of 40.0 for 50th percentile on a series like
+    # [10, 20, 30, 40, 50, 60, 70, 80], where N=8, the expected rank is 4 (0-indexed 3).
+    # This implies using a rank calculation like (p / 100.0) * N, then rounding.
+    # Specifically, for the 50th percentile of 8 items, 0.5 * 8 = 4.
+    # If we want the 4th element (index 3), the formula needs to be adjusted.
+    # A common nearest-rank method is to use the index given by:
+    # i = floor(p/100 * N + 0.5) if p/100 * N is not an integer
+    # i = p/100 * N if p/100 * N is an integer.
+    # Or more simply, round(p/100 * N) and handle 0-indexing.
+    # However, the most straightforward "nearest-rank" definition is:
+    # 1. Calculate the rank `r = (p / 100.0) * n`.
+    # 2. If `r` is an integer, the percentile is `s[r-1]` (0-indexed).
+    # 3. If `r` is not an integer, the percentile is `s[ceil(r)-1]` (0-indexed).
+    # This can be simplified to `s[max(0, min(n - 1, int(math.ceil(r)) - 1))]`.
+
+    if not s: # validate_metric_samples already checks this, but for safety
+        raise ValueError("Samples list cannot be empty")
+
+    if p < 0.0 or p > 100.0:
+        raise ValueError("Percentile must be between 0 and 100 inclusive.")
+
+    if p == 0.0:
+        return s[0]
+    if p == 100.0:
+        return s[n - 1]
+
+    # Calculate 1-based rank using the nearest-rank method (C=1 or "ceiling" method).
+    # This aligns with the expectation of 40.0 for 50th percentile on [10..80].
+    # For N=8, p=50, r_1based = ceil(0.5 * 8) = ceil(4.0) = 4.
+    # The 0-based index would then be r_1based - 1 = 3. s[3] is 40.0.
+    # For N=3, p=100, r_1based = ceil(1.0 * 3) = 3. Index 2. s[2] is 30.0.
+    # This matches the visible test as well.
+    rank_1_based = (p / 100.0) * n
+    index_0_based = int(math.ceil(rank_1_based)) - 1
+
+    # Ensure index is within bounds [0, n-1]
+    index_0_based = max(0, min(index_0_based, n - 1))
+
+    return s[index_0_based]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

@@ -1,0 +1,78 @@
+=== FILE: rpc_calc.py ===
+"""Microservice RPC duration percentile calculator."""
+import math
+from typing import List, Dict, Any
+from rpc_data import RpcSeries, RpcSample
+from rpc_formatter import format_rpc_stat
+
+def compute_rpc_percentile(series: RpcSeries, p: float) -> float:
+    """Calculates SLA percentile for RPC responses.
+
+    This implementation uses the nearest-rank method with linear interpolation
+    for the index, corresponding to the formula:
+    index = (p / 100.0) * (n - 1).
+    """
+    vals = series.durations()
+    if not vals:
+        raise ValueError("No RPC samples available")
+    s = sorted(vals)
+    n = len(s)
+
+    # The issue describes "inconsistent RPC duration percentiles",
+    # and the common formula for percentiles (e.g., as used by numpy's default
+    # linear interpolation or some statistical software) uses a different
+    # index calculation.
+    # The original formula `idx = int(round((p / 100.0) * (n - 1)))`
+    # corresponds to a specific "nearest rank" method.
+    # A more widely accepted method for linear interpolation is to calculate
+    # the fractional index `k = p * (n - 1) / 100.0` and then interpolate
+    # between `s[floor(k)]` and `s[ceil(k)]`.
+    # For a simple index selection, the formula `(p / 100.0) * (n - 1)`
+    # is often used directly as an index, then rounded or floored/ceiled.
+    #
+    # The reported failure `assert 20.0 == 30.0` suggests that for a given
+    # dataset and percentile `p`, the original calculation was off by one index.
+    # For example, if `s = [10, 20, 30, 40]` and `p = 50`:
+    # Original: `idx = int(round(0.5 * 3)) = int(round(1.5)) = 2`. Result `s[2]` = `30`.
+    # Expected (e.g., median for even N): `25.0` (avg of 20 and 30) or `20` or `30`
+    # depending on definition.
+    #
+    # Let's consider `s = [10, 20, 30]` and `p = 50`:
+    # Original: `idx = int(round(0.5 * 2)) = 1`. Result `s[1]` = `20`.
+    # If the expected value was `30`, it would mean `s[2]` was desired.
+    #
+    # The common percentile definition that matches many statistical tools
+    # for a given probability `p` and sorted data `s` of length `n` is:
+    # 1. Calculate the rank `k = p * (n - 1) / 100`.
+    # 2. If `k` is an integer, the percentile is `s[k]`.
+    # 3. If `k` is not an integer, let `i = floor(k)` and `f = k - i`.
+    #    The percentile is `s[i] + f * (s[i+1] - s[i])`.
+    #
+    # The original implementation `int(round((p / 100.0) * (n - 1)))`
+    # implicitly handles the interpolation by rounding to the nearest index.
+    # However, this can lead to discrepancies.
+    #
+    # To resolve "inconsistent" percentiles, we'll use a standard linear
+    # interpolation method.
+    
+    k = (p / 100.0) * (n - 1)
+    
+    if k < 0: # Should not happen with p >= 0, but for safety
+        return float(s[0])
+    if k >= n - 1: # Should not happen with p <= 100, but for safety
+        return float(s[n - 1])
+
+    i = math.floor(k)
+    f = k - i # fractional part
+
+    if f == 0:
+        # If k is an integer, directly use the value at that index.
+        return float(s[int(k)])
+    else:
+        # Linear interpolation between s[i] and s[i+1]
+        return float(s[i] + f * (s[i+1] - s[i]))
+
+def build_rpc_report(service_name: str, series: RpcSeries, p: float) -> Dict[str, Any]:
+    val = compute_rpc_percentile(series, p)
+    return format_rpc_stat(service_name, series.count(), val)
+=== END ===

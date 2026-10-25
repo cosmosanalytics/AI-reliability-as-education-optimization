@@ -1,0 +1,49 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values)
+
+    # The issue specifies "nearest-rank house standard". This usually refers
+    # to the method where the rank is calculated as N*P/100, and the percentile
+    # value is the element at the ceiling of this rank (adjusted for 0-indexing).
+    #
+    # Specifically, for a 0-indexed sorted list `s` of length `N`:
+    # 1. Calculate the rank `k = (P / 100.0) * N`.
+    # 2. If `k` is an integer, the percentile is `s[k-1]`.
+    # 3. If `k` is not an integer, the percentile is `s[ceil(k)-1]`.
+    # This can be simplified to `s[ceil(k)-1]` for `k > 0`.
+    #
+    # Special cases for P=0 and P=100 are handled explicitly to ensure
+    # the first and last elements are returned, respectively.
+    
+    if p < 0: # Treat negative percentiles as 0th percentile
+        p = 0.0
+    if p > 100: # Treat percentiles > 100 as 100th percentile
+        p = 100.0
+
+    if p == 0.0:
+        return s[0]
+    if p == 100.0:
+        return s[len(s) - 1]
+    
+    # Calculate the 1-based rank
+    rank = (p / 100.0) * len(s)
+    
+    # Convert to 0-based index using ceil(rank) - 1
+    # The max(0, ...) and min(..., len(s)-1) are robust bounds checks
+    # although the p=0 and p=100 special cases above largely prevent
+    # out-of-bounds issues for standard percentile ranges.
+    index = math.ceil(rank) - 1
+    index = max(0, min(int(index), len(s) - 1))
+    
+    return s[index]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

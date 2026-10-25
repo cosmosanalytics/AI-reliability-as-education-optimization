@@ -1,0 +1,51 @@
+=== FILE: event_packet.py ===
+"""Stream event packet model."""
+from dataclasses import dataclass, field
+from typing import Dict, Any, Optional
+import time
+import uuid
+
+@dataclass
+class EventPacket:
+    stream_id: str
+    severity: int
+    payload: str
+    topic: str = "telemetry"
+    processed: bool = False
+    # Add a timestamp and a unique sequence number for robust tie-breaking
+    # Use float for timestamp to capture sub-second precision, and a UUID for guaranteed uniqueness
+    timestamp: float = field(default_factory=time.time)
+    sequence_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+
+    def is_critical(self) -> bool:
+        return self.severity >= 9
+
+    def mark_processed(self) -> None:
+        self.processed = True
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "stream_id": self.stream_id,
+            "severity": self.severity,
+            "payload": self.payload,
+            "topic": self.topic,
+            "timestamp": self.timestamp,
+            "sequence_id": self.sequence_id,
+        }
+=== END ===
+=== FILE: sort_helper.py ===
+"""Internal stream sorting helper."""
+from typing import List
+from event_packet import EventPacket
+
+def order_packets(packets: List[EventPacket]) -> List[EventPacket]:
+    # Sort primarily by severity (descending), then by timestamp (ascending),
+    # then by stream_id (ascending), and finally by sequence_id (ascending) for guaranteed uniqueness.
+    return sorted(packets, key=lambda p: (-p.severity, p.timestamp, p.stream_id, p.sequence_id))
+
+def get_max_severity(packets: List[EventPacket]) -> int:
+    return max((p.severity for p in packets), default=0)
+
+def count_critical_packets(packets: List[EventPacket]) -> int:
+    return sum(1 for p in packets if p.is_critical())
+=== END ===

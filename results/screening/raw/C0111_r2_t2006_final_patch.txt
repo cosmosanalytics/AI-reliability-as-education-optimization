@@ -1,0 +1,26 @@
+=== FILE: env_loader.py ===
+"""Environment settings loader and merger."""
+from typing import Dict, Any
+import copy
+
+DEFAULT_CONN_TIMEOUT = 30
+
+def load_system_env() -> Dict[str, Any]:
+    return {"timeout": DEFAULT_CONN_TIMEOUT}
+
+def merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:
+    # Perform a deep copy of base_settings to ensure that no modifications to the
+    # returned dictionary (or its nested dicts) will affect the original base_settings.
+    # This prevents corruption of shared default settings across different calls or threads.
+    merged = copy.deepcopy(base_settings)
+    
+    for k, v in override_settings.items():
+        if k in merged and isinstance(merged[k], dict) and isinstance(v, dict):
+            # If both base and override have a dictionary for this key, merge them recursively.
+            # This handles cases where only specific pool parameters are overridden.
+            merged[k].update(v)
+        else:
+            # Otherwise, override directly (for non-dict values or if key not in base).
+            merged[k] = v
+    return merged
+=== END ===

@@ -1,0 +1,43 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values)
+    
+    # According to the nearest-rank method for the p-th percentile of N data points,
+    # the index (1-based) is calculated as i = ceil(p/100 * N).
+    # Then the percentile value is the i-th smallest value.
+    # If p=0, the 0th percentile is typically the minimum value (index 0).
+    # If p=100, the 100th percentile is typically the maximum value (index N-1).
+    if not s: # Already validated by validate_metric_samples, but defensive check
+        raise ValueError("Samples list cannot be empty")
+    
+    n = len(s)
+    if p < 0 or p > 100:
+        raise ValueError("Percentile p must be between 0 and 100")
+
+    if p == 0:
+        return s[0]
+    if p == 100:
+        return s[n - 1]
+
+    # Calculate 1-based index using the nearest-rank method: i = ceil(p/100 * N)
+    # Convert to 0-based index for list access: index = i - 1
+    rank_idx = math.ceil((p / 100.0) * n)
+    
+    # Ensure index is within bounds (0 to n-1)
+    # math.ceil((100/100)*n) = n, so rank_idx will be n for p=100.
+    # We need to map this to n-1 for 0-based indexing.
+    # The smallest rank_idx will be 1 (for p > 0).
+    # The largest rank_idx will be n (for p=100).
+    # So the 0-based index will be rank_idx - 1.
+    return s[int(rank_idx) - 1]
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

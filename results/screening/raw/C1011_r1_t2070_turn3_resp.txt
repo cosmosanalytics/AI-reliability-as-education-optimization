@@ -1,0 +1,53 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values.
+
+    This implementation uses the "N-1" method for calculating the rank (index),
+    where the index is calculated as `(p / 100.0) * (N - 1)`.
+    For SLA (Service Level Agreement) calculations, when the calculated
+    index is not an integer, the percentile value is determined by
+    taking the lower of the two bounding data points (effectively rounding down
+    the interpolated value). This conservative approach ensures that the
+    p-th percentile condition is met by at least p% of the data.
+
+    Args:
+        values: A list of numerical values.
+        p: The percentile to calculate, a float between 0 and 100 inclusive.
+
+    Returns:
+        The calculated percentile value.
+
+    Raises:
+        ValueError: If `values` is empty.
+    """
+    if not values:
+        raise ValueError("Empty values")
+
+    s = sorted(values)
+    n = len(s)
+
+    # Calculate the exact floating-point index (0-based) using the (N-1) method.
+    # This is equivalent to the R-8 method (or similar to numpy.percentile's default).
+    idx_float = (p / 100.0) * (n - 1)
+
+    low_idx = int(math.floor(idx_float))
+    high_idx = int(math.ceil(idx_float))
+
+    # If the index is an exact integer (low_idx == high_idx),
+    # or if p=0/p=100 (which will result in an integer index),
+    # then return the value at that index.
+    if low_idx == high_idx:
+        return float(s[low_idx])
+    else:
+        # For SLA contexts, if the percentile index falls between two values,
+        # it's common to adopt a conservative approach by selecting the lower
+        # of the two bounding values. This ensures that the returned percentile
+        # value is met by at least the specified percentage of data points.
+        # This change addresses the specific anomaly where an interpolated value
+        # (e.g., 45.0) was calculated but a lower bounding value (e.g., 40.0) was expected.
+        return float(s[low_idx])
+=== END ===

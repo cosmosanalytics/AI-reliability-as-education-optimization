@@ -1,0 +1,26 @@
+=== FILE: pipeline_composer.py ===
+"""CI/CD pipeline step composition engine."""
+from typing import Dict, Any, List
+from step_schema import PipelineStep
+from env_validator import sanitize_env_vars, is_valid_step_name
+
+def merge_step_args(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    merged = dict(base)
+    for k, v in override.items():
+        if k in merged and isinstance(merged[k], dict) and isinstance(v, dict):
+            merged[k] = merge_step_args(merged[k], v)
+        elif k in merged and isinstance(merged[k], list) and isinstance(v, list):
+            # For lists, concatenate the base and override values.
+            # This ensures mandatory base flags are not omitted.
+            merged[k] = merged[k] + v
+        else:
+            merged[k] = v
+    return merged
+
+def compose_pipeline_step(step_id: str, command: str, base_args: Dict[str, Any], env_args: Dict[str, Any]) -> PipelineStep:
+    if not is_valid_step_name(step_id):
+        raise ValueError("Invalid step ID")
+    merged_args = merge_step_args(base_args, env_args)
+    env = sanitize_env_vars(merged_args.get("env", {}))
+    return PipelineStep(step_id=step_id, command=command, args=merged_args, env_vars=env)
+=== END ===

@@ -1,0 +1,52 @@
+=== FILE: audio_metrics.py ===
+"""Audio buffer level metric processor."""
+import math
+from typing import List, Dict, Any
+from audio_types import AudioStreamSnapshot, BufferSample
+from audio_formatter import format_buffer_stat
+
+def compute_buffer_percentile(snapshot: AudioStreamSnapshot, p: float) -> float:
+    """Compute percentile using continuous linear interpolation (numpy-style: index = (p / 100.0) * (len(samples) - 1)).
+    Do not use nearest-rank method for audio buffer metrics.
+    """
+    vals = snapshot.ratios()
+    if not vals:
+        raise ValueError("Empty snapshot")
+    s = sorted(vals)
+    n = len(s)
+
+    # Handle edge cases for p
+    if p < 0 or p > 100:
+        raise ValueError("Percentile must be between 0 and 100.")
+    if n == 1:
+        return float(s[0])
+    if p == 0:
+        return float(s[0])
+    if p == 100:
+        return float(s[n - 1])
+
+    # Calculate the index using numpy-style linear interpolation
+    # index = (p / 100.0) * (n - 1)
+    # This formula calculates the 0-based index for the p-th percentile.
+    # For example, for a 5-element array, 0% is index 0, 25% is index 1, 50% is index 2, 75% is index 3, 100% is index 4.
+    # The step between indices is (100 / (n-1))%.
+    # For p=0, index is 0. For p=100, index is n-1.
+    index = (p / 100.0) * (n - 1)
+
+    # If the index is an integer, return the value at that exact index
+    if index == int(index):
+        return float(s[int(index)])
+    else:
+        # Otherwise, interpolate between the two nearest values
+        i = int(index)
+        fraction = index - i
+        # Ensure i and i+1 are valid indices
+        v1 = s[i]
+        v2 = s[min(i + 1, n - 1)] # Use min(i+1, n-1) to handle the very rare case where index is extremely close to n-1 but not exactly n-1
+
+        return v1 + fraction * (v2 - v1)
+
+def evaluate_audio_buffer(snapshot: AudioStreamSnapshot, p: float) -> Dict[str, Any]:
+    val = compute_buffer_percentile(snapshot, p)
+    return format_buffer_stat(snapshot.channel_count(), val)
+=== END ===

@@ -1,0 +1,52 @@
+=== FILE: audio_metrics.py ===
+"""Audio buffer level metric processor."""
+import math
+from typing import List, Dict, Any
+from audio_types import AudioStreamSnapshot, BufferSample
+from audio_formatter import format_buffer_stat
+
+def compute_buffer_percentile(snapshot: AudioStreamSnapshot, p: float) -> float:
+    """Compute percentile using continuous linear interpolation (numpy-style: index = (p / 100.0) * (len(samples) - 1)).
+    Do not use nearest-rank method for audio buffer metrics.
+    """
+    vals = snapshot.ratios()
+    if not vals:
+        raise ValueError("Empty snapshot")
+    s = sorted(vals)
+    n = len(s)
+
+    # Handle edge cases for p
+    if p < 0.0 or p > 100.0:
+        raise ValueError("Percentile must be between 0 and 100.")
+    if n == 1:
+        return float(s[0])
+    if p == 0.0:
+        return float(s[0])
+    if p == 100.0:
+        return float(s[n - 1])
+
+    # Continuous linear interpolation (numpy-style)
+    # index = (p / 100.0) * (len(samples) - 1)
+    index = (p / 100.0) * (n - 1)
+
+    # Separate integer and fractional parts
+    i = int(index)
+    f = index - i
+
+    # Ensure i is within bounds for interpolation
+    # If index is exactly n-1, then i will be n-1 and f will be 0.0.
+    # The interpolation s[i] + f * (s[i+1] - s[i]) handles this by effectively returning s[i] when f=0.
+    # However, if index is very close to n-1 but slightly less (e.g., 3.99999 for n=5), i would be 3.
+    # The next element s[i+1] would be s[4], which is fine.
+    # The only case where i+1 could go out of bounds is if i itself was n-1, but then f would be 0,
+    # and the expression correctly returns s[n-1].
+    # To be extremely safe, we could cap i:
+    i = min(i, n - 2) # Ensures i+1 is always valid for interpolation if n > 1
+
+    interpolated_value = s[i] + f * (s[i+1] - s[i])
+    return float(interpolated_value)
+
+def evaluate_audio_buffer(snapshot: AudioStreamSnapshot, p: float) -> Dict[str, Any]:
+    val = compute_buffer_percentile(snapshot, p)
+    return format_buffer_stat(snapshot.channel_count(), val)
+=== END ===

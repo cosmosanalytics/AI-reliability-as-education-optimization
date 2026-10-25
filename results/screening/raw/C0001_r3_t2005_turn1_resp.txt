@@ -1,0 +1,43 @@
+=== FILE: routing.py ===
+"""Tenant routing configuration aggregator."""
+import copy
+from typing import Dict, Any
+from models import RouteProfile
+from schema import validate_route_keys
+
+def merge_tenant_routing(base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge tenant overrides into base configuration.
+    Inputs must remain strictly immutable; the function must return a newly allocated deep copy.
+    """
+    merged = copy.deepcopy(base_config)
+
+    for key, value in tenant_overrides.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            # Recursively merge dictionaries
+            merged[key] = merge_tenant_routing(merged[key], value)
+        else:
+            # For non-dict values or new keys, just overwrite/add
+            merged[key] = copy.deepcopy(value)
+            
+    return merged
+
+def build_route_profile(tenant_id: str, base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> RouteProfile:
+    cfg = merge_tenant_routing(base_config, tenant_overrides)
+    # The validate_route_keys function expects a flat dictionary for top-level keys
+    # The current merge_tenant_routing handles nested dictionaries.
+    # To satisfy validate_route_keys, we need to extract the relevant top-level config.
+    # Assuming validate_route_keys should check the *final* merged config for 'retries' and 'timeout'
+    # which might be nested under 'network'.
+    # For now, we pass the full config, but this might need refinement if schema.py expects flat keys.
+    # The current schema.py `validate_route_keys` checks for top-level keys `retries` or `timeout`.
+    # Based on the usage in `get_default_network_settings` and the outage, these are likely nested.
+    # The outage indicates default network retry policies were altered.
+    # The default settings are `{"network": {"retries": 3, "timeout": 30}}`.
+    # The `validate_route_keys` function needs to be updated to check for these nested keys.
+    # However, this ticket is about the merge logic. The current `validate_route_keys` will fail
+    # if `cfg` only has a `network` key and `retries`/`timeout` are nested.
+    # The ticket does not ask to change schema.py, so we proceed with the existing validation which
+    # might not fully cover the nested case.
+    validate_route_keys(cfg)
+    return RouteProfile(tenant_id=tenant_id, settings=cfg)
+=== END ===

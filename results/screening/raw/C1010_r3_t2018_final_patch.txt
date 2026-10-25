@@ -1,0 +1,57 @@
+=== FILE: rbac.py ===
+"""Document scope RBAC filter."""
+from path_resolver import clean_scope, split_scope_segments
+from audit_logger import format_access_attempt
+
+def check_scope_access(allowed_scope: str, requested_scope: str) -> bool:
+    """Verify if requested scope is permitted within the designated scope pattern.
+
+    A requested scope is permitted if it is either identical to the allowed scope,
+    or if it is a direct descendant of the allowed scope.
+    The wildcard '::*' in allowed_scope indicates permission for any direct descendant
+    of the preceding scope segment, but not the scope itself.
+    """
+    clean_allowed = clean_scope(allowed_scope)
+    clean_requested = clean_scope(requested_scope)
+
+    allowed_segments = split_scope_segments(clean_allowed)
+    requested_segments = split_scope_segments(clean_requested)
+
+    # Handle the '::*' wildcard: it means allow any child segment, but not the parent itself.
+    # If allowed_scope ends with '::*', remove it and require requested_scope to have at least one more segment.
+    allow_children_only = False
+    if allowed_segments and allowed_segments[-1] == "*":
+        allow_children_only = True
+        allowed_segments.pop() # Remove the '*' segment
+
+    # The requested scope must start with the allowed scope's segments
+    # and not be a 'sibling prefix' (e.g., 'corp::public' should not match 'corp::public_internal')
+    if len(requested_segments) < len(allowed_segments):
+        allowed = False
+    else:
+        # Check if allowed_segments is a prefix of requested_segments, segment by segment
+        is_prefix = True
+        for i in range(len(allowed_segments)):
+            if allowed_segments[i] != requested_segments[i]:
+                is_prefix = False
+                break
+
+        if not is_prefix:
+            allowed = False
+        elif allow_children_only:
+            # If '::*' was present, the requested scope must have more segments than the allowed prefix
+            allowed = len(requested_segments) > len(allowed_segments)
+        else:
+            # If no '::*' was present, the requested scope can be the allowed scope itself
+            # or a deeper descendant.
+            allowed = True
+
+    _ = format_access_attempt(allowed_scope, requested_scope, allowed)
+    return allowed
+
+def filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:
+    return [s for s in scopes if check_scope_access(allowed_scope, s)]
+
+def can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:
+    return all(check_scope_access(allowed_scope, s) for s in scopes)
+=== END ===

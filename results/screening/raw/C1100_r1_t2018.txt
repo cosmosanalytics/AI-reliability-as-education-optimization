@@ -1,0 +1,50 @@
+=== FILE: rbac.py ===
+"""Document scope RBAC filter."""
+from path_resolver import clean_scope, split_scope_segments
+from audit_logger import format_access_attempt
+
+def check_scope_access(allowed_scope: str, requested_scope: str) -> bool:
+    """Verify if requested scope is permitted within the designated scope pattern."""
+    clean_allowed = clean_scope(allowed_scope)
+    clean_requested = clean_scope(requested_scope)
+
+    if clean_allowed.endswith("::*"):
+        # If allowed_scope ends with ::*, treat the part before ::* as the prefix.
+        # This allows any sub-scope beyond that prefix.
+        prefix_allowed = clean_allowed[:-3] # Remove "::*"
+        # An empty prefix_allowed means "::*" was the whole scope, which implies full access.
+        # Otherwise, check if the requested scope strictly starts with the prefix.
+        allowed = not prefix_allowed or clean_requested.startswith(prefix_allowed + "::") or clean_requested == prefix_allowed
+    else:
+        # For exact scope or parent scope matching, compare segments.
+        # A requested scope is allowed if its segments strictly begin with the allowed_scope's segments.
+        allowed_segments = split_scope_segments(clean_allowed)
+        requested_segments = split_scope_segments(clean_requested)
+
+        # Check if the allowed scope is empty, which would grant access to any non-empty requested scope.
+        # However, `split_scope_segments` already handles empty strings to return an empty list.
+        # So, if `allowed_segments` is empty, it means `clean_allowed` was empty.
+        # If `allowed_segments` is empty, and `requested_segments` is also empty, it means both are empty, which can be considered a match.
+        # If `allowed_segments` is empty and `requested_segments` is not, it means an empty scope allows any scope, which is typically not desired.
+        # Given the existing tests and docstring, an empty `allowed_scope` likely implies no access,
+        # unless `requested_scope` is also empty.
+        # The current implementation of `clean_scope(requested_scope).startswith(clean_scope(allowed_scope))`
+        # would return True for `("", "")` and False for `("", "a")`.
+        # Let's adjust to match this behavior more strictly for non-wildcard cases.
+
+        if not allowed_segments: # If allowed_scope is empty or only whitespace
+            allowed = not requested_segments # Only allow if requested_scope is also empty
+        elif len(requested_segments) < len(allowed_segments):
+            allowed = False
+        else:
+            allowed = requested_segments[:len(allowed_segments)] == allowed_segments
+
+    _ = format_access_attempt(allowed_scope, requested_scope, allowed)
+    return allowed
+
+def filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:
+    return [s for s in scopes if check_scope_access(allowed_scope, s)]
+
+def can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:
+    return all(check_scope_access(allowed_scope, s) for s in scopes)
+=== END ===

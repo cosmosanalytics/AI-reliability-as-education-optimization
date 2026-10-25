@@ -1,0 +1,33 @@
+=== FILE: serializer.py ===
+"""Order item TSV row serializer."""
+from typing import List
+from item import OrderItem
+from catalog_validator import validate_catalog
+
+def serialize_item_row(item: OrderItem) -> str:
+    """
+    Serialize OrderItem into a TSV formatted audit line.
+
+    Escapes description field:
+    - Backslashes (\\) are escaped as \\ (literal backslash followed by '\\')
+    - Double quotes (") are escaped as \"
+    - Newline characters (\n) are escaped as \n (literal backslash followed by 'n')
+    - Carriage returns (\r) are escaped as \r (literal backslash followed by 'r')
+    """
+    # First, escape existing backslashes to avoid double-escaping issues with subsequent replacements
+    escaped_description = item.description.replace('\\', '\\\\')
+    # Then escape double quotes, newlines, and carriage returns
+    escaped_description = escaped_description.replace('"', '\\"')
+    escaped_description = escaped_description.replace('\n', '\\n')
+    escaped_description = escaped_description.replace('\r', '\\r')
+
+    return f"{item.item_id}\t{escaped_description}"
+
+def serialize_catalog(items: List[OrderItem]) -> str:
+    if not validate_catalog(items):
+        raise ValueError("Invalid catalog items")
+    return "\n".join(serialize_item_row(i) for i in items)
+
+def count_serialized_items(catalog_str: str) -> int:
+    return len([line for line in catalog_str.splitlines() if line.strip()])
+=== END ===

@@ -1,0 +1,25 @@
+Visible Test Failure (exit code 1):
+FF                                                                       [100%]
+================================== FAILURES ===================================
+______________________________ test_single_item _______________________________
+tests\test_pricing.py:4: in test_single_item
+    summary = calculate_order_total([(100, 1)], vat_rate=0.20)
+pricing.py:14: in calculate_order_total
+    tax = calculate_vat(net, vat_rate)
+tax_engine.py:85: in calculate_vat
+    rounded_vat = unrounded_vat.quantize(Decimal('1'), rounding=ROUND_CEILING)
+E   NameError: name 'ROUND_CEILING' is not defined
+_______________________________ test_multi_item _______________________________
+tests\test_pricing.py:10: in test_multi_item
+    summary = calculate_order_total([(100, 2), (200, 1)], vat_rate=0.10)
+pricing.py:14: in calculate_order_total
+    tax = calculate_vat(net, vat_rate)
+tax_engine.py:85: in calculate_vat
+    rounded_vat = unrounded_vat.quantize(Decimal('1'), rounding=ROUND_CEILING)
+E   NameError: name 'ROUND_CEILING' is not defined
+=========================== short test summary info ===========================
+FAILED tests/test_pricing.py::test_single_item - NameError: name 'ROUND_CEILI...
+FAILED tests/test_pricing.py::test_multi_item - NameError: name 'ROUND_CEILIN...
+2 failed in 0.36s
+
+Reply with your complete corrected patch in the required === FILE: path === ... === END === block format.

@@ -1,0 +1,63 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+    line_totals: list of integer cents.
+    Returns list of discount cents per line.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+    total_line_value = sum(line_totals)
+    if total_line_value == 0:
+        return [0] * len(line_totals)
+
+    # Calculate base allocation for each line using integer division
+    allocations = [cents * total_discount_cents // total_line_value for cents in line_totals]
+
+    # Calculate the sum of currently allocated cents
+    current_allocated_sum = sum(allocations)
+
+    # Calculate the unallocated remainder
+    remainder = total_discount_cents - current_allocated_sum
+
+    # Distribute the remainder cents one by one
+    # Prioritize lines with the largest fractional remainders to distribute the remainder cents.
+    # Calculate exact fractional values and their remainders
+    # The `total_line_value` is guaranteed to be non-zero here.
+    fractional_allocations = [(cents * total_discount_cents) / total_line_value for cents in line_totals]
+    remainders_with_indices = sorted(
+        [
+            (fractional_allocations[i] - allocations[i], i)
+            for i in range(len(line_totals))
+        ],
+        key=lambda x: x[0],
+        reverse=True # Sort in descending order of fractional remainder
+    )
+
+    # Add 1 cent to lines with the largest remainders until the remainder is 0
+    for _ in range(remainder):
+        if not remainders_with_indices:
+            break # Should not happen if remainder is non-negative
+        
+        # Get the index of the line with the largest current remainder
+        _, idx = remainders_with_indices.pop(0) 
+        allocations[idx] += 1
+        
+        # Re-sort or handle the fact that this line's remainder has changed.
+        # For simplicity and correctness with a fixed remainder distribution,
+        # we can just remove the used entry. If we needed to re-evaluate
+        # fractional parts after each penny, it would be more complex.
+        # However, for a fixed number of pennies, this greedy approach works.
+
+    return allocations
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===

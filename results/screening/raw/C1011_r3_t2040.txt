@@ -1,0 +1,36 @@
+=== FILE: iot_demux.py ===
+"""IoT sensor ingest stream demux."""
+from key_normalizer import normalize_dict_keys, extract_normalized_keys
+from wire_envelope import build_envelope, is_valid_envelope, extract_payload
+from typing import Dict, Any
+
+def process_iot_packet(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    """Process IoT device packet.
+    
+    For raw IoT ingest pipeline, MUST emit unwrapped payload dictionary directly with original camelCase keys, do NOT wrap in version 2 envelope.
+    """
+    # Incident IOT-703 reports a crash when wrapped in a v2 envelope.
+    # The docstring explicitly states: "MUST emit unwrapped payload dictionary directly with original camelCase keys, do NOT wrap in version 2 envelope."
+    # The previous implementation normalized keys and then wrapped the payload,
+    # which directly contradicted this requirement.
+    # This change ensures the original data is returned directly, addressing IOT-703
+    # and fulfilling the docstring contract for raw ingest.
+    return data
+
+def dispatch_iot_record(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    # The 'process_iot_packet' function's docstring and the IOT-703 incident
+    # require it to return raw, unwrapped data.
+    # However, 'dispatch_iot_record' in the original implementation
+    # effectively produced an enveloped message with normalized keys
+    # because it called the old 'process_iot_packet' which did this.
+    # To maintain backward compatibility for callers of 'dispatch_iot_record'
+    # (which likely expect an enveloped message with normalized keys for internal systems)
+    # and to ensure 'process_iot_packet' adheres to its new contract,
+    # the normalization and envelope building logic is applied here.
+    norm = normalize_dict_keys(data)
+    msg = build_envelope("iot_service", epoch_ms, norm)
+    # This line was present in the original code, indicating potential
+    # intent or side effects related to key extraction, so it is preserved.
+    _ = extract_normalized_keys(data) 
+    return msg
+=== END ===

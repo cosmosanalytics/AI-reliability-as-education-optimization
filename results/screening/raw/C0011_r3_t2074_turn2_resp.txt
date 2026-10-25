@@ -1,0 +1,44 @@
+=== FILE: jitter_core.py ===
+"""Low-level jitter percentile calculation engine."""
+import math
+from typing import List
+
+def evaluate_jitter_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile values across observed samples using nearest-rank estimation.
+    The index k (0-based) for a sorted list `s` of length `n` is given by:
+    k = math.ceil(p / 100.0 * n) - 1.
+    The percentile value is then s[k].
+    """
+    if not values:
+        raise ValueError("No jitter values")
+    s = sorted(values)
+    n = len(s)
+
+    # Calculate the rank (1-based)
+    # The problem description and common nearest-rank definitions use (p/100 * n) as the rank.
+    # For a 1-based index, this value is usually rounded up.
+    # Then, convert to a 0-based index.
+    
+    # Calculate the 1-based ordinal rank
+    ordinal_rank = (p / 100.0) * n
+
+    # Clamp the ordinal rank to be at least 1, as ceil(0) is 0 and index -1 is invalid.
+    # For p=0, ordinal_rank would be 0, leading to k = -1.
+    # The lowest valid index is 0, corresponding to the smallest value (0th percentile or p very close to 0).
+    # So, if p is 0, we should return the smallest value s[0].
+    if p == 0:
+        return float(s[0])
+    
+    # Apply the nearest-rank formula: k = math.ceil(rank) - 1 for 0-based index
+    # math.ceil returns a float, so cast to int.
+    k = int(math.ceil(ordinal_rank)) - 1
+
+    # Ensure the calculated index is within the valid range [0, n-1]
+    # The formula already implicitly handles k <= n-1 for p <= 100.
+    # If p is very small but not 0 (e.g., p=0.001 for n=5), ordinal_rank might be < 1.
+    # E.g., p=0.001, n=5 -> ordinal_rank = 0.005. ceil(0.005) = 1. k = 1 - 1 = 0. This is correct.
+    
+    # If p=100, ordinal_rank = n. ceil(n) = n. k = n - 1. This is correct.
+    
+    return float(s[k])
+=== END ===

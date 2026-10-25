@@ -1,0 +1,31 @@
+=== FILE: rbac.py ===
+"""Document scope RBAC filter."""
+from path_resolver import clean_scope, split_scope_segments
+from audit_logger import format_access_attempt
+
+def check_scope_access(allowed_scope: str, requested_scope: str) -> bool:
+    """Verify if requested scope is permitted within the designated scope pattern.
+    Access is granted if the requested scope is identical to the allowed scope,
+    or if it is a direct descendant (sub-scope) of the allowed scope,
+    meaning all segments of the allowed scope match the initial segments
+    of the requested scope.
+    """
+    allowed_segments = split_scope_segments(allowed_scope)
+    requested_segments = split_scope_segments(requested_scope)
+
+    # A requested scope cannot be shorter than the allowed scope and still be a descendant.
+    if len(requested_segments) < len(allowed_segments):
+        allowed = False
+    else:
+        # Check if the requested scope's initial segments match the allowed scope's segments.
+        allowed = requested_segments[:len(allowed_segments)] == allowed_segments
+
+    _ = format_access_attempt(clean_scope(allowed_scope), clean_scope(requested_scope), allowed)
+    return allowed
+
+def filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:
+    return [s for s in scopes if check_scope_access(allowed_scope, s)]
+
+def can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:
+    return all(check_scope_access(allowed_scope, s) for s in scopes)
+=== END ===

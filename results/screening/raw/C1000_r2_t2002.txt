@@ -1,0 +1,65 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value.
+    The total discount is fully allocated, distributing any remainder cents
+    to lines with the largest fractional proportions.
+
+    line_totals: list of integer cents.
+    Returns list of discount cents per line.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+
+    total_value = sum(line_totals)
+    num_lines = len(line_totals)
+    if num_lines == 0:
+        return []
+    if total_value == 0:
+        # If total value is 0, distribute discount evenly or as 0 if discount is 0.
+        # For this context, assume 0 for all lines if total_value is 0.
+        # If total_discount_cents > 0 and total_value is 0, this scenario
+        # implies an arbitrary distribution, but proportional means 0.
+        return [0] * num_lines
+
+    # Calculate base allocation and track fractional parts
+    allocations = [0] * num_lines
+    remainder_candidates = [] # Stores (fractional_part, original_index)
+
+    for i, cents in enumerate(line_totals):
+        # Use float for precise proportional calculation
+        proportional_discount = (cents / total_value) * total_discount_cents
+        base_allocation = int(proportional_discount)
+        allocations[i] = base_allocation
+        
+        # Calculate the fractional part to identify candidates for remainder distribution
+        remainder_candidates.append((proportional_discount - base_allocation, i))
+
+    # Distribute remaining cents
+    total_allocated_so_far = sum(allocations)
+    remaining_cents = total_discount_cents - total_allocated_so_far
+
+    if remaining_cents > 0:
+        # Sort candidates by fractional part in descending order
+        # to distribute remaining cents to those with largest fractions first
+        remainder_candidates.sort(key=lambda x: x[0], reverse=True)
+
+        for i in range(min(remaining_cents, num_lines)):
+            original_index = remainder_candidates[i][1]
+            allocations[original_index] += 1
+
+    return allocations
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    # The prorate_discount function now ensures full allocation,
+    # so is_fully_allocated should always be True unless line_totals is empty
+    # and total_discount_cents > 0, which is handled by returning [].
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===

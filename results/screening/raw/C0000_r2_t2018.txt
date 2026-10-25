@@ -1,0 +1,40 @@
+=== FILE: rbac.py ===
+"""Document scope RBAC filter."""
+from path_resolver import clean_scope, split_scope_segments
+from audit_logger import format_access_attempt
+
+def check_scope_access(allowed_scope: str, requested_scope: str) -> bool:
+    """Verify if requested scope is permitted within the designated scope pattern."""
+    cleaned_allowed_scope = clean_scope(allowed_scope)
+    cleaned_requested_scope = clean_scope(requested_scope)
+
+    # Handle wildcard for allowed_scope
+    if cleaned_allowed_scope.endswith("::*"):
+        # Remove "::*" to get the base scope for prefix matching
+        base_allowed_scope = cleaned_allowed_scope[:-3]
+        allowed_segments = split_scope_segments(base_allowed_scope)
+        requested_segments = split_scope_segments(cleaned_requested_scope)
+
+        # For "::*" wildcard, the requested scope must be a descendant or exactly the base scope
+        is_prefix = requested_segments[:len(allowed_segments)] == allowed_segments
+        allowed = is_prefix and len(requested_segments) >= len(allowed_segments)
+    else:
+        # No wildcard, exact segment-by-segment prefix match
+        allowed_segments = split_scope_segments(cleaned_allowed_scope)
+        requested_segments = split_scope_segments(cleaned_requested_scope)
+
+        # A scope is allowed if it exactly matches the allowed scope,
+        # or if it is a direct descendant (i.e., starts with the allowed scope's segments
+        # and has further segments).
+        is_prefix = requested_segments[:len(allowed_segments)] == allowed_segments
+        allowed = is_prefix and len(requested_segments) >= len(allowed_segments)
+
+    _ = format_access_attempt(cleaned_allowed_scope, cleaned_requested_scope, allowed)
+    return allowed
+
+def filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:
+    return [s for s in scopes if check_scope_access(allowed_scope, s)]
+
+def can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:
+    return all(check_scope_access(allowed_scope, s) for s in scopes)
+=== END ===

@@ -1,0 +1,48 @@
+=== FILE: cache_monitor.py ===
+"""Cache Hit Latency Percentile Monitor percentile calculator."""
+from typing import List
+from percentile_helper import validate_metric_samples, sample_range
+from metric_model import create_sample_window
+import math
+
+def calculate_cache_percentile(samples: List[float], p: float) -> float:
+    win = create_sample_window("calculate_cache_percentile", samples)
+    s = validate_metric_samples(win.values)
+    n = len(s)
+    if n == 1:
+        return s[0]
+
+    # The incident describes a discrepancy against a "nearest-rank house standard".
+    # The failing test `assert calculate_cache_percentile(d1, 50.0) == 40.0`
+    # (with original code yielding a different value like 30.0 for d1=[10,20,30,40,50])
+    # suggests a percentile definition like the (N+1) method (NIST Method R-6).
+    #
+    # In the (N+1) method, the rank is calculated as `L = (p / 100.0) * (n + 1)`.
+    # If L is an integer, the p-th percentile is the value at that rank.
+    # If L is not an integer, it interpolates between the two nearest ranks.
+    # For 0-indexed arrays, the effective index is `L - 1`.
+
+    # Calculate the effective 0-indexed rank using the (N+1) method.
+    idx_float = (p / 100.0) * (n + 1) - 1
+
+    # Handle out-of-bounds percentile requests (p < 0 or p > 100)
+    # by clamping to the minimum or maximum sample value.
+    if idx_float < 0:
+        return s[0]
+    if idx_float >= n - 1:
+        return s[n - 1]
+
+    # Determine the lower and upper indices for interpolation.
+    low = int(math.floor(idx_float))
+    high = int(math.ceil(idx_float))
+
+    # If the index is an exact integer, return the value at that index.
+    if low == high:
+        return s[low]
+
+    # Perform linear interpolation.
+    return s[low] + (idx_float - low) * (s[high] - s[low])
+
+def compute_summary_range(samples: List[float]) -> float:
+    return sample_range(samples)
+=== END ===

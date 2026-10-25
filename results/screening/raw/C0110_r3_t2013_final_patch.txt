@@ -1,0 +1,46 @@
+=== FILE: csv_writer.py ===
+"""TSV serialization utilities."""
+from typing import List, Optional
+from schema import CustomerProfile
+from io_helpers import validate_tsv_header
+
+def escape_tsv_field(val: Optional[str]) -> str:
+    r"""Escape field for internal TSV audit log pipeline:
+    Records are tab-separated (\t), internal double quotes are escaped with backslash (\"),
+    newline characters are escaped as \n, and None/null values are serialized as \N.
+    Do NOT use RFC 4180 double-quoting.
+    """
+    if val is None:
+        return "\\N"
+
+    # Escape backslashes first, so subsequent escapes like \" don't introduce
+    # new backslashes that get re-escaped.
+    # The docstring specifies escaping " with \" and newline with \n.
+    # If a literal backslash `\` appears, it must be escaped to `\\`
+    # so that `\"` or `\n` are interpreted as literal escape sequences,
+    # not as a backslash followed by another character.
+    # Example: "foo\bar" should become "foo\\bar" if no other rules apply.
+    # If it contains a quote: "foo\"bar" -> "foo\\\"bar"
+    # If it contains a newline: "foo\nbar" -> "foo\\nbar"
+    escaped_val = val.replace("\\", "\\\\")
+    escaped_val = escaped_val.replace('"', '\\"')
+    escaped_val = escaped_val.replace("\n", "\\n")
+    return escaped_val
+
+def export_profiles_tsv(profiles: List[CustomerProfile]) -> str:
+    # The header definition should use actual tab characters, not escaped ones.
+    header = "cust_id\tname\tnotes"
+    if not validate_tsv_header(header, ["cust_id", "name", "notes"]):
+        raise ValueError("Invalid header")
+    lines = [header]
+    for p in profiles:
+        f_name = escape_tsv_field(p.name)
+        f_notes = escape_tsv_field(p.notes)
+        lines.append(f"{p.cust_id}\t{f_name}\t{f_notes}")
+    # The final output should use actual newline characters, not escaped ones.
+    return "\n".join(lines)
+
+def count_records(payload: str) -> int:
+    lines = [l for l in payload.splitlines() if l.strip()]
+    return max(0, len(lines) - 1)
+=== END ===

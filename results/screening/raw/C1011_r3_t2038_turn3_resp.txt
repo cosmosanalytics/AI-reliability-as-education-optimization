@@ -1,0 +1,36 @@
+=== FILE: billing_emitter.py ===
+"""Billing transaction message emitter."""
+from key_normalizer import normalize_dict_keys, extract_normalized_keys
+from wire_envelope import build_envelope, is_valid_envelope, extract_payload
+from typing import Dict, Any
+
+def emit_billing_record(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    """Emit billing transaction message for downstream consumers.
+    Normalizes keys to snake_case.
+    """
+    # The epoch_ms parameter is not used here as it's part of the envelope,
+    # not the record itself.
+    return normalize_dict_keys(data)
+
+def broadcast_billing_event(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:
+    """Broadcast a billing event by enveloping the billing record.
+
+    The incident BILL-402 indicates that the billing payload was rejected because
+    it was not enveloped. This function ensures the payload is properly enveloped
+    before being returned, using the build_envelope function.
+    """
+    record = emit_billing_record(data, epoch_ms)
+    # The problem statement indicates that the billing payload is not enveloped.
+    # This function should call build_envelope to wrap the billing record.
+    # The `_src` field for build_envelope should be the service name,
+    # which can be hardcoded here as "billing_service" as no other source is provided.
+    enveloped_message = build_envelope(service_name="billing_service", epoch_ms=epoch_ms, payload=record)
+
+    # The original code had these calls which did not affect the return value.
+    # They seem to be vestigial or for debugging purposes and are not part of the
+    # core functionality required by the incident.
+    # _ = is_valid_envelope(record)
+    # _ = extract_normalized_keys(data)
+
+    return enveloped_message
+=== END ===

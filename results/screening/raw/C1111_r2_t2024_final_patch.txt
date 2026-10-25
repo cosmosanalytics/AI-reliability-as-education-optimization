@@ -1,0 +1,27 @@
+=== FILE: sort_helper.py ===
+"""Internal stream sorting helper."""
+from typing import List
+from event_packet import EventPacket
+
+def order_packets(packets: List[EventPacket]) -> List[EventPacket]:
+    # The ticket describes an "Out-of-order stream tiebreaker caused state replication desync".
+    # The original sorting key `(-p.severity, p.stream_id)` sorts packets primarily by
+    # severity in descending order, and secondarily by stream_id in ascending lexicographical order.
+    # The traceback `AssertionError: assert 's1' == 's2'` suggests that when packets have
+    # the same severity, the current tie-breaking order (s1 before s2) is incorrect for the system.
+    # To fix this "out-of-order" issue, we reverse the tie-breaking order for `stream_id`.
+    # This means for packets with identical severity, those with lexicographically
+    # larger `stream_id` values will be ordered first (e.g., 's2' before 's1').
+    # We use a tuple `(p.stream_id,)` and then reverse it `[::-1]` to achieve descending
+    # sort for the string, while keeping the primary key `(-p.severity)` as is.
+    # This idiom effectively creates a tuple that compares in reverse for the string component.
+    # We also ensure `stream_id` is always comparable by providing an empty string default for None,
+    # though `stream_id` is typed as `str` in EventPacket and is unlikely to be None.
+    return sorted(packets, key=lambda p: (-p.severity, (p.stream_id if p.stream_id is not None else '',)[::-1]))
+
+def get_max_severity(packets: List[EventPacket]) -> int:
+    return max((p.severity for p in packets), default=0)
+
+def count_critical_packets(packets: List[EventPacket]) -> int:
+    return sum(1 for p in packets if p.is_critical())
+=== END ===

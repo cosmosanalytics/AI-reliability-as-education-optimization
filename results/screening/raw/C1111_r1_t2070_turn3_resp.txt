@@ -1,0 +1,31 @@
+=== FILE: query_percentile.py ===
+"""Percentile estimation engine for database telemetry."""
+import math
+from typing import List
+
+def calculate_percentile(values: List[float], p: float) -> float:
+    """Calculates percentile across sample values using the nearest rank method (rounding half up).
+
+    This method is consistent with some statistical software (e.g., NIST method or R-3 in Hyndman and Fan's taxonomy)
+    and resolves discrepancies in SLA calculations where linear interpolation was not expected.
+    """
+    if not values:
+        raise ValueError("Empty values")
+    s = sorted(values)
+    n = len(s)
+
+    # Calculate the 1-based rank for the percentile.
+    # The formula (p / 100.0) * n gives the rank.
+    rank_float = (p / 100.0) * n
+
+    # Round the rank to the nearest integer.
+    # `int(x + 0.5)` simulates "round half up" behavior, which is often desired for percentiles.
+    # For example, 5.4 rounds to 5, 5.5 rounds to 6.
+    rank_int = int(rank_float + 0.5)
+
+    # Convert the 1-based rank to a 0-based index and clamp it within the valid array bounds [0, n-1].
+    # A rank of 1 corresponds to index 0, rank of n corresponds to index n-1.
+    final_index = max(0, min(n - 1, rank_int - 1))
+
+    return float(s[final_index])
+=== END ===
