@@ -2,7 +2,7 @@
 
 **Current Phase:** Pilot Calibration Round 2 (Complete; Strict Stop Rule Enforced)  
 **Phase State:** **Complete (168 Total Live Attempts Analyzed; All Factor Runs Locked)**  
-**Frozen SHA:** *Submitting for Round 14 Review*  
+**Frozen SHA:** `534e1e8`  
 **Model Specifications:**  
 - **Model ID:** `gemini-2.5-flash` (for upcoming pilot calibration upon benchmark validation approval)  
 - **Sampling Settings:** `temperature=0.0`, `max_output_tokens=16384`, `thinking_budget=2048`  
