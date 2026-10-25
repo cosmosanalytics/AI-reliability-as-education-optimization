@@ -1,0 +1,25 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Access control report ACC-404: Expired user account retained active entitlement access for one second after subscription window lapsed.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_subscription_cases.py::test_window_expiration - AssertionError: assert True is False
+
+REPOSITORY FILES:
+=== FILE: subscription.py ===
+"""Subscription authorization service."""
+from rules import Entitlement
+from period_calc import check_in_window
+
+def is_entitled_at(user_id: int, plan: str, start_epoch: int, end_epoch: int, current_epoch: int) -> bool:
+    """Evaluate whether user plan entitlement is active at current_epoch timestamp."""
+    return check_in_window(start_epoch, end_epoch, current_epoch)
+
+def get_entitlement_status(user_id: int, plan: str, start_epoch: int, end_epoch: int, current_epoch: int) -> dict:
+    active = is_entitled_at(user_id, plan, start_epoch, end_epoch, current_epoch)
+    return {"user_id": user_id, "plan": plan, "active": active}
+
+def describe_window(start_epoch: int, end_epoch: int) -> str:
+    return f"Window(from={start_epoch}, to={end_epoch})"
+=== END ===

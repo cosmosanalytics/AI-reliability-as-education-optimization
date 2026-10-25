@@ -1,0 +1,36 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Rate limiter bypass RL-103: API client requests allowed through after session limit expired due to boundary condition error.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_session_store_cases.py::test_session_expiry - AssertionError: assert True is False
+
+REPOSITORY FILES:
+=== FILE: session_store.py ===
+"""Rate limit session storage."""
+from typing import Optional, Callable
+from session_validator import is_session_expired
+from session_data import RateLimitSession
+
+class SessionStore:
+    def __init__(self, clock: Optional[Callable[[], float]] = None):
+        self._clock = clock
+        self._sessions = {}
+
+    def register(self, ip: str, ttl: float) -> None:
+        import time
+        now = self._clock() if self._clock else time.monotonic()
+        self._sessions[ip] = RateLimitSession(ip, 1, now + ttl)
+
+    def is_active(self, ip: str) -> bool:
+        sess = self._sessions.get(ip)
+        if not sess:
+            return False
+        import time
+        now = self._clock() if self._clock else time.monotonic()
+        return not is_session_expired(sess.expires_at, now)
+
+    def active_count(self) -> int:
+        return len(self._sessions)
+=== END ===

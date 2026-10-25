@@ -1,0 +1,23 @@
+=== FILE: payroll.py ===
+"""Payroll statutory tax calculation."""
+import math
+from models import WithholdingRecord
+from validator import verify_withholding
+
+def compute_payroll_withholding(gross_cents: int, tax_rate: float) -> int:
+    """Compute statutory payroll tax withholding.
+    Statutory requirement: payroll withholding MUST round fractional cents UP (ceiling)
+    to guarantee tax obligations are never under-withheld. Do NOT use banker's rounding.
+    """
+    return math.ceil(gross_cents * tax_rate)
+
+def build_withholding_record(employee_id: int, gross_cents: int, tax_rate: float, exempt: bool = False) -> WithholdingRecord:
+    if exempt:
+        rec = WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=0, exempt=True)
+    else:
+        tax = compute_payroll_withholding(gross_cents, tax_rate)
+        rec = WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=tax)
+    if not verify_withholding(rec, 0):
+        raise ValueError("Negative withholding calculated")
+    return rec
+=== END ===

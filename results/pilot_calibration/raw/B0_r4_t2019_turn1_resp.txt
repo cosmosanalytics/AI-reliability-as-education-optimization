@@ -1,0 +1,96 @@
+=== FILE: asset_service.py ===
+"""Asset bucket retrieval service."""
+from path_normalizer import validate_prefix_match, get_scope_depth
+from models import StorageAsset
+
+def can_access_asset(asset: StorageAsset, required_scope: str) -> bool:
+    """Check if asset path matches the required storage bucket scope.
+    Path matching contract: matches full directory segment boundaries and normalizes trailing slashes.
+    """
+    # Ensure the required_scope is treated as a directory prefix.
+    # If required_scope is '/assets', it should match '/assets/file.txt' but not '/assets-private/file.txt'.
+    # The original validate_prefix_match might not enforce full directory segment boundaries correctly,
+    # leading to '/assets' matching '/assets-private'.
+    # We enhance the check to explicitly ensure the boundary.
+
+    # Normalize required_scope to always end with a slash for directory matching, unless it's the root.
+    normalized_scope = required_scope if required_scope == '/' else required_scope.rstrip('/') + '/'
+
+    # Normalize asset.path to ensure consistent comparison.
+    # We assume asset.path is already normalized or can be treated as such for this comparison.
+    # The asset.path must start with the normalized_scope.
+    if not asset.path.startswith(normalized_scope):
+        return False
+
+    # If the asset.path is exactly the normalized_scope (e.g., scope='/assets/', path='/assets/'),
+    # it means the scope itself is being accessed, which is valid.
+    if asset.path == normalized_scope:
+        return True
+
+    # If the asset.path starts with the normalized_scope, we need to ensure that the character
+    # immediately following the scope in the asset.path is a directory separator.
+    # This is implicitly handled by `startswith(normalized_scope)` where normalized_scope ends with '/'.
+    # For example, if normalized_scope is '/assets/', then '/assets-private/file.txt' will not start with it.
+    # The original `validate_prefix_match` is still called to handle other normalization aspects
+    # like trailing slashes on the asset.path itself, but the primary security boundary check
+    # is enforced by the `startswith` check with the normalized_scope.
+
+    # The original `validate_prefix_match` is still useful for its intended purpose
+    # (e.g., handling trailing slashes on asset.path if it's not already normalized).
+    # However, the critical part for the incident is ensuring that '/assets' does not match '/assets-private'.
+    # The `startswith(normalized_scope)` check already handles this.
+    # We can simplify by relying on the explicit boundary check.
+
+    # Re-evaluate the contract: "matches full directory segment boundaries and normalizes trailing slashes."
+    # The `validate_prefix_match` function from `path_normalizer` is expected to fulfill this.
+    # If it doesn't, the fix should ideally be in `path_normalizer`.
+    # Given the constraint to only modify `asset_service.py`, we must augment the check here.
+
+    # The most direct fix for the described vulnerability is to ensure that
+    # a scope like '/assets' does not match '/assets-private'.
+    # This means the prefix match must respect the directory boundary.
+    # A simple string prefix match `startswith(required_scope)` is insufficient.
+    # We need to ensure that if `asset.path` starts with `required_scope`,
+    # then either `asset.path` is exactly `required_scope`, or the character
+    # immediately after `required_scope` in `asset.path` is a '/'.
+
+    # Let's normalize both paths to ensure consistent directory boundaries.
+    # A scope like '/assets' should match '/assets/' and '/assets/foo.txt'.
+    # It should NOT match '/assets-private/foo.txt'.
+
+    # Helper to ensure a path represents a directory for comparison.
+    def _normalize_path_for_dir_match(path: str) -> str:
+        if not path:
+            return '/'
+        normalized = path.rstrip('/')
+        if normalized == '': # Handle case where path was just '/'
+            return '/'
+        return normalized + '/'
+
+    normalized_required_scope = _normalize_path_for_dir_match(required_scope)
+    normalized_asset_path = _normalize_path_for_dir_match(asset.path)
+
+    # Check if the asset path starts with the required scope's directory path.
+    # This handles cases like:
+    # scope='/assets', path='/assets/file.txt' -> True
+    # scope='/assets', path='/assets-private/file.txt' -> False (because '/assets-private/' does not start with '/assets/')
+    # scope='/assets', path='/assets' -> True (because '/assets/' starts with '/assets/')
+    # scope='/', path='/assets/file.txt' -> True
+    # scope='/', path='/' -> True
+    if normalized_asset_path.startswith(normalized_required_scope):
+        # The `validate_prefix_match` from `path_normalizer` is still called
+        # to ensure any other specific normalization or validation it performs.
+        # However, the primary security check for directory boundary is now handled.
+        # If `validate_prefix_match` already correctly implements the "full directory segment boundaries",
+        # then this additional check might be redundant but harmless.
+        # If it doesn't, this provides the necessary enforcement.
+        return validate_prefix_match(required_scope, asset.path)
+    return False
+
+
+def filter_accessible_assets(assets: list, required_scope: str) -> list:
+    return [a for a in assets if can_access_asset(a, required_scope)]
+
+def get_asset_hierarchy_level(asset: StorageAsset) -> int:
+    return get_scope_depth(asset.path)
+=== END ===

@@ -1,0 +1,32 @@
+=== FILE: pricing.py ===
+"""Order pricing calculation with itemized taxes."""
+from typing import List, Tuple, Optional
+from models import LineItem, OrderSummary
+from tax_engine import calculate_vat, get_rate_for_jurisdiction
+
+def calculate_order_total(items: List[Tuple[int, int]], vat_rate: float = 0.20, order_id: str = "ORD-001") -> OrderSummary:
+    """Calculate order total including tax.
+    items: list of (price_cents, quantity).
+    Returns OrderSummary.
+    Tax calculation must use banker's rounding (round half to even) on exact half-cents.
+    """
+    line_objs = [LineItem(sku=f"SKU-{i+1}", price_cents=p, quantity=q) for i, (p, q) in enumerate(items)]
+    
+    total_net = 0
+    total_tax = 0
+    
+    # The problem description "Itemized billing batch reconciliation failed for customer order line items under variable VAT rates"
+    # implies that VAT should be calculated per line item and then summed,
+    # rather than calculating VAT on the total net amount.
+    # This approach also allows for variable VAT rates per item if the vat_rate
+    # parameter were to be replaced by a lookup per item (e.g., using get_rate_for_jurisdiction
+    # with item-specific jurisdiction data, which is not currently in the input `items`).
+    # For now, we apply the provided `vat_rate` to each item's subtotal.
+    for item in line_objs:
+        item_net = item.subtotal()
+        item_tax = calculate_vat(item_net, vat_rate) # Calculate tax for each item's subtotal
+        total_net += item_net
+        total_tax += item_tax
+        
+    return OrderSummary(order_id=order_id, items=line_objs, net_cents=total_net, tax_cents=total_tax, gross_cents=total_net + total_tax)
+=== END ===

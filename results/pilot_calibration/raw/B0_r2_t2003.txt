@@ -1,0 +1,22 @@
+=== FILE: converter.py ===
+"""Currency amount converter interface."""
+from rates import FxQuote, ConversionSummary
+from fx_engine import apply_fx_rate
+
+def convert_currency_amount(amount_cents: int, quote: FxQuote) -> int:
+    """Convert amount in base currency cents to quote currency cents.
+    amount_cents: source currency amount in cents.
+    quote: exchange rate quote.
+    """
+    # Apply FX rate, which might result in a fractional cent amount.
+    # For cross-border clearing and settlement reconciliation,
+    # fractional cents must be handled consistently.
+    # A common financial rounding rule is "round half up" to the nearest cent.
+    # For positive currency amounts, this can be achieved by adding 0.5 and truncating.
+    raw_converted_amount = apply_fx_rate(amount_cents, quote.rate)
+    return int(raw_converted_amount + 0.5)
+
+def build_conversion_summary(amount_cents: int, quote: FxQuote) -> ConversionSummary:
+    converted = convert_currency_amount(amount_cents, quote)
+    return ConversionSummary(source_cents=amount_cents, converted_cents=converted, applied_rate=quote.rate)
+=== END ===

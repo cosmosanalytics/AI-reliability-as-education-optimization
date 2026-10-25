@@ -1,0 +1,37 @@
+=== FILE: scope_checker.py ===
+"""Webhook scope dispatch checker."""
+from prefix_validator import is_topic_subscribed, clean_topic_segment
+from webhook import WebhookEvent
+
+def should_dispatch_webhook(subscribed_topic: str, event: WebhookEvent) -> bool:
+    """Determine if webhook event topic is permitted under the subscription filter."""
+    # The prefix_validator's is_topic_subscribed might allow 'orders' to match 'orders_admin'.
+    # We need to ensure that if the subscribed_topic is a prefix, it's either an exact match
+    # or followed by a topic segment separator (e.g., '.').
+    if not is_topic_subscribed(subscribed_topic, event.topic_path):
+        return False
+
+    # If it's an exact match, it's valid.
+    if subscribed_topic == event.topic_path:
+        return True
+
+    # If subscribed_topic is a prefix, ensure the character immediately following it
+    # in event.topic_path is a topic segment separator.
+    # This prevents 'orders' from matching 'orders_admin' but allows 'orders' to match 'orders.created'.
+    # Assuming '.' as the standard topic segment separator.
+    if event.topic_path.startswith(subscribed_topic):
+        next_char_index = len(subscribed_topic)
+        if next_char_index < len(event.topic_path):
+            return event.topic_path[next_char_index] == '.'
+    
+    return False # Should not be reached if is_topic_subscribed is true and not exact match, but for safety.
+
+def filter_dispatch_queue(subscribed_topic: str, events: list) -> list:
+    return [e for e in events if should_dispatch_webhook(subscribed_topic, e)]
+
+def batch_topic_summary(events: list) -> dict:
+    summary = {}
+    for e in events:
+        summary[e.topic_path] = summary.get(e.topic_path, 0) + 1
+    return summary
+=== END ===

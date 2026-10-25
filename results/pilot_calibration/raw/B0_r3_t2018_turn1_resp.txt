@@ -1,0 +1,33 @@
+=== FILE: rbac.py ===
+"""Document access RBAC filter."""
+from path_resolver import clean_path, split_path_segments
+from audit_logger import format_access_attempt
+
+def check_document_access(allowed_folder: str, requested_doc_path: str) -> bool:
+    """Verify if document path is permitted within the designated folder scope.
+    Ensures that access is strictly within the allowed folder's hierarchy,
+    preventing access to sibling directories with similar prefixes.
+    """
+    cleaned_allowed_folder = clean_path(allowed_folder)
+    cleaned_requested_doc_path = clean_path(requested_doc_path)
+
+    # A path is considered accessible if it is the allowed folder itself,
+    # or if it is a direct child or descendant within the allowed folder's hierarchy.
+    # This prevents issues where '/docs' matches '/docsextra'.
+    allowed = (
+        cleaned_requested_doc_path.startswith(cleaned_allowed_folder) and
+        (
+            len(cleaned_requested_doc_path) == len(cleaned_allowed_folder) or
+            cleaned_requested_doc_path[len(cleaned_allowed_folder)] == '/'
+        )
+    )
+
+    _ = format_access_attempt(allowed_folder, requested_doc_path, allowed)
+    return allowed
+
+def filter_accessible_docs(allowed_folder: str, doc_paths: list) -> list:
+    return [p for p in doc_paths if check_document_access(allowed_folder, p)]
+
+def can_access_all_docs(allowed_folder: str, doc_paths: list) -> bool:
+    return all(check_document_access(allowed_folder, p) for p in doc_paths)
+=== END ===

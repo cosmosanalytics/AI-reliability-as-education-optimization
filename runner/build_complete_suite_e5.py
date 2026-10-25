@@ -310,6 +310,19 @@ def generate_fairness_md():
     tune_set = set(splits["tune"])
     held_out_set = set(splits["held_out"])
     
+    # Load measured baseline pass rates if available
+    baseline_rates = {}
+    rows_path = os.path.join(REPO_ROOT, "results", "pilot_calibration", "rows.json")
+    if os.path.exists(rows_path):
+        with open(rows_path, "r", encoding="utf-8") as rf:
+            calib_rows = json.load(rf)
+            for tid in [t["id"] for t in TASKS]:
+                t_rows = [r for r in calib_rows if r["ticket"] == tid]
+                if t_rows:
+                    k = sum(1 for r in t_rows if r.get("final_strict") is True)
+                    n = len(t_rows)
+                    baseline_rates[tid] = f"**{k/n*100.0:.1f}%** ({k}/{n})"
+    
     lines = [
         "# Benchmark Validation & Fairness Audit (`FAIRNESS_e5.md`)",
         "",
@@ -375,9 +388,10 @@ def generate_fairness_md():
         tag = t["class_tag"]
         split_name = "Tune" if tid in tune_set else "Held-Out"
         repo_files_str = ", ".join(t["non_test_files"])
+        b_rate_str = baseline_rates.get(tid, "*Pending Pilot Calibration*")
         for fn_name, src, derivable, a_tag in t["assertions"]:
             lines.append(
-                f"| **{tid}** | `{fam}` | `{fn_name}` | {src} | **{derivable}** | *Pending Pilot Calibration* | `{a_tag}` | `{repo_files_str}` | **None (0)** | {split_name} |"
+                f"| **{tid}** | `{fam}` | `{fn_name}` | {src} | **{derivable}** | {b_rate_str} | `{a_tag}` | `{repo_files_str}` | **None (0)** | {split_name} |"
             )
             
     lines.extend([

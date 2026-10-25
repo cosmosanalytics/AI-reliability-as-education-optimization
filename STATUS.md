@@ -1,8 +1,8 @@
 # Project Status & Execution Tracker (`STATUS.md`)
 
-**Current Phase:** Pilot Calibration (Baseline B0 on `suite_e5` across all 28 tasks x 5 runs = 140 attempts)  
-**Phase State:** **Approved (Round 12) & Execution in Progress**  
-**Frozen SHA:** `e812d88` (Benchmark Validation Suite e5 Verified & Approved)  
+**Current Phase:** Pilot Calibration Complete (Awaiting Round 13 Pre-Registration Review)  
+**Phase State:** **Complete & Analyzed (140/140 Attempts Finished; 0 Errors; PILOT_CALIBRATION_REPORT.md Generated)**  
+**Frozen SHA:** `6ab48af` (Pilot Calibration Runner Frozen SHA)  
 **Model Specifications:**  
 - **Model ID:** `gemini-2.5-flash` (for upcoming pilot calibration upon benchmark validation approval)  
 - **Sampling Settings:** `temperature=0.0`, `max_output_tokens=16384`, `thinking_budget=2048`  
@@ -28,8 +28,8 @@
 | **Phase 0** | Infrastructure & Protocol Setup | **Complete and Verified** | `c81d851` | Evaluation runner (`agent_runner.py`), grader (`grader.py`), 16 cell briefs (`briefs/DIFF.md`), exact token accounting, Resolution-V parity, interactive tool loop, standardized task envelope, audit trail, 10 hermetic unit tests. Live dry run verified on `gemini-2.5-flash`. |
 | **Pilot Calibration (suite_e4)** | Difficulty Calibration Only | **Complete (Difficulty Calibrated)** | `915711b` | 12 multi-module tasks (`suite_e4`), 120 live attempts ($C0000=56.7\%$, $C1111=61.7\%$, $p=0.8750$). Established as difficulty calibration only (ceiling broken); per-task effects did not replicate across runs. |
 | **Benchmark Validation (suite_e5)** | Modular Task Suite $e5$, Invariants & Preflight | **Complete (146/146 Verified)** | `e669a2e` | Strictly offline. 28 modular instances across 7 families (`benchmarks/suite_e5.py`), `HANDBOOK.md` vs `PLACEBO.md` token balance (761 vs 754, 0.920% diff $\le 3\%$), 2 worked examples (`briefs/P3.md`), per-assertion audit table (`benchmarks/FAIRNESS_e5.md`), class-stratified split (`benchmarks/splits_e5.json`: 15 Tune, 13 Held-Out), 146/146 passing preflight tests (`tests/test_suite_e5_preflight.py`). S-1..S-6, B1..B4, and C1..C2 resolved. |
-| **Pilot Calibration (suite_e5)** | Baseline B0 Calibration Run | **In Progress** | `e812d88` | Live B0 calibration on `suite_e5` (frozen runner config, 5 runs across all 28 tasks = 140 attempts). Calibrates baseline difficulty, run-to-run noise, failure modes, and executes C2 relabel rule (>70% baseline -> STATED). |
-| **Pre-Registration** | Formal Pre-Registration Document | **LOCKED (Pending Pilot Calibration)** | — | Primary hypothesis ($\Delta_{\text{TAUGHT}} > 0$), instance-clustered permutation tests, $\theta^*$ selection rule, C2 baseline-solvability relabel rule, and stopping rules committed before screening experiment. |
+| **Pilot Calibration (suite_e5)** | Baseline B0 Calibration Run | **Complete (140/140)** | `6ab48af` | Live B0 calibration on `suite_e5` (140 attempts across all 28 tasks). Overall strict pass: 44.3% (Tune: 49.3%, Held-Out: 38.5%). ICC = 0.966. Executed C2 relabel rule: Tasks 2014, 2018, 2022 (100% baseline) reclassified to STATED; 3 TAUGHT retained in Held-Out (CONFIRMATORY_VALID). Report: `PILOT_CALIBRATION_REPORT.md`. |
+| **Pre-Registration** | Formal Pre-Registration Document | **LOCKED (Awaiting Round 13 Review)** | — | Primary hypothesis ($\Delta_{\text{TAUGHT}} > 0$), instance-clustered permutation tests, $\theta^*$ selection rule, C2 baseline-solvability relabel rule, and stopping rules to be committed before screening experiment. |
 | **Screening Experiment** | Tune-Set Factorial ($2^{5-1}$) | **LOCKED (Pending Pre-Registration)** | — | 16 cells $\times \ge 5$ runs on the 15 tune tasks (`benchmarks/splits_e5.json`). |
 | **Confirmatory Study** | Held-Out Confirmation & Multi-Model Replication | **LOCKED** | — | Confirmatory evaluation on 13 held-out tasks (4 TAUGHT, 3 STATED, 2 DISTRACTOR, 4 TRANSFER) and second-model replication as budget allows. |
 
@@ -140,7 +140,33 @@ In response to Round 9, Round 10, and Round 11 reviews, all construct-validity r
 
 ---
 
-## 4. Historical Reference: Pilot Calibration on suite_e4 (Difficulty Calibration Only)
+## 4. Pilot Calibration on suite_e5 (Baseline B0 Empirical Findings)
+
+- **Total Attempts:** 140 / 140 (28 tasks $\times$ 5 runs, `gemini-2.5-flash`, `temperature=0.0`, single call B0).
+- **Overall Strict Pass Rate:** 62 / 140 (**44.3%**, Wilson 95% CI: [36.3%, 52.6%]).
+  - **Tune Split (15 tasks):** 37 / 75 (**49.3%**, Wilson [38.3%, 60.4%]).
+  - **Held-Out Split (13 tasks):** 25 / 65 (**38.5%**, Wilson [27.6%, 50.6%]).
+- **By Task Class:**
+  - `STATED`: 32 / 50 (**64.0%**, Wilson [50.1%, 75.9%]).
+  - `TAUGHT`: 15 / 55 (**27.3%**, Wilson [17.3%, 40.2%]).
+  - `DISTRACTOR`: 5 / 15 (**33.3%**, Wilson [15.2%, 58.3%]).
+  - `TRANSFER`: 10 / 20 (**50.0%**, Wilson [29.9%, 70.1%]).
+- **Noise Analysis:**
+  - Between-task variance: `0.2470`
+  - Mean within-task variance across repeats: `0.0086`
+  - Intraclass Correlation (ICC): **`0.966`** (96.6% between tasks, 3.4% run-to-run noise).
+  - Recommended runs per cell/task for 15-pt diff at 80% power: **$n \ge 6$**.
+- **C2 Pre-Registered Relabeling Audit:**
+  - Tasks exceeding 70% baseline solvability: **Task 2014** (100%), **Task 2018** (100%), **Task 2022** (100%).
+  - Action: Tasks 2014, 2018, 2022 automatically reclassified from `TAUGHT` to `STATED`.
+  - Resulting Held-Out `TAUGHT` count: **3 tasks** (2003, 2010, 2015) $\ge 3$ threshold -> **CONFIRMATORY_VALID**.
+- **Execution Integrity:** 0 truncations, 0 API errors, 0 retries, 0 protected file modifications.
+- **Resource Usage:** 284,629 billed tokens; total cost = **$0.0725 USD**.
+- **Report & Raw Logs:** [`PILOT_CALIBRATION_REPORT.md`](file:///c:/Users/richa/ai-engineering/repo_push/PILOT_CALIBRATION_REPORT.md) and [`results/pilot_calibration/rows.jsonl`](file:///c:/Users/richa/ai-engineering/repo_push/results/pilot_calibration/rows.jsonl).
+
+---
+
+## 5. Historical Reference: Pilot Calibration on suite_e4 (Difficulty Calibration Only)
 
 - $C0000$: 34/60 (56.7%, Wilson [44.1%, 68.4%]). Baseline ceiling broken ($56.7\% \in [20\%, 60\%]$).
 - $C1111$: 37/60 (61.7%, Wilson [49.0%, 72.9%]).

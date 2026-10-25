@@ -180,3 +180,18 @@ This is an append-only, timestamped log recording all operational decisions, har
   - Condition B0 executes as a single call: $s=0, p=0, u=0, r=0, k=0$ (no handbook, no placebo, no examples, no tools, no review, no retry).
 - **Execution Script:** Created `runner/run_pilot_calibration.py` orchestrating 140 attempts across 6 worker threads with thread-safe file locking.
 - **Cost Confirmation:** Projected token cost for 140 attempts: ~105k input tokens ($0.008) + ~140k output/thinking tokens ($0.042) = ~$0.05 total (well within budget).
+
+### [2026-10-25T02:15:00Z] Pilot Calibration: 140 Attempts Completed & Analyzed
+- **Execution Summary:** 140 / 140 attempts executed natively on `gemini-2.5-flash` (`temperature=0.0`, `thinking_budget=2048`, `max_output_tokens=16384`) under condition B0 (ticket + failing excerpt + traceback file).
+- **Core Results:**
+  - Overall strict-pass rate: 62 / 140 (44.3%, Wilson [36.3%, 52.6%]).
+  - Tune split pass rate: 37 / 75 (49.3%, Wilson [38.3%, 60.4%]).
+  - Held-out split pass rate: 25 / 65 (38.5%, Wilson [27.6%, 50.6%]).
+  - Intraclass Correlation (ICC): 0.966 (96.6% task variance, 3.4% within-task repeat variance).
+- **C2 Relabeling Execution:**
+  - Tasks 2014, 2018, and 2022 showed 100% baseline pass rates, proving solvability from code/docstrings alone.
+  - Automatically reclassified from `TAUGHT` to `STATED`.
+  - Exactly 3 `TAUGHT` tasks remain in the Held-Out set (Tasks 2003, 2010, 2015), validating the statistical power for the primary confirmatory hypothesis test (`CONFIRMATORY_VALID`).
+- **Integrity:** 0 truncations, 0 API errors, 0 retries, 0 protected file modifications. Total billed tokens: 284,629 ($0.0725 USD).
+- **Deliverables:** Generated `PILOT_CALIBRATION_REPORT.md`, `results/pilot_calibration/rows.json`, `results/pilot_calibration/rows.jsonl`.
+- **Stop Rule:** Execution strictly halted. Awaiting Round 13 Pre-Registration Review.

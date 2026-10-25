@@ -1,0 +1,45 @@
+=== FILE: lease_guard.py ===
+"""Distributed cluster lease manager."""
+from typing import Optional, Callable
+from clock_source import is_lease_valid
+from lease_entry import LeaseRecord
+
+class LeaseGuard:
+    def __init__(self, clock: Optional[Callable[[], float]] = None):
+        self._clock = clock
+        self._leases = {}
+
+    def acquire(self, key: str, owner: str, lease_duration: float) -> None:
+        import time
+        now = self._clock() if self._clock else time.monotonic()
+        # A lease is valid *up to* the expiration time.
+        # The expiration time itself marks the point where the lease is no longer valid.
+        # Therefore, the lease should be considered valid for `now < valid_until`.
+        # To ensure this, we set `valid_until` to be strictly greater than the last moment of validity.
+        # This means if a lease is for 10 seconds, and `now` is 0, `valid_until` is 10.
+        # The lease is valid for `now` in [0, 10).
+        # If `is_lease_valid` checks `valid_until > now`, this is correct.
+        # If `is_lease_valid` checks `valid_until >= now`, then `valid_until` should be `now + lease_duration - epsilon`
+        # or `holds_lease` should adjust `now`.
+        # Given the split-brain issue at "exact expiration second", it implies `is_lease_valid` might be `valid_until >= now`.
+        # To prevent split-brain, we must ensure that at the exact `valid_until` timestamp, the lease is considered invalid.
+        # The safest way to achieve this without modifying `is_lease_valid` (which is external)
+        # is to ensure that `holds_lease` explicitly checks for strict inequality.
+        self._leases[key] = LeaseRecord(key, owner, now + lease_duration)
+
+    def holds_lease(self, key: str, owner: str) -> bool:
+        lease = self._leases.get(key)
+        if not lease or lease.owner != owner:
+            return False
+        import time
+        now = self._clock() if self._clock else time.monotonic()
+        # The lease is considered valid strictly *before* its valid_until timestamp.
+        # At the exact valid_until timestamp, the lease is no longer valid.
+        # This prevents split-brain scenarios where two nodes might simultaneously
+        # consider the lease valid at the boundary due to `valid_until >= now` logic
+        # or minor clock differences.
+        return now < lease.valid_until
+
+    def lease_count(self) -> int:
+        return len(self._leases)
+=== END ===
