@@ -395,3 +395,33 @@ This is an append-only, timestamped log recording all operational decisions, har
   - Re-ran the complete preflight test suite (`runner/run_preflight_logged.py`) covering all 106 unpatched fails, 106 gold reference passes, 212 mutant fails, 106 comment checks, token balance, tag/split stratification, reachability, consistency matrix invariants, J2 rule sufficiency, and all negative controls.
   - Generated and committed `tests/preflight_suite_e5_541.log` in clean UTF-8.
 - **Strict Stop Rule Enforced:** Exactly zero factor scaffolding calls executed.
+
+### [2026-10-25T17:35:00Z] Round 22 Review Implementation: Executable Rule Sufficiency Triage, Active Derivation Recomputation, Mutation Negative Controls, and Broadened Scope
+- **Context & Guidance:** Reviewer Round 21 verdict: "Conditional approval. O1, O2 and O4 are accepted. O3 is not accepted yet. The freeze (FREEZE.json) is approved only after Round 22 below, which is small and must not touch the handbook, placebo or suite unless it finds a real defect."
+- **P1 (Executable Triage & Derivation Verification):**
+  - Replaced metadata-based classification in `runner/generate_rule_sufficiency_triage.py` with an executable verification engine in `runner/verify_rule_sufficiency.py`:
+    - **AST Fixture Verification:** Test fixture inputs are verified by parsing the AST of each hidden test function. Any literal appearing in an assignment (`Assign`) or call argument (`Call.args` / `Call.keywords`) outside assertion verification helpers is verified as an input fixture with its call site recorded.
+    - **Mathematical & Formatting Recomputation:** For each non-verbatim literal governed by handbook conventions, the exact value is deterministically recomputed from test inputs:
+      - Rule H14: nearest-rank percentile $k = \lceil (P / 100) \times N \rceil$ computed on input sample series and asserted equal to the test literal.
+      - Rule H02: fixed-point half-up rounding (`ROUND_HALF_UP`) recomputed on monetary inputs (proration shares, FX conversion, tax/fee rounding) and asserted equal.
+      - Rule H09: UTC millisecond ISO-8601 formatting (`YYYY-MM-DDTHH:MM:SS.sssZ`) recomputed on input datetime or epoch seconds/milliseconds and asserted equal.
+      - Rule H10: TSV formatting and backslash escaping (`\t`, `\"`, `\n`, `\N`) recomputed on input records and asserted equal.
+      - Rule H08: payload key normalization (`snake_case`) recomputed from camelCase input dictionary keys, and `_src` verified from module filename domain prefix.
+      - Rule H13: idempotency regex pattern verified against the handbook format specification.
+    - **Local Overrides:** Distractor tasks verified by grepping module docstrings and recomputing local formulas (e.g. continuous linear interpolation for Task 2072/2076).
+    - **Dynamic Metrics:** `benchmarks/RULE_SUFFICIENCY_TRIAGE.md` now generates all summary counts, category tallies, and defect numbers dynamically from execution results. Zero metrics are hardcoded.
+  - **Triage Negative Control Tests:**
+    - `test_triage_percentile_mutation_negative_control`: Mutated Task 2070's nearest-rank percentile assertion from `40.0` to `40.5` in a suite copy; confirmed the triage engine fails recomputation and immediately flags Task 2070 as `UNRESOLVED`.
+    - `test_triage_rounding_mutation_negative_control`: Mutated Task 2102's half-up fee assertion from `'0.13'` to `'0.14'` in a suite copy; confirmed the triage engine fails recomputation and immediately flags Task 2102 as `UNRESOLVED`.
+- **P2 (Broadened Scope & Elimination of Dead Flags):**
+  - Expanded `runner/verify_rule_sufficiency.py` to evaluate all asserted constants across all 87 evaluated tasks (`TAUGHT`, `TRANSFER`, `DISTRACTOR`).
+  - Actively wired all handbook flags (`has_h08_src_rule`, `has_h13_format_rule`, `has_h04_codes`, `has_h15_state_rule`, `has_h09_iso_rule`, `has_h10_tsv_rule`, `has_h14_percentile_rule`, `has_h02_rounding_rule`) directly into the derivation checkers. If any flag is missing from the handbook, the corresponding derivations fail and flag the task as unresolved. Zero dead flags remain.
+- **P3 (Accurate Wording & Progress Framing):**
+  - Updated output text to state exact counts: "All 87 evaluated tasks (TAUGHT, TRANSFER, DISTRACTOR) satisfy Rule Sufficiency (J2)!"
+  - Clarified that the quoted ~45% project completion is an effort-weighted engineering and calibration metric across the entire study lifecycle, while Phase 3 (Screening Experiment) and Phase 4 (Confirmatory Replication) remain strictly at 0% execution pending freeze sign-off.
+- **Handbook & Suite Freeze Preserved:**
+  - `briefs/HANDBOOK.md`, `briefs/PLACEBO.md`, and all 106 tasks in `benchmarks/suite_e5.py` remain **100% UNCHANGED**.
+- **Preflight Expansion (543 Tests):**
+  - Preflight suite expanded from 541 to 543 tests with the addition of the two triage mutation negative control tests.
+  - Full preflight run executed and logged to `tests/preflight_suite_e5_543.log` in clean UTF-8 text.
+- **Strict Stop Rule Enforced:** Exactly zero factor scaffolding calls executed.

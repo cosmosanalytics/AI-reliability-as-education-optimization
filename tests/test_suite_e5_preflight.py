@@ -360,3 +360,52 @@ def test_negative_control_h04_missing():
         assert tid in unresolved, f"Task {tid} must fail sufficiency check when ERR_RESOURCE_LOCKED is missing"
 
 
+def test_triage_percentile_mutation_negative_control():
+    """Negative control for executable triage: Mutating an asserted nearest-rank
+    percentile constant (e.g. 40.0 -> 40.5 in Task 2070) MUST cause the triage engine
+    to fail recomputation and flag Task 2070 as UNRESOLVED.
+    """
+    import copy
+    import verify_rule_sufficiency as v
+    mutated_suite = copy.deepcopy(suite_e5.T)
+    found = False
+    for t in mutated_suite:
+        if t["id"] == 2070:
+            for vr in t["key"]["variants"]:
+                for path in vr["overlay"]:
+                    if "assert val == 40.0" in vr["overlay"][path]:
+                        vr["overlay"][path] = vr["overlay"][path].replace(
+                            "assert val == 40.0", "assert val == 40.5"
+                        )
+                        found = True
+    assert found, "Test mutation target 'assert val == 40.0' not found in Task 2070"
+    unresolved = v.check_rule_sufficiency(suite=mutated_suite)
+    assert 2070 in unresolved, "Executable triage failed to catch mutated percentile in Task 2070!"
+    assert any(item["val"] == 40.5 for item in unresolved[2070]), "Mutated literal 40.5 not recorded in unresolved"
+
+
+def test_triage_rounding_mutation_negative_control():
+    """Negative control for executable triage: Mutating an asserted half-up rounding
+    constant (e.g. '0.13' -> '0.14' in Task 2102) MUST cause the triage engine
+    to fail recomputation and flag Task 2102 as UNRESOLVED.
+    """
+    import copy
+    import verify_rule_sufficiency as v
+    mutated_suite = copy.deepcopy(suite_e5.T)
+    found = False
+    for t in mutated_suite:
+        if t["id"] == 2102:
+            for vr in t["key"]["variants"]:
+                for path in vr["overlay"]:
+                    if 'assert res1 == "0.13"' in vr["overlay"][path]:
+                        vr["overlay"][path] = vr["overlay"][path].replace(
+                            'assert res1 == "0.13"', 'assert res1 == "0.14"'
+                        )
+                        found = True
+    assert found, "Test mutation target 'assert res1 == \"0.13\"' not found in Task 2102"
+    unresolved = v.check_rule_sufficiency(suite=mutated_suite)
+    assert 2102 in unresolved, "Executable triage failed to catch mutated rounded fee in Task 2102!"
+    assert any(item["val"] == "0.14" for item in unresolved[2102]), "Mutated literal '0.14' not recorded in unresolved"
+
+
+

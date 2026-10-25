@@ -1,7 +1,7 @@
 # Project Status & Execution Tracker (`STATUS.md`)
 
-**Current Phase:** Benchmark Validation & Pilot Calibration (Round 18 Suite Expansion to 106 Tasks & Baseline Calibration Complete)  
-**Phase State:** **Round 21 Complete: Handbook-Coupled Rule Sufficiency Implemented (Derivations Strictly Tied to HANDBOOK.md Text), 4 Negative Control Preflight Tests Added (H08, H13, H04, H15 Verified to Fail When Rules Removed), Cross-Platform Portable Paths Implemented Across All Runner & Test Scripts, Exhaustive Literal Triage Audit Completed (`benchmarks/RULE_SUFFICIENCY_TRIAGE.md`: 100% of Literals Accounted, 0 Defects), Engineering & Placebo Handbooks Strictly Frozen, Full 541-Test Preflight Suite Executed, FREEZE_DRAFT.json Updated. Factor Runs Strictly Locked Pending Approval.**  
+**Current Phase:** Benchmark Validation & Pilot Calibration (Round 22 Executable Literal Triage & Preflight Validation Complete)  
+**Phase State:** **Round 22 Complete: Executable Rule Sufficiency Triage Implemented (AST Call Site Verification + Active Mathematical/Formatting Recomputation Across All 87 Evaluated Tasks), Triage Mutation Negative Controls Added (Task 2070 & Task 2102 Mutated Assertions Flagged as Unresolved), Dead Flags Eliminated, Scope Broadened, FREEZE_DRAFT.json Updated with Unchanged Handbook and Suite Hashes, 543/543 Preflight Tests Passing. Factor Runs Strictly Locked Pending Approval.**  
 **Frozen SHA:** `[Current main commit]`  
 **Model Specifications:**  
 - **Model ID:** `gemini-2.5-flash`  
