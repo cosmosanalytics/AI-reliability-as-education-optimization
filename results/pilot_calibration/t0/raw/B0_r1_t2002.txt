@@ -1,0 +1,62 @@
+=== FILE: discount.py ===
+"""Invoice discount allocation module."""
+from typing import List
+from models import AllocationResult
+from utils import validate_line_totals
+
+def prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:
+    """Prorate discount across lines proportionally to their value,
+    ensuring the total allocated discount matches total_discount_cents.
+    line_totals: list of integer cents.
+    Returns list of discount cents per line.
+    """
+    if not validate_line_totals(line_totals):
+        raise ValueError("Line totals must be non-negative integers")
+
+    total_line_value = sum(line_totals)
+    num_lines = len(line_totals)
+
+    if total_line_value == 0:
+        # If total line value is zero, no proportional allocation is possible.
+        # Return zeros for all lines, as per existing behavior.
+        # Any remaining discount will be unallocated, which is handled by AllocationResult.
+        return [0] * num_lines
+
+    # Calculate base allocations and track fractional parts
+    allocations = [0] * num_lines
+    remainder_cents = total_discount_cents
+    fractional_parts = [] # Stores (fractional_value, original_index)
+
+    for i, cents in enumerate(line_totals):
+        # Calculate the exact proportional share using float division
+        exact_share = (cents * total_discount_cents) / total_line_value
+        
+        # Round down to get the integer part
+        integer_share = int(exact_share)
+        allocations[i] = integer_share
+        remainder_cents -= integer_share
+
+        # Store the fractional part for later distribution of remaining pennies
+        fractional_parts.append((exact_share - integer_share, i))
+
+    # Distribute the remaining pennies (if any) to lines with the largest fractional parts
+    # Sort by fractional part in descending order. If fractional parts are equal,
+    # the original order (index) will act as a tie-breaker due to stable sort behavior,
+    # or we can explicitly add index to the sort key for consistent tie-breaking.
+    fractional_parts.sort(key=lambda x: x[0], reverse=True)
+
+    for _ in range(remainder_cents):
+        if not fractional_parts: # Should not happen if remainder_cents <= num_lines
+            break
+        # Take the line with the largest fractional part and add 1 cent
+        _, original_index = fractional_parts.pop(0) # Pop the largest
+        allocations[original_index] += 1
+
+    return allocations
+
+def allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:
+    """Wrapper returning structured allocation result."""
+    allocs = prorate_discount(line_totals, total_discount_cents)
+    tot = sum(allocs)
+    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))
+=== END ===

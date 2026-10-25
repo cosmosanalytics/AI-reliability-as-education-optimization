@@ -1,0 +1,74 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Cloud storage incident CLD-512: Private asset directory /assets-private was exposed to users granted standard /assets access.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_asset_cases.py::test_resource_isolation - AssertionError: assert True is False
+
+REPOSITORY FILES:
+=== FILE: models.py ===
+"""Storage bucket asset records."""
+from dataclasses import dataclass
+from typing import Dict, Any, Optional
+
+@dataclass
+class StorageAsset:
+    asset_id: str
+    path: str
+    bucket: str = "default-assets"
+    content_type: str = "application/octet-stream"
+
+    def extension(self) -> str:
+        if "." in self.path:
+            return self.path.rsplit(".", 1)[1]
+        return ""
+
+    def is_image(self) -> bool:
+        return self.extension().lower() in ("png", "jpg", "jpeg", "gif", "webp")
+
+    def to_descriptor(self) -> Dict[str, Any]:
+        return {
+            "id": self.asset_id,
+            "path": self.path,
+            "bucket": self.bucket,
+            "ext": self.extension(),
+        }
+=== END ===
+=== FILE: path_normalizer.py ===
+"""Storage path normalization engine."""
+def validate_prefix_match(scope_prefix: str, asset_path: str) -> bool:
+    return asset_path.startswith(scope_prefix)
+
+def get_scope_depth(path: str) -> int:
+    return len([seg for seg in path.split("/") if seg])
+
+def normalize_bucket_path(path: str) -> str:
+    return "/" + path.strip("/")
+=== END ===
+=== FILE: asset_service.py ===
+"""Asset bucket retrieval service."""
+from path_normalizer import validate_prefix_match, get_scope_depth
+from models import StorageAsset
+
+def can_access_asset(asset: StorageAsset, required_scope: str) -> bool:
+    """Check if asset path matches the required storage bucket scope.
+    Path matching contract: matches full directory segment boundaries and normalizes trailing slashes.
+    """
+    return validate_prefix_match(required_scope, asset.path)
+
+def filter_accessible_assets(assets: list, required_scope: str) -> list:
+    return [a for a in assets if can_access_asset(a, required_scope)]
+
+def get_asset_hierarchy_level(asset: StorageAsset) -> int:
+    return get_scope_depth(asset.path)
+=== END ===
+=== FILE: tests/test_asset.py ===
+from models import StorageAsset
+from asset_service import can_access_asset
+
+def test_nominal_asset():
+    a = StorageAsset("A1", "/assets/images/logo.png")
+    assert can_access_asset(a, "/assets") is True
+    assert can_access_asset(a, "/data") is False
+=== END ===

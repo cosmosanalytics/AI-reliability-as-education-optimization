@@ -1,0 +1,19 @@
+=== FILE: sanitizer.py ===
+"""CSV cell sanitizer."""
+def sanitize_cell(text: str) -> str:
+    # Standard CSV escaping rules:
+    # 1. If a field contains a comma, newline, or double quote, the field must be enclosed in double quotes.
+    # 2. If a field enclosed in double quotes contains a double quote, the double quote must be escaped by preceding it with another double quote (i.e., "").
+
+    if requires_sanitization(text):
+        # Escape internal double quotes by doubling them
+        escaped_text = text.replace('"', '""')
+        # Enclose the entire field in double quotes
+        return f'"{escaped_text}"'
+    else:
+        # No special characters that require quoting, return as is
+        return text
+
+def requires_sanitization(text: str) -> bool:
+    return any(c in text for c in (',', '\n', '"'))
+=== END ===

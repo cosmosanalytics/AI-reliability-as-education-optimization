@@ -1,0 +1,10 @@
+=== FILE: clock_source.py ===
+"""Lease validity checker."""
+def is_lease_valid(valid_until: float, current_time: float) -> bool:
+    # A lease is valid strictly before its valid_until timestamp.
+    # At the valid_until timestamp or after, the lease is considered expired.
+    return current_time < valid_until
+
+def remaining_lease_time(valid_until: float, current_time: float) -> float:
+    return max(0.0, valid_until - current_time)
+=== END ===

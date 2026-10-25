@@ -1,0 +1,38 @@
+=== FILE: defaults.py ===
+"""Default step parameters."""
+from typing import Dict, Any
+import copy
+
+DEFAULT_PIPELINE_OPTS = {
+    "engine": "v2",
+    "retries": {"max": 3, "backoff": 1.5},
+    "monitoring": {"enabled": True, "sample_rate": 0.1},
+    "concurrency": {"max_workers": 4, "queue_depth": 100}
+}
+
+def get_base_options() -> Dict[str, Any]:
+    # Return a deep copy to ensure immutability of the global default options
+    return copy.deepcopy(DEFAULT_PIPELINE_OPTS)
+
+def is_feature_enabled(feature_name: str) -> bool:
+    return DEFAULT_PIPELINE_OPTS.get(feature_name, {}).get("enabled", False)
+=== END ===
+=== FILE: pipeline.py ===
+"""Pipeline stage configurator."""
+from typing import Dict, Any, List
+from step_builder import compile_step_config, format_step_manifest
+from defaults import get_base_options # Import the function to get a deep copy
+
+def build_stage_spec(stage_name: str, step_overrides: Dict[str, Any]) -> Dict[str, Any]:
+    """Compile pipeline stage specification.
+    Inputs must remain immutable and nested options must be defensively copied.
+    """
+    # Use get_base_options() to retrieve a deep copy of the default options
+    # ensuring that modifications do not affect the global DEFAULT_PIPELINE_OPTS
+    spec = compile_step_config(stage_name, get_base_options(), step_overrides)
+    _ = format_step_manifest(spec)
+    return spec
+
+def build_multi_stage_pipeline(stage_configs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [build_stage_spec(f"stage-{i}", cfg) for i, cfg in enumerate(stage_configs)]
+=== END ===

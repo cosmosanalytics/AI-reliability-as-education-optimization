@@ -1,0 +1,32 @@
+=== FILE: cache.py ===
+"""In-memory security token cache."""
+import time
+from typing import Dict, Optional, Callable
+from token_record import CachedToken
+from cache_utils import format_cache_key
+
+class TokenCache:
+    def __init__(self, clock: Optional[Callable[[], float]] = None):
+        """In-memory token cache with injectable clock."""
+        self._clock = clock or time.time
+        self._store: Dict[str, CachedToken] = {}
+
+    def set(self, key: str, token_str: str, ttl_seconds: float) -> None:
+        now = self._clock()
+        norm_key = format_cache_key("tok", key)
+        self._store[norm_key] = CachedToken(token_str=token_str, expires_at=now + ttl_seconds)
+
+    def get(self, key: str) -> Optional[str]:
+        norm_key = format_cache_key("tok", key)
+        entry = self._store.get(norm_key)
+        if not entry:
+            return None
+        now = self._clock()
+        if now >= entry.expires_at:
+            del self._store[norm_key]
+            return None
+        return entry.token_str
+
+    def size(self) -> int:
+        return len(self._store)
+=== END ===

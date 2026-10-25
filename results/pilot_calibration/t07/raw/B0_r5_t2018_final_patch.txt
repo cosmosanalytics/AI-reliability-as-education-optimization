@@ -1,0 +1,31 @@
+=== FILE: rbac.py ===
+"""Document access RBAC filter."""
+from path_resolver import clean_path, split_path_segments
+from audit_logger import format_access_attempt
+
+def check_document_access(allowed_folder: str, requested_doc_path: str) -> bool:
+    """Verify if document path is permitted within the designated folder scope."""
+    cleaned_allowed_folder = clean_path(allowed_folder)
+    cleaned_requested_doc_path = clean_path(requested_doc_path)
+
+    # Split paths into segments for robust comparison
+    allowed_segments = split_path_segments(cleaned_allowed_folder)
+    requested_segments = split_path_segments(cleaned_requested_doc_path)
+
+    # An access is allowed if:
+    # 1. The requested path has at least as many segments as the allowed folder.
+    # 2. The segments of the allowed folder exactly match the leading segments of the requested path.
+    allowed = (
+        len(requested_segments) >= len(allowed_segments) and
+        requested_segments[:len(allowed_segments)] == allowed_segments
+    )
+
+    _ = format_access_attempt(allowed_folder, requested_doc_path, allowed)
+    return allowed
+
+def filter_accessible_docs(allowed_folder: str, doc_paths: list) -> list:
+    return [p for p in doc_paths if check_document_access(allowed_folder, p)]
+
+def can_access_all_docs(allowed_folder: str, doc_paths: list) -> bool:
+    return all(check_document_access(allowed_folder, p) for p in doc_paths)
+=== END ===

@@ -1,0 +1,72 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Compliance audit AUD-601: Expired audit log records on the exact daily archive cutoff timestamp were retained past required purge window.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_retention_cases.py::test_retention_window_cutoff - AssertionError: assert 2 == 1
+
+REPOSITORY FILES:
+=== FILE: log_store.py ===
+"""Log storage models."""
+from dataclasses import dataclass
+from typing import Dict, Any, Optional
+
+@dataclass
+class LogEntry:
+    entry_id: str
+    timestamp: int
+    source: str = "app"
+    severity: str = "INFO"
+
+    def is_system(self) -> bool:
+        return self.source == "system"
+
+    def is_error(self) -> bool:
+        return self.severity in ("ERROR", "FATAL")
+
+    def to_record(self) -> Dict[str, Any]:
+        return {"id": self.entry_id, "ts": self.timestamp, "sev": self.severity}
+=== END ===
+=== FILE: window_evaluator.py ===
+"""Retention window evaluator."""
+def is_within_retention(ts: int, start_ts: int, end_ts: int) -> bool:
+    return start_ts <= ts <= end_ts
+
+def get_window_span(start_ts: int, end_ts: int) -> int:
+    return max(0, end_ts - start_ts)
+
+def is_valid_cutoff(start_ts: int, end_ts: int) -> bool:
+    return start_ts <= end_ts
+=== END ===
+=== FILE: retention.py ===
+"""Audit log retention manager."""
+from typing import List
+from window_evaluator import is_within_retention
+from log_store import LogEntry
+
+def filter_retained_logs(logs: List[LogEntry], cutoff_start: int, cutoff_end: int) -> List[LogEntry]:
+    """Filter logs that fall into the active retention period."""
+    return [l for l in logs if is_within_retention(l.timestamp, cutoff_start, cutoff_end)]
+
+def count_purged_logs(logs: List[LogEntry], cutoff_start: int, cutoff_end: int) -> int:
+    retained = filter_retained_logs(logs, cutoff_start, cutoff_end)
+    return len(logs) - len(retained)
+
+def group_retained_by_source(logs: List[LogEntry], cutoff_start: int, cutoff_end: int) -> dict:
+    retained = filter_retained_logs(logs, cutoff_start, cutoff_end)
+    res = {}
+    for l in retained:
+        res.setdefault(l.source, []).append(l)
+    return res
+=== END ===
+=== FILE: tests/test_retention.py ===
+from log_store import LogEntry
+from retention import filter_retained_logs
+
+def test_nominal_filtering():
+    logs = [LogEntry("l1", 100), LogEntry("l2", 500)]
+    retained = filter_retained_logs(logs, 50, 200)
+    assert len(retained) == 1
+    assert retained[0].entry_id == "l1"
+=== END ===

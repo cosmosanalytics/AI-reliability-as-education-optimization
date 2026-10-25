@@ -1,0 +1,44 @@
+=== FILE: guard.py ===
+"""API gateway authorization guard."""
+from policy import RoutePolicy
+from url_normalizer import remove_query_string
+
+def _normalize_path(path: str) -> str:
+    """Normalizes a path by removing trailing slashes, unless it's the root path."""
+    if path == "/":
+        return "/"
+    return path.rstrip('/')
+
+def is_route_permitted(policy: RoutePolicy, request_path: str) -> bool:
+    """Check if request_path is authorized under policy.allowed_prefix.
+    Path matching contract:
+    - Normalizes trailing slashes before matching.
+    - Matches only full path segments (e.g. '/api' covers '/api' and '/api/v1', but NOT '/api-v2').
+    """
+    normalized_request_path = _normalize_path(remove_query_string(request_path))
+    normalized_policy_prefix = _normalize_path(policy.allowed_prefix)
+
+    # Handle wildcard policy: "/" matches any path
+    if normalized_policy_prefix == "/":
+        return True
+
+    # Exact match: e.g., policy "/api", request "/api"
+    if normalized_request_path == normalized_policy_prefix:
+        return True
+
+    # Segment match: e.g., policy "/api", request "/api/v1"
+    # This means the request path must start with the policy prefix followed by a '/'
+    if normalized_request_path.startswith(normalized_policy_prefix + '/'):
+        return True
+
+    return False
+
+def evaluate_request(policies: list, role: str, path: str) -> bool:
+    for p in policies:
+        if p.matches_role(role) and is_route_permitted(p, path):
+            return True
+    return False
+
+def count_permitted_routes(policy: RoutePolicy, paths: list) -> int:
+    return sum(1 for p in paths if is_route_permitted(policy, p))
+=== END ===

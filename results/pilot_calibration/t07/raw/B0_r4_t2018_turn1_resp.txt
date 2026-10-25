@@ -1,0 +1,42 @@
+=== FILE: rbac.py ===
+"""Document access RBAC filter."""
+from path_resolver import clean_path, split_path_segments
+from audit_logger import format_access_attempt
+
+def check_document_access(allowed_folder: str, requested_doc_path: str) -> bool:
+    """Verify if document path is permitted within the designated folder scope."""
+    cleaned_allowed_folder = clean_path(allowed_folder)
+    cleaned_requested_doc_path = clean_path(requested_doc_path)
+
+    # A path is accessible if it's exactly the allowed folder, or a direct child path.
+    # For example, if allowed_folder is "/docs", then "/docs" and "/docs/report.pdf" are allowed,
+    # but "/docsextra/report.pdf" or "/docs-archive/old.pdf" are not.
+    if cleaned_requested_doc_path == cleaned_allowed_folder:
+        allowed = True
+    elif cleaned_requested_doc_path.startswith(cleaned_allowed_folder):
+        # Ensure that the character immediately after the allowed_folder prefix is a '/',
+        # preventing "prefix" matches like "/public" matching "/public-internal".
+        # This check is only relevant if the requested path is longer than the allowed folder.
+        prefix_end_index = len(cleaned_allowed_folder)
+        if prefix_end_index < len(cleaned_requested_doc_path):
+            if cleaned_requested_doc_path[prefix_end_index] == '/':
+                allowed = True
+            else:
+                allowed = False
+        else:
+            # This case should ideally be covered by the first 'if' (equality)
+            # or means cleaned_requested_doc_path is a prefix of cleaned_allowed_folder,
+            # which is not what we're checking for.
+            allowed = False
+    else:
+        allowed = False
+
+    _ = format_access_attempt(allowed_folder, requested_doc_path, allowed)
+    return allowed
+
+def filter_accessible_docs(allowed_folder: str, doc_paths: list) -> list:
+    return [p for p in doc_paths if check_document_access(allowed_folder, p)]
+
+def can_access_all_docs(allowed_folder: str, doc_paths: list) -> bool:
+    return all(check_document_access(allowed_folder, p) for p in doc_paths)
+=== END ===

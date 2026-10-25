@@ -1,8 +1,8 @@
 # Project Status & Execution Tracker (`STATUS.md`)
 
-**Current Phase:** Pilot Calibration Round 2 (Redefined B0 per Round 13 E1–E5 across T=0.0 and T=0.7)  
-**Phase State:** **Execution in Progress (168 Total Attempts: 28 at T=0.0, 140 at T=0.7)**  
-**Frozen SHA:** *Commit in Progress*  
+**Current Phase:** Pilot Calibration Round 2 (Complete; Strict Stop Rule Enforced)  
+**Phase State:** **Complete (168 Total Live Attempts Analyzed; All Factor Runs Locked)**  
+**Frozen SHA:** *Submitting for Round 14 Review*  
 **Model Specifications:**  
 - **Model ID:** `gemini-2.5-flash` (for upcoming pilot calibration upon benchmark validation approval)  
 - **Sampling Settings:** `temperature=0.0`, `max_output_tokens=16384`, `thinking_budget=2048`  
@@ -28,7 +28,7 @@
 | **Phase 0** | Infrastructure & Protocol Setup | **Complete and Verified** | `c81d851` | Evaluation runner (`agent_runner.py`), grader (`grader.py`), 16 cell briefs (`briefs/DIFF.md`), exact token accounting, Resolution-V parity, interactive tool loop, standardized task envelope, audit trail, 10 hermetic unit tests. Live dry run verified on `gemini-2.5-flash`. |
 | **Pilot Calibration (suite_e4)** | Difficulty Calibration Only | **Complete (Difficulty Calibrated)** | `915711b` | 12 multi-module tasks (`suite_e4`), 120 live attempts ($C0000=56.7\%$, $C1111=61.7\%$, $p=0.8750$). Established as difficulty calibration only (ceiling broken); per-task effects did not replicate across runs. |
 | **Benchmark Validation (suite_e5)** | Modular Task Suite $e5$, Invariants & Preflight | **Complete (146/146 Verified)** | `e669a2e` | Strictly offline. 28 modular instances across 7 families (`benchmarks/suite_e5.py`), `HANDBOOK.md` vs `PLACEBO.md` token balance (761 vs 754, 0.920% diff $\le 3\%$), 2 worked examples (`briefs/P3.md`), per-assertion audit table (`benchmarks/FAIRNESS_e5.md`), class-stratified split (`benchmarks/splits_e5.json`: 15 Tune, 13 Held-Out), 146/146 passing preflight tests (`tests/test_suite_e5_preflight.py`). S-1..S-6, B1..B4, and C1..C2 resolved. |
-| **Pilot Calibration (suite_e5)** | Baseline B0 Calibration Run | **In Progress** | *Current Commit* | Live re-run of B0 calibration on `suite_e5` under redefined B0 (full repo in context, E1) across 28 tasks: 1 run at T=0.0 (28 att) + 5 runs at T=0.7 (140 att) = 168 total attempts. Power, ICC, C2 relabeling, and difficulty audit in progress. |
+| **Pilot Calibration (suite_e5)** | Baseline B0 Calibration Run | **Complete (Audited & Reported)** | *Current Commit* | Live re-run of B0 calibration on `suite_e5` under redefined B0 (full repo in context, E1) across 28 tasks: 1 run at T=0.0 (28 att, 75.0% pass) + 5 runs at T=0.7 (140 att, 69.3% pass, ICC=0.818). 8 TAUGHT tasks reclassified to STATED per C2 rule (>70% at T=0.7). Exactly 1 held-out TAUGHT remains (2003). 6 tasks in calibrated band (15-85%); E3 contingency rule triggered. All factor runs strictly locked. |
 | **Pre-Registration** | Formal Pre-Registration Document | **LOCKED (Awaiting Round 13 Review)** | — | Primary hypothesis ($\Delta_{\text{TAUGHT}} > 0$), instance-clustered permutation tests, $\theta^*$ selection rule, C2 baseline-solvability relabel rule, and stopping rules to be committed before screening experiment. |
 | **Screening Experiment** | Tune-Set Factorial ($2^{5-1}$) | **LOCKED (Pending Pre-Registration)** | — | 16 cells $\times \ge 5$ runs on the 15 tune tasks (`benchmarks/splits_e5.json`). |
 | **Confirmatory Study** | Held-Out Confirmation & Multi-Model Replication | **LOCKED** | — | Confirmatory evaluation on 13 held-out tasks (4 TAUGHT, 3 STATED, 2 DISTRACTOR, 4 TRANSFER) and second-model replication as budget allows. |

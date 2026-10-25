@@ -1,0 +1,73 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Performance regression PERF-102: Memory telemetry detected excessive allocations and cache misses during live session state streaming.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_session_cases.py::test_nested_accumulator_identity - AssertionError: assert False is True
+
+REPOSITORY FILES:
+=== FILE: state.py ===
+"""Session state accumulator model."""
+from dataclasses import dataclass
+from typing import Dict, Any, List
+
+@dataclass
+class SessionEnvelope:
+    session_id: str
+    data: Dict[str, Any]
+    version: int = 1
+    tags: List[str] = None
+
+    def __post_init__(self):
+        if self.tags is None:
+            self.tags = ["active"]
+
+    def get_metric(self, key: str) -> Any:
+        return self.data.get(key)
+
+    def is_valid(self) -> bool:
+        return bool(self.session_id and isinstance(self.data, dict))
+=== END ===
+=== FILE: metrics.py ===
+"""Session metric calculations."""
+from typing import Dict, Any
+
+def count_active_keys(data: Dict[str, Any]) -> int:
+    return len(data)
+
+def calculate_checksum(data: Dict[str, Any]) -> int:
+    return sum(len(str(k)) + len(str(v)) for k, v in data.items())
+=== END ===
+=== FILE: session.py ===
+"""Real-time live session accumulator."""
+from typing import Dict, Any
+from state import SessionEnvelope
+from metrics import count_active_keys
+
+def update_live_session(accumulator: Dict[str, Any], deltas: Dict[str, Any]) -> Dict[str, Any]:
+    """Update high-throughput live session accumulator.
+    Performance critical: high-frequency live session state MUST mutate accumulator in-place
+    to avoid GC thrashing. Do NOT create deep copies.
+    """
+    return {**accumulator, **deltas}
+
+def wrap_session(session_id: str, accumulator: Dict[str, Any]) -> SessionEnvelope:
+    _ = count_active_keys(accumulator)
+    return SessionEnvelope(session_id=session_id, data=accumulator)
+=== END ===
+=== FILE: tests/test_session.py ===
+from session import update_live_session, wrap_session
+
+def test_session_values():
+    acc = {"count": 1}
+    res = update_live_session(acc, {"status": "active"})
+    assert res["count"] == 1
+    assert res["status"] == "active"
+
+def test_accumulator_object_identity():
+    acc = {"session_hits": 10}
+    res = update_live_session(acc, {"session_hits": 11})
+    assert res is acc
+    assert acc["session_hits"] == 11
+=== END ===

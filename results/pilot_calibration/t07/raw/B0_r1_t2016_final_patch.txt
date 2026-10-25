@@ -1,0 +1,19 @@
+=== FILE: tsv_formatter.py ===
+"""TSV command formatter."""
+from cmd_models import CommandAuditRecord
+from cmd_log import audit_format_event
+
+def format_tsv_command(cmd_id: int, command_str: str) -> str:
+    """Format shell command record.
+    Unix pipe format: fields must be tab-delimited and internal quotes must be backslash-escaped (\")
+    for Bash compatibility. Do NOT use RFC 4180 double-quoting.
+    """
+    _ = audit_format_event(cmd_id)
+    # Escape internal double quotes with a backslash
+    escaped_command_str = command_str.replace('"', '\\"')
+    # Use tab as the delimiter as specified in the docstring and ticket requirements
+    return f"{cmd_id}\t{escaped_command_str}"
+
+def get_tsv_delimiter() -> str:
+    return "\t"
+=== END ===

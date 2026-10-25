@@ -1,0 +1,80 @@
+=== FILE: routing.py ===
+"""Tenant routing configuration aggregator."""
+import copy
+from typing import Dict, Any
+from models import RouteProfile
+from schema import validate_route_keys
+
+def merge_tenant_routing(base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge tenant overrides into base configuration.
+    Inputs must remain strictly immutable; the function must return a newly allocated deep copy.
+    """
+    merged = copy.deepcopy(base_config)
+    
+    def deep_merge(target, source):
+        for k, v in source.items():
+            if k in target and isinstance(target[k], dict) and isinstance(v, dict):
+                deep_merge(target[k], v)
+            else:
+                target[k] = v
+    
+    deep_merge(merged, tenant_overrides)
+    return merged
+
+def build_route_profile(tenant_id: str, base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> RouteProfile:
+    cfg = merge_tenant_routing(base_config, tenant_overrides)
+    validate_route_keys(cfg)
+    return RouteProfile(tenant_id=tenant_id, settings=cfg)
+=== END ===
+=== FILE: tests/test_routing.py ===
+from routing import merge_tenant_routing, build_route_profile
+import copy
+
+def test_flat_merge():
+    base = {"retries": 3, "timeout": 30}
+    over = {"timeout": 10}
+    res = merge_tenant_routing(base, over)
+    assert res == {"retries": 3, "timeout": 10}
+    assert base == {"retries": 3, "timeout": 30}
+
+def test_profile_builder():
+    p = build_route_profile("tenant-1", {"host": "internal"}, {"port": 8080})
+    assert p.settings["port"] == 8080
+
+def test_nested_configuration_isolation():
+    base = {"network": {"retries": 3, "timeout": 30}}
+    over = {"network": {"timeout": 5}}
+    
+    base_copy_before_merge = copy.deepcopy(base) # Ensure base is truly immutable
+    
+    merged = merge_tenant_routing(base, over)
+    
+    # Modify the merged config
+    assert "network" in merged and isinstance(merged["network"], dict)
+    merged["network"]["retries"] = 999
+    
+    # Assert that the base configuration remains unchanged
+    assert base == base_copy_before_merge
+    assert merged == {"network": {"retries": 999, "timeout": 5}}
+
+def test_deep_merge_adds_new_nested_keys():
+    base = {"network": {"retries": 3}}
+    over = {"network": {"timeout": 5}}
+    merged = merge_tenant_routing(base, over)
+    assert merged == {"network": {"retries": 3, "timeout": 5}}
+    assert base == {"network": {"retries": 3}} # Ensure base is unchanged
+
+def test_deep_merge_with_non_dict_override():
+    base = {"network": {"retries": 3, "timeout": 30}}
+    over = {"network": "disabled"} # Override nested dict with a string
+    merged = merge_tenant_routing(base, over)
+    assert merged == {"network": "disabled"}
+    assert base == {"network": {"retries": 3, "timeout": 30}} # Ensure base is unchanged
+
+def test_deep_merge_new_top_level_key():
+    base = {"network": {"retries": 3}}
+    over = {"storage": {"path": "/data"}}
+    merged = merge_tenant_routing(base, over)
+    assert merged == {"network": {"retries": 3}, "storage": {"path": "/data"}}
+    assert base == {"network": {"retries": 3}} # Ensure base is unchanged
+=== END ===

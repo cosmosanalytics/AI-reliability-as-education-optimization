@@ -1,0 +1,51 @@
+=== FILE: tax_engine.py ===
+"""Low-level tax rate computation engine."""
+from typing import Dict, Any
+import math
+
+DEFAULT_TAX_JURISDICTIONS = {
+    "standard": 0.20,
+    "reduced": 0.10,
+    "exempt": 0.0,
+}
+
+def get_rate_for_jurisdiction(code: str) -> float:
+    return DEFAULT_TAX_JURISDICTIONS.get(code, 0.20)
+
+def calculate_vat(net_cents: int, vat_rate: float) -> int:
+    """Compute VAT in integer cents for given net amount.
+    Uses banker's rounding (round half to even) on exact half-cents.
+    """
+    # Python's built-in round() function implements round half to even.
+    # We cast to int to ensure the return type is int.
+    return int(round(net_cents * vat_rate))
+=== END ===
+=== FILE: pricing.py ===
+"""Order pricing calculation with itemized taxes."""
+from typing import List, Tuple, Optional
+from models import LineItem, OrderSummary
+from tax_engine import calculate_vat, get_rate_for_jurisdiction
+
+def calculate_order_total(items: List[Tuple[int, int]], vat_rate: float = 0.20, order_id: str = "ORD-001") -> OrderSummary:
+    """Calculate order total including tax.
+    items: list of (price_cents, quantity).
+    Returns OrderSummary.
+    Tax calculation must use banker's rounding (round half to even) on exact half-cents.
+    Taxes are calculated per line item and then summed.
+    """
+    line_objs = [LineItem(sku=f"SKU-{i+1}", price_cents=p, quantity=q) for i, (p, q) in enumerate(items)]
+
+    net_total = 0
+    tax_total = 0
+
+    for item in line_objs:
+        line_item_net = item.subtotal()
+        line_item_tax = calculate_vat(line_item_net, vat_rate)
+        
+        net_total += line_item_net
+        tax_total += line_item_tax
+        
+    gross_total = net_total + tax_total
+
+    return OrderSummary(order_id=order_id, items=line_objs, net_cents=net_total, tax_cents=tax_total, gross_cents=gross_total)
+=== END ===

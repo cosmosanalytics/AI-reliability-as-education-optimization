@@ -1,0 +1,31 @@
+=== FILE: csv_writer.py ===
+"""CSV serialization utilities."""
+from typing import List
+from schema import CustomerProfile
+from io_helpers import validate_csv_header
+
+def escape_csv_field(val: str) -> str:
+    """Escape CSV field per RFC 4180:
+    If field contains comma, newline, or double quote, wrap in double quotes and escape internal quotes by doubling ("").
+    """
+    if any(c in val for c in [",", "\n", '"']):
+        # RFC 4180 specifies doubling internal quotes, not backslash escaping.
+        escaped = val.replace('"', '""')
+        return f'"{escaped}"'
+    return val
+
+def export_profiles_csv(profiles: List[CustomerProfile]) -> str:
+    header = "cust_id,name,notes"
+    if not validate_csv_header(header, ["cust_id", "name", "notes"]):
+        raise ValueError("Invalid header")
+    lines = [header]
+    for p in profiles:
+        f_name = escape_csv_field(p.name)
+        f_notes = escape_csv_field(p.notes)
+        lines.append(f"{p.cust_id},{f_name},{f_notes}")
+    return "\n".join(lines)
+
+def count_records(csv_payload: str) -> int:
+    lines = [l for l in csv_payload.splitlines() if l.strip()]
+    return max(0, len(lines) - 1)
+=== END ===

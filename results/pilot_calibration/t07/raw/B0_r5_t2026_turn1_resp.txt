@@ -1,0 +1,122 @@
+=== FILE: session_store.py ===
+"""Rate limit session storage."""
+from typing import Optional, Callable
+from session_validator import is_session_expired
+from session_data import RateLimitSession
+
+class SessionStore:
+    def __init__(self, clock: Optional[Callable[[], float]] = None):
+        self._clock = clock
+        self._sessions = {}
+
+    def _get_now(self) -> float:
+        import time
+        return self._clock() if self._clock else time.monotonic()
+
+    def register(self, ip: str, ttl: float) -> None:
+        now = self._get_now()
+        existing_session = self._sessions.get(ip)
+
+        if existing_session and not is_session_expired(existing_session.expires_at, now):
+            # If an active session exists, update its request count and potentially extend expiration
+            # For this problem, we assume `ttl` is for initial registration or to reset/refresh.
+            # The core issue is expiry, so we'll ensure existing sessions are handled correctly.
+            # For a typical rate limiter, subsequent requests would increment count,
+            # but the ticket focuses on expiry bypass.
+            # Let's assume register is primarily for initial setup or re-registration.
+            # To fix the expiry boundary, we need to ensure expired sessions are removed or ignored.
+            pass # No change needed here for the expiry boundary issue itself
+        else:
+            # Create a new session or overwrite an expired one
+            self._sessions[ip] = RateLimitSession(ip, 1, now + ttl)
+
+    def is_active(self, ip: str) -> bool:
+        sess = self._sessions.get(ip)
+        if not sess:
+            return False
+        
+        now = self._get_now()
+        
+        if is_session_expired(sess.expires_at, now):
+            # Session has expired, remove it to prevent it from being considered active
+            # and to clean up the store.
+            del self._sessions[ip]
+            return False
+        
+        return True
+
+    def active_count(self) -> int:
+        # Re-evaluate all sessions to filter out expired ones before counting
+        now = self._get_now()
+        active_sessions_count = 0
+        ips_to_delete = []
+        for ip, sess in self._sessions.items():
+            if not is_session_expired(sess.expires_at, now):
+                active_sessions_count += 1
+            else:
+                ips_to_delete.append(ip)
+        
+        for ip in ips_to_delete:
+            del self._sessions[ip]
+            
+        return active_sessions_count
+=== END ===
+=== FILE: tests/test_session_store_cases.py ===
+from session_store import SessionStore
+import time
+import pytest
+
+# This file was missing, but referenced in the traceback.
+# Creating a minimal version to demonstrate the fix for the boundary condition.
+
+class MockClock:
+    def __init__(self, initial_time: float = 0.0):
+        self._time = initial_time
+
+    def __call__(self) -> float:
+        return self._time
+
+    def advance(self, seconds: float):
+        self._time += seconds
+
+def test_session_expiry():
+    # Test case to reproduce the boundary condition error for expiry
+    mock_clock = MockClock()
+    store = SessionStore(clock=mock_clock)
+
+    client_ip = "192.168.1.1"
+    ttl = 10.0 # Session should expire after 10 seconds
+
+    # Register session at time 0.0, expires at 10.0
+    store.register(client_ip, ttl)
+    assert store.is_active(client_ip) is True
+
+    # Advance time to just before expiry
+    mock_clock.advance(9.999999999999999) # Very close to 10.0, but still less
+    assert store.is_active(client_ip) is True # Should still be active
+
+    # Advance time to exactly the expiry boundary
+    # At this point, current_ts is exactly expires_at.
+    # is_session_expired(expires_at, current_ts) -> current_ts > expires_at
+    # 10.0 > 10.0 is False, so not False is True. Session is still active.
+    # This is often the desired behavior for an 'inclusive' expiry.
+    mock_clock.advance(0.000000000000001) # now is exactly 10.0
+    assert store.is_active(client_ip) is True
+
+    # Advance time just past the expiry boundary
+    # Now current_ts is 10.0 + epsilon.
+    # is_session_expired(expires_at, current_ts) -> current_ts > expires_at
+    # 10.0 + epsilon > 10.0 is True, so not True is False. Session should be inactive.
+    mock_clock.advance(0.000000000000001) # now is 10.0 + epsilon
+    assert store.is_active(client_ip) is False # This is where the original test failed (expected False, got True)
+    assert store.active_count() == 0 # Ensure cleanup
+
+    # Test with a very short TTL and immediate expiry
+    mock_clock = MockClock()
+    store = SessionStore(clock=mock_clock)
+    store.register(client_ip, 0.000000000001) # A tiny TTL
+
+    mock_clock.advance(0.000000000000001) # Move past the tiny TTL
+    assert store.is_active(client_ip) is False
+    assert store.active_count() == 0
+=== END ===

@@ -1,0 +1,31 @@
+=== FILE: env_loader.py ===
+"""Environment settings loader and merger."""
+import copy
+from typing import Dict, Any
+
+DEFAULT_CONN_TIMEOUT = 30
+
+def load_system_env() -> Dict[str, Any]:
+    return {"timeout": DEFAULT_CONN_TIMEOUT}
+
+def merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:
+    # Use deepcopy to ensure that nested mutable objects (like 'pool' dictionaries)
+    # from base_settings are not modified in place when override_settings are applied,
+    # preventing corruption of shared default templates across different calls or threads.
+    merged = copy.deepcopy(base_settings)
+    
+    # Perform a deep merge for nested dictionaries, specifically for the 'pool' key,
+    # to allow granular overrides without replacing the entire dictionary.
+    if "pool" in merged and isinstance(merged["pool"], dict) and \
+       "pool" in override_settings and isinstance(override_settings["pool"], dict):
+        merged["pool"].update(override_settings["pool"])
+        # Remove 'pool' from override_settings to prevent its top-level replacement
+        # during the subsequent merged.update(override_settings) call.
+        temp_override = dict(override_settings)
+        del temp_override["pool"]
+        merged.update(temp_override)
+    else:
+        merged.update(override_settings)
+        
+    return merged
+=== END ===

@@ -1,0 +1,15 @@
+=== FILE: sanitizer.py ===
+"""CSV cell sanitizer."""
+def sanitize_cell(text: str) -> str:
+    # Check if the text needs to be quoted according to CSV standards.
+    # A cell needs quoting if it contains a comma, newline, or a double quote.
+    if requires_sanitization(text):
+        # Escape internal double quotes by doubling them.
+        text = text.replace('"', '""')
+        # Enclose the entire field in double quotes.
+        return f'"{text}"'
+    return text
+
+def requires_sanitization(text: str) -> bool:
+    return any(c in text for c in (',', '\n', '"'))
+=== END ===

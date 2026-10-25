@@ -1,0 +1,66 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Workflow engine bug WFL-301: Stage retry policy overrides mutated global default execution parameters across sequential pipeline steps.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_pipeline_cases.py::test_pipeline_defaults_isolation - AssertionError: assert 99.0 == 1.5
+
+REPOSITORY FILES:
+=== FILE: defaults.py ===
+"""Default step parameters."""
+from typing import Dict, Any
+
+DEFAULT_PIPELINE_OPTS = {
+    "engine": "v2",
+    "retries": {"max": 3, "backoff": 1.5},
+    "monitoring": {"enabled": True, "sample_rate": 0.1},
+    "concurrency": {"max_workers": 4, "queue_depth": 100}
+}
+
+def get_base_options() -> Dict[str, Any]:
+    return DEFAULT_PIPELINE_OPTS
+
+def is_feature_enabled(feature_name: str) -> bool:
+    return DEFAULT_PIPELINE_OPTS.get(feature_name, {}).get("enabled", False)
+=== END ===
+=== FILE: step_builder.py ===
+"""Low-level step configuration compiler."""
+from typing import Dict, Any
+
+def compile_step_config(name: str, base_opts: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:
+    res = dict(base_opts)
+    res["name"] = name
+    res.update(overrides)
+    return res
+
+def format_step_manifest(spec: Dict[str, Any]) -> str:
+    name = spec.get("name", "unnamed")
+    engine = spec.get("engine", "default")
+    return f"StageManifest(name={name}, engine={engine})"
+=== END ===
+=== FILE: pipeline.py ===
+"""Pipeline stage configurator."""
+from typing import Dict, Any, List
+from step_builder import compile_step_config, format_step_manifest
+from defaults import DEFAULT_PIPELINE_OPTS
+
+def build_stage_spec(stage_name: str, step_overrides: Dict[str, Any]) -> Dict[str, Any]:
+    """Compile pipeline stage specification.
+    Inputs must remain immutable and nested options must be defensively copied.
+    """
+    spec = compile_step_config(stage_name, DEFAULT_PIPELINE_OPTS, step_overrides)
+    _ = format_step_manifest(spec)
+    return spec
+
+def build_multi_stage_pipeline(stage_configs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [build_stage_spec(f"stage-{i}", cfg) for i, cfg in enumerate(stage_configs)]
+=== END ===
+=== FILE: tests/test_pipeline.py ===
+from pipeline import build_stage_spec
+
+def test_stage_naming():
+    spec = build_stage_spec("ingest", {"engine": "v3"})
+    assert spec["name"] == "ingest"
+    assert spec["engine"] == "v3"
+=== END ===

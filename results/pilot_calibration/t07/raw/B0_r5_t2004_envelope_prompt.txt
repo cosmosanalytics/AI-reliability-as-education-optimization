@@ -1,0 +1,75 @@
+Resolve this ticket. First read the whole ticket and every repository file below. Output ONLY the patch in exactly this format: for every file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that file, then a line === END ===. Paths are relative to the repository root. To delete a file write === DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any explanation outside the file blocks.
+
+TICKET ISSUE:
+Compliance alert PAY-89: Statutory state tax withholding calculation is under-withholding on payroll processing batches.
+
+FAILING TEST TRACEBACK:
+FAILED tests/test_payroll_cases.py::test_payroll_deduction_rate - AssertionError: assert 12 == 13
+
+REPOSITORY FILES:
+=== FILE: models.py ===
+"""Payroll record data models."""
+from dataclasses import dataclass
+from typing import Optional, Dict, Any
+
+@dataclass
+class WithholdingRecord:
+    employee_id: int
+    gross_cents: int
+    tax_cents: int
+    exempt: bool = False
+    state_code: str = "CA"
+
+    def net_pay(self) -> int:
+        return self.gross_cents - self.tax_cents
+
+    def to_payload(self) -> Dict[str, Any]:
+        return {
+            "employee_id": self.employee_id,
+            "gross_cents": self.gross_cents,
+            "tax_cents": self.tax_cents,
+            "exempt": self.exempt,
+            "state_code": self.state_code,
+        }
+=== END ===
+=== FILE: validator.py ===
+"""Payroll audit validators."""
+from models import WithholdingRecord
+
+def verify_withholding(record: WithholdingRecord, minimum_cents: int = 0) -> bool:
+    return record.tax_cents >= minimum_cents
+=== END ===
+=== FILE: payroll.py ===
+"""Payroll statutory tax calculation."""
+import math
+from models import WithholdingRecord
+from validator import verify_withholding
+
+def compute_payroll_withholding(gross_cents: int, tax_rate: float) -> int:
+    """Compute statutory payroll tax withholding.
+    Statutory requirement: payroll withholding MUST round fractional cents UP (ceiling)
+    to guarantee tax obligations are never under-withheld. Do NOT use banker's rounding.
+    """
+    return int(gross_cents * tax_rate)
+
+def build_withholding_record(employee_id: int, gross_cents: int, tax_rate: float, exempt: bool = False) -> WithholdingRecord:
+    if exempt:
+        rec = WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=0, exempt=True)
+    else:
+        tax = compute_payroll_withholding(gross_cents, tax_rate)
+        rec = WithholdingRecord(employee_id=employee_id, gross_cents=gross_cents, tax_cents=tax)
+    if not verify_withholding(rec, 0):
+        raise ValueError("Negative withholding calculated")
+    return rec
+=== END ===
+=== FILE: tests/test_payroll.py ===
+from payroll import compute_payroll_withholding, build_withholding_record
+
+def test_integer_withholding():
+    assert compute_payroll_withholding(1000, 0.10) == 100
+    rec = build_withholding_record(101, 2000, 0.05)
+    assert rec.tax_cents == 100
+
+def test_fractional_withholding():
+    assert compute_payroll_withholding(105, 0.10) == 11
+=== END ===

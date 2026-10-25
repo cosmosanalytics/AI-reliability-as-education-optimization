@@ -1,0 +1,8 @@
+=== FILE: session_validator.py ===
+"""Session expiration validation logic."""
+def is_session_expired(expires_at: float, current_ts: float) -> bool:
+    return current_ts >= expires_at
+
+def time_remaining(expires_at: float, current_ts: float) -> float:
+    return max(0.0, expires_at - current_ts)
+=== END ===

@@ -216,3 +216,25 @@ This is an append-only, timestamped log recording all operational decisions, har
     - 2016 (0%): Model implemented backslash escaping correctly, but hidden test assertion contained an unescaped single-quoted string literal mismatch.
 - **Paired Power Analysis (E5):**
   - For $J = 13$ held-out tasks at $\alpha = 0.05$ (two-tailed, 80% power), the minimum detectable effect size is $\text{MDE} \approx 0.846 \cdot s_D$. For moderate task-to-task difference standard deviation ($s_D = 0.30$), $\text{MDE} \approx 25.4$ percentage points. If the true educational effect is $+15.0$ percentage points, detecting it requires $J \ge 37$ tasks (or $s_D \le 0.177$).
+
+### [2026-10-25T03:48:00Z] Pilot Calibration Round 2: 168 Attempts Executed & Completed
+- **Execution & Cost:**
+  - 168 / 168 live attempts completed against `gemini-2.5-flash`: 28 at $T=0.0$ + 140 at $T=0.7$ (5 runs).
+  - Total tokens billed: 424,972 tokens (Input: 136,356, Output: 65,241, Thinking: 223,375).
+  - Total financial cost: $0.0968 USD (well within budget).
+  - Zero truncations, zero API errors, zero retries, 17 recorded protected file modification attempts.
+- **Key Empirical Results:**
+  - $T=0.0$ overall strict pass: 21 / 28 (75.0%). Tune: 11/15 (73.3%), Held-Out: 10/13 (76.9%).
+  - $T=0.7$ overall strict pass: 97 / 140 (69.3%, Wilson [61.1%, 76.4%]). Tune: 46/75 (61.3%), Held-Out: 51/65 (78.5%).
+  - By initial class ($T=0.7$): STATED 64.0% (32/50), TAUGHT 74.5% (41/55), DISTRACTOR 33.3% (5/15), TRANSFER 95.0% (19/20).
+  - Noise: Between-task variance $\sigma^2_{\text{between}} = 0.1792$, mean within-task variance $\sigma^2_{\text{within}} = 0.0400$, ICC = 0.818.
+- **Relabeling (C2 Rule at $T=0.7$):**
+  - 8 initially TAUGHT tasks exceeded 70% baseline pass rate and were reclassified as STATED: 2006 (100%), 2010 (100%), 2012 (100%), 2014 (100%), 2015 (100%), 2018 (100%), 2022 (100%), 2024 (100%).
+  - 3 validated TAUGHT tasks remain: 2002 (0%), 2003 (20%), 2020 (0%).
+  - Held-out TAUGHT tasks: exactly 1 (2003). Confirmatory power is exploratory unless suite is expanded.
+- **Difficulty Audit (E3):**
+  - 16 ceiling tasks (>85%), 6 floor tasks (<15%), 6 calibrated tasks in 15%–85% band.
+  - Contingency rule triggered (< 8 tasks in calibrated range).
+- **Deliverables & Strict Stop Rule:**
+  - `PILOT_CALIBRATION_REPORT.md` written and committed alongside raw logs `results/pilot_calibration/t0/` and `results/pilot_calibration/t07/`.
+  - All factor runs ($s, p, u, r, k$) strictly locked awaiting Round 14 review and instructions.
