@@ -5,7 +5,7 @@
 **Harness Condition:** Redefined Baseline B0 (ALL non-test source files + visible tests in context; ticket + failing traceback excerpt; single call; no scaffolding; final anti-tamper envelope)  
 **Total Executed Attempts:** 636 attempts (106 at T=0.0, 530 at T=0.7 across 5 runs)  
 **Total Billed Tokens:** 1,695,324 tokens (Input: 558,696, Output: 276,151, Thinking: 860,477)  
-**Total Cost:** $0.1247 USD  
+**Total Cost:** $3.0092 USD (T=0.7: $2.5225, T=0.0: $0.4866)  
 **Audit Status:** 100% Genuine Live Model Responses (0 mock, 0 simulated)  
 
 ---
@@ -57,7 +57,7 @@
 | **2041** | User Activity Event Dispatcher | `wire_envelope` | `TAUGHT` | Held-Out | No | No | 0/1 | 0/5 | **0.0%** | wrong_fix (5/5) |
 | **2042** | Order Notification Wire Dispatcher | `wire_envelope` | `STATED` | Held-Out | No | No | 0/1 | 0/5 | **0.0%** | wrong_fix (5/5) |
 | **2043** | Inventory Sync Event Broadcaster | `wire_envelope` | `TAUGHT` | Held-Out | No | No | 0/1 | 0/5 | **0.0%** | wrong_fix (5/5) |
-| **2044** | Legacy SOAP Bridge Gateway | `wire_envelope` | `DISTRACTOR` | Held-Out | No | No | 0/1 | 0/5 | **0.0%** | wrong_fix (5/5) |
+| **2044** | Legacy SOAP Bridge Gateway | `wire_envelope` | `DISTRACTOR` | Held-Out | No | Yes | 0/1 | 0/5 | **0.0%** | wrong_fix (5/5) |
 | **2045** | Audit Event Timestamp Normalizer | `timestamp_iso` | `STATED` | Tune | No | Yes | 1/1 | 5/5 | **100.0%** | None (100% pass) |
 | **2046** | Telemetry Log Serializer | `timestamp_iso` | `TAUGHT` | Tune | Yes | No | 1/1 | 4/5 | **80.0%** | wrong_fix (1/1) |
 | **2047** | Webhook Delivery Envelope | `timestamp_iso` | `TAUGHT` | Tune | No | Yes | 1/1 | 5/5 | **100.0%** | None (100% pass) |
@@ -148,6 +148,7 @@
 | **Overall Strict Pass Rate** | 71/106 (**67.0%**) | 343/530 (**64.7%**) |
 | **Tune Split Pass Rate** | 31/46 (**67.4%**) | 155/230 (**67.4%**) |
 | **Held-Out Split Pass Rate** | 40/60 (**66.7%**) | 188/300 (**62.7%**) |
+| **Financial Cost** | $0.4866 USD | $2.5225 USD |
 
 ---
 
@@ -181,21 +182,21 @@ In compliance with Round 17 Review Condition K2 and Round 18 Review Condition L1
 ---
 ## 4. Run-to-Run Noise Estimate & Dual-Population Power Analysis (K1, M1 & E5)
 
-- **Between-Task Variance ($\sigma^2_{	ext{between}}$):** `0.1795`
-- **Mean Within-Task Variance across Repeats at T=0.7 ($\sigma^2_{	ext{within}}$):** `0.0632`
-- **Total Variance ($\sigma^2_{	ext{total}}$):** `0.2427`
+- **Between-Task Variance ($\sigma^2_{\text{between}}$):** `0.1795`
+- **Mean Within-Task Variance across Repeats at T=0.7 ($\sigma^2_{\text{within}}$):** `0.0632`
+- **Total Variance ($\sigma^2_{\text{total}}$):** `0.2427`
 - **Intraclass Correlation (ICC):** `0.740`  
   - *Interpretation:* Sampling at $T=0.7$ introduces genuine within-task stochasticity (within-task variance = `0.0632`).
 
 ### A. Primary Hypothesis Power Analysis (Held-Out TAUGHT Tasks with Baseline $\le 70.0\%$)
 
-Under Rule C2 and the updated primary population definition (Condition K2, updated per Round 18 Review L2 to include Task 2042), the confirmatory hypothesis test ($\Delta_{	ext{TAUGHT}} = ar{Y}_{	heta^*} - ar{Y}_0 > 0$) evaluates across the **$J_{\\text{primary}} = 12$** held-out `TAUGHT` tasks that exhibit baseline solvability $\le 70.0\%$:
+Under Rule C2 and the updated primary population definition (Condition K2, updated per Round 18 Review L2 to include Task 2042), the confirmatory hypothesis test ($\Delta_{\text{TAUGHT}} = \bar{Y}_{\theta^*} - \bar{Y}_0 > 0$) evaluates across the **$J_{\text{primary}} = 12$** held-out `TAUGHT` tasks that exhibit baseline solvability $\le 70.0\%$:
 - **Primary Population Tasks ($J = 12$):** 2015, 2022, 2033, 2035, 2041, 2042, 2043, 2065, 2067, 2073, 2099, 2101
 - **Family Distribution ($K = 6$ families):** `csv_roundtrip` (2), `permission_prefix` (1), `service_errors` (2), `wire_envelope` (3), `idempotency_keys` (2), `metric_percentiles` (2)
 
 #### 1. Unadjusted MDE ($J = 12$, $df = 11$):
-- Critical values: $t_{lpha/2, 11} = 2.201$ (two-tailed $lpha=0.05$), $t_{eta, 11} = 0.876$ (power $1-eta=0.80$); sum factor = **3.077**
-$$	ext{MDE}_{	ext{unadjusted}} = \frac{3.077 \cdot s_D}{\sqrt{12}} \approx 0.888 \cdot s_D$$
+- Critical values: $t_{\alpha/2, 11} = 2.201$ (two-tailed $\alpha=0.05$), $t_{\beta, 11} = 0.876$ (power $1-\beta=0.80$); sum factor = **3.077**
+$$\text{MDE}_{\text{unadjusted}} = \frac{3.077 \cdot s_D}{\sqrt{12}} \approx 0.888 \cdot s_D$$
 
 | Inter-Task Difference Standard Deviation ($s_D$) | Unadjusted Primary MDE (%) | Statistical Sensitivity |
 |:---:|:---:|:---|
@@ -204,10 +205,10 @@ $$	ext{MDE}_{	ext{unadjusted}} = \frac{3.077 \cdot s_D}{\sqrt{12}} \approx 0.888
 | **$s_D = 0.30$** | **26.6%** | Substantial education effect sensitivity |
 | **$s_D = 0.40$** | **35.5%** | Conservative large effect sensitivity |
 
-#### 2. Family-Clustered MDE ($K = 6$ clusters, $J_{	ext{eff}} \approx 8$, $df = 5$):
-- Accounting for family clustering with average cluster size $m = 12/6 = 2.0$ and intra-cluster correlation $\rho \approx 0.50$, the design effect is $DEFF = 1 + (m-1)\rho \approx 1.50$, yielding effective sample size $J_{	ext{eff}} = 12 / 1.50 = 8.0$.
-- Under conservative cluster-level degrees of freedom ($df = K - 1 = 5$): critical values $t_{lpha/2, 5} = 2.571$, $t_{eta, 5} = 0.920$; sum factor = **3.491**.
-$$	ext{MDE}_{	ext{clustered}} = \frac{3.491 \cdot s_D}{\sqrt{8.0}} \approx 1.234 \cdot s_D$$
+#### 2. Family-Clustered MDE ($K = 6$ clusters, $J_{\text{eff}} \approx 8$, $df = 5$):
+- Accounting for family clustering with average cluster size $m = 12/6 = 2.0$ and intra-cluster correlation $\rho \approx 0.50$, the design effect is $DEFF = 1 + (m-1)\rho \approx 1.50$, yielding effective sample size $J_{\text{eff}} = 12 / 1.50 = 8.0$.
+- Under conservative cluster-level degrees of freedom ($df = K - 1 = 5$): critical values $t_{\alpha/2, 5} = 2.571$, $t_{\beta, 5} = 0.920$; sum factor = **3.491**.
+$$\text{MDE}_{\text{clustered}} = \frac{3.491 \cdot s_D}{\sqrt{8.0}} \approx 1.234 \cdot s_D$$
 
 | Inter-Task Difference Standard Deviation ($s_D$) | Family-Clustered MDE (%) | Statistical Sensitivity |
 |:---:|:---:|:---|
@@ -218,13 +219,13 @@ $$	ext{MDE}_{	ext{clustered}} = \frac{3.491 \cdot s_D}{\sqrt{8.0}} \approx 1.234
 
 > [!WARNING]
 > **Explicit Pre-Registration Limitation Statement (Condition M1):**
-> The confirmatory test is powered to detect only **large educational effects ($\ge 25	ext{--}30$ percentage points)**. Smaller effects ($\le 20$ points) will not reach 80% statistical power at the family-clustered level and will be reported as point estimates with 95% confidence intervals.
+> The confirmatory test is powered to detect only **large educational effects ($\ge 25\text{--}30$ percentage points)**. Smaller effects ($\le 20$ points) will not reach 80% statistical power at the family-clustered level and will be reported as point estimates with 95% confidence intervals.
 
 ### B. Secondary Exploratory Power Analysis (TRANSFER Classes & All Held-Out Tasks)
 
-Per Condition M2, exploratory endpoints are reported strictly separately and are **never pooled** into the primary confirmatory $\Delta_{	ext{TAUGHT}}$ metric:
+Per Condition M2, exploratory endpoints are reported strictly separately and are **never pooled** into the primary confirmatory $\Delta_{\text{TAUGHT}}$ metric:
 1. **TRANSFER Tasks ($J = 12$ held-out tasks: 8 `state_transitions`, 4 `cache_ttl`):** High upside exploratory candidate for cross-domain educational generalization.
-2. **Full Pooled Held-Out Suite ($J = 60$ tasks, $df = 59$, factor = 2.849):** $	ext{MDE} = 7.4\%	ext{--}14.7\%$ for system-wide secondary evaluation.
+2. **Full Pooled Held-Out Suite ($J = 60$ tasks, $df = 59$, factor = 2.849):** $\text{MDE} = 7.4\%\text{--}14.7\%$ for system-wide secondary evaluation.
 
 ---
 ## 5. Pre-Registered Label Audit (C2 Relabeling Rule & L2 Audit)
@@ -237,14 +238,15 @@ Under Pre-Registered Rule C2 and Round 18 Review Condition L2:
 - Reclassified to `STATED`: 2003, 2005, 2006, 2009, 2010, 2011, 2012, 2014, 2017, 2019, 2020, 2021, 2023, 2025, 2026, 2027, 2028, 2029, 2046, 2047, 2050, 2051, 2053, 2054, 2057, 2059, 2061, 2069, 2103, 2104, 2105, 2106.
 
 ### B. Validated Retained TAUGHT Tasks (25 tasks):
-- **Held-Out ($J_{\\text{primary}} = 12$ tasks):** **2015, 2022, 2033, 2035, 2041, 2042, 2043, 2065, 2067, 2073, 2099, 2101**
-- **Tune ($J_{\\text{tune}} = 13$ tasks):** **2002, 2018, 2024, 2030, 2031, 2037, 2038, 2039, 2055, 2062, 2063, 2070, 2071**
+- **Held-Out ($J_{\text{primary}} = 12$ tasks):** **2015, 2022, 2033, 2035, 2041, 2042, 2043, 2065, 2067, 2073, 2099, 2101**
+- **Tune ($J_{\text{tune}} = 13$ tasks):** **2002, 2018, 2024, 2030, 2031, 2037, 2038, 2039, 2055, 2062, 2063, 2070, 2071**
 
 ### C. Resulting Population Balance:
 - **Primary Confirmatory Population:** Exactly **12 held-out `TAUGHT` tasks** ($\ge 3$ required, confirmatory test adequately powered for large effects).
 - **Screening Experiment Population:** Exactly **13 usable Tune `TAUGHT` tasks** ($\ge 10$ required by Condition M3).
 
 ---
+
 ## 6. Difficulty Audit: Floor and Ceiling Tasks (E3)
 
 Per protocol, tasks with baseline solvability $> 85\%$ (ceiling) or $< 15\%$ (floor) are flagged below:
@@ -345,7 +347,7 @@ Per protocol, tasks with baseline solvability $> 85\%$ (ceiling) or $< 15\%$ (fl
 | **Protected File Modifications** | Recorded if attempted | **1** | **PASS** |
 | **Turn Count** | Single call per attempt | **100% Turn 1** | **PASS** |
 | **Billed Tokens Accounting** | Exact provider token usage | **1,695,324 tokens** | **PASS** |
-| **Financial Cost** | Tracked vs credit budget | **$0.1247 USD** | **PASS** |
+| **Financial Cost** | Tracked vs credit budget | **$3.0092 USD** | **PASS** |
 
 ### Operational Anomaly Disclosure (Condition K5):
 - **Attempt (Task 2070, Run 2):** During the initial 84-task baseline pilot execution on commit `c8ff2c8`, background worker thread 3 encountered an unhandled provider runtime error (`RuntimeError: Response was truncated by provider stop_reason=FinishReason.MAX_TOKENS`). The original failed attempt log is preserved in the repository at `results/pilot_calibration/t07/raw/B0_r2_t2070_original_max_tokens_error.json`. The worker process was restarted under identical deterministic configuration and temperature settings ($T=0.7$, seed=1337). Upon re-execution, the model produced an untruncated response that failed hidden tests due to index truncation (`strict_pass=False`), which was recorded faithfully in `results/pilot_calibration/t07/rows.json`. Exactly 0 cherry-picking, output substitution, or result alteration occurred.

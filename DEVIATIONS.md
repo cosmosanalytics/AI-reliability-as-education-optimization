@@ -453,3 +453,55 @@ This is an append-only, timestamped log recording all operational decisions, har
 - **Handbook & Suite Integrity:**
   - `briefs/HANDBOOK.md`, `briefs/PLACEBO.md`, and all 106 tasks in `benchmarks/suite_e5.py` remain **100% UNCHANGED**.
 - **Strict Stop Rule Enforced:** Exactly zero factor scaffolding calls executed.
+
+
+### [2026-10-25T18:35:00Z] Round 23 Item B1 Implementation: Pilot Calibration Pricing Constant Correction & Thinking Token Billing Accounting
+- **Context & Guidance:** Reviewer Round 23 Item B1 identified that the pilot calibration cost accounting in 
+unner/analyze_pilot_calibration.py used outdated Gemini 1.5 Flash list prices (\.075 / \.30 per 1M tokens) and omitted 	houghts_tokens from billed output.
+- **Action & Resolution:**
+  - Updated price constants in 
+unner/analyze_pilot_calibration.py to official Google Generative AI / Gemini API list pricing for gemini-2.5-flash (i.google.dev/pricing, Oct 2026):
+    - Input tokens: \.30 per 1M tokens (\.00000030 per token).
+    - Output tokens (candidates + thinking tokens): \.50 per 1M tokens (\.00000250 per token).
+  - In Gemini 2.5 Flash, 	houghts_tokens are billed alongside completion candidate tokens (	okens_out) at the standard output token rate (\.50 per 1M).
+  - Updated cost formula:
+    \text{cost} = \frac{\text{total\_in} \times 0.30}{10^6} + \frac{(\text{total\_out} + \text{total\_thoughts}) \times 2.50}{10^6}
+  - Regenerated PILOT_CALIBRATION_REPORT.md:
+    - Total Executed Attempts: 636 attempts.
+    - Total Billed Tokens: 1,695,324 tokens (558,696 in + 276,151 out + 860,477 thinking).
+    - Total Financial Spend: **\.0092 USD** (~\.01), exactly matching reviewer's calculation.
+    - \=0.7\$ Sample (530 attempts): 465,580 in + 242,632 out + 710,515 thinking -> **\.5225 USD** (~\.52), matching reviewer's calculation.
+    - \=0.0\$ Baseline (106 attempts): 93,116 in + 33,519 out + 149,962 thinking -> **\.4866 USD** (~\.49).
+- **Invariant Statement:** This accounting correction is strictly financial and reporting-only; it has **zero impact** on task pass rates, task labels, model generation outputs, or benchmark suite integrity (riefs/HANDBOOK.md, riefs/PLACEBO.md, and all 106 tasks in enchmarks/suite_e5.py remain **100% UNCHANGED**).
+
+### [2026-10-25T18:41:00Z] Round 23 Item B2 Implementation: Discarded Engineering Smoke Test & Screening Budget Extrapolation
+- **Context & Guidance:** Round 23 Review Item B2 required a dedicated pre-screening smoke test:
+  - 3 Tune tasks x 1 attempt across the lightest cell (`C0000`, all 5 factors off), mid cell (`C1001`, $s=1, p=0, u=0, r=1, k=1$), and heaviest cell (`C1111`, all 5 factors on).
+  - Empirical measurement of input tokens, output tokens, thinking tokens, API call counts, wall-clock time, and cost per attempt using official Gemini 2.5 Flash rates ($0.30/1M in, $2.50/1M out incl thinking).
+  - Factorial budget extrapolation across all 16 cells x 46 tune tasks for $N=5$ and $N=3$ runs, setting a hard-stop cap at 1.5x projected total.
+  - Mandatory invariant: Output artifacts are designated strictly as engineering checks, discarded from screening datasets, and executed under an independent seed (`seed=99999`) to prevent seed collision.
+- **Action & Execution:**
+  - Authored dedicated script `runner/run_smoke_test_b2.py`.
+  - Selected 3 representative tune tasks from `benchmarks/splits_e5.json`: 2001 (`money_rounding`), 2005 (`config_merge`), 2013 (`csv_roundtrip`).
+  - Created output directory `results/smoke_test_b2/` with `README.md` explicitly marking all contents as discarded engineering checks.
+  - Executed all 9 live attempts against `gemini-2.5-flash` under `temperature=0.7`, `thinking_budget=2048`, `max_output_tokens=16384`, and `seed=99999`:
+    - **Lightest Cell (`C0000`):** Mean tokens in: 1,038.3; out: 589.3; thinking: 1,469.3; total billed: 3,097.0. Calls: 1.00. Wall time: 12.79s. Cost/attempt: **$0.00546 USD**.
+    - **Mid Cell (`C1001`):** Mean tokens in: 4,511.3; out: 802.0; thinking: 3,007.0; total billed: 8,320.3. Calls: 2.00. Wall time: 24.40s. Cost/attempt: **$0.01088 USD**.
+    - **Heaviest Cell (`C1111`):** Mean tokens in: 11,485.0; out: 732.0; thinking: 4,850.3; total billed: 17,067.3. Calls: 3.00. Wall time: 35.27s. Cost/attempt: **$0.01740 USD**.
+  - All 9 attempts succeeded with `strict_pass=True`, verifying that the interactive tool runner, self-review step, and audit trail execute end-to-end without runtime errors or truncations.
+- **Factorial Budget Extrapolation (16 Cells x 46 Tune Tasks):**
+  - **Full Screening Design ($N = 5$ Runs Per Cell):**
+    - Total attempts: **3,680 attempts** ($16 \times 46 \times 5$).
+    - Projected baseline cost: **$42.06 USD** (mean per-cell cost: $2.63 USD).
+    - Hard-stop cap (1.5x total): **$63.09 USD**.
+    - Conservative worst-case ceiling (if 100% of attempts consumed C1111 resources): $64.04 USD (1.5x cap: $96.05 USD).
+    - Threshold check: The expected $N=5$ cost ($42.06 USD) is **under the $50 budget limit**.
+  - **Cheaper Alternative Design ($N = 3$ Runs Per Cell):**
+    - Total attempts: **2,208 attempts** ($16 \times 46 \times 3$).
+    - Projected cost: **$25.24 USD**.
+    - Hard-stop cap (1.5x total): **$37.85 USD** (strictly under $50 even with the 1.5x multiplier applied).
+    - Trade-off: $N=3$ saves 40.0% ($16.82 USD). Main effect standard error increases slightly from $SE \approx 1.16\%$ to $SE \approx 1.50\%$ (retaining $\beta \ge 0.80$ power for $\Delta \ge 5.0\%$), but slightly attenuates sensitivity to two-way interactions ($p \times u$, $s \times r$) below 7%.
+- **Invariant Statement:**
+  - All 9 execution outputs, transcripts, tool logs, and grades are isolated under `results/smoke_test_b2/` and discarded.
+  - Frozen artifacts in `FREEZE.json` remain pristine and unmodified (`benchmarks/suite_e5.py`, `benchmarks/splits_e5.json`, `briefs/HANDBOOK.md`, `briefs/PLACEBO.md`, `runner/agent_runner.py`).
+- **Strict Stop Rule Enforced:** Exactly zero factor scaffolding screening calls executed.

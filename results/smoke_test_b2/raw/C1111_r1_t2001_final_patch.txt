@@ -1,0 +1,22 @@
+=== FILE: tax_engine.py ===
+"""Low-level tax rate computation engine."""
+from typing import Dict, Any
+
+DEFAULT_TAX_JURISDICTIONS = {
+    "standard": 0.20,
+    "reduced": 0.10,
+    "exempt": 0.0,
+}
+
+def get_rate_for_jurisdiction(code: str) -> float:
+    return DEFAULT_TAX_JURISDICTIONS.get(code, 0.20)
+
+def calculate_vat(net_cents: int, vat_rate: float) -> int:
+    """Compute VAT in integer cents for given net amount.
+    Uses half-up rounding (ties broken towards positive infinity).
+    """
+    # For non-negative numbers, adding 0.5 and then truncating (int conversion)
+    # correctly implements half-up rounding (ties broken towards positive infinity).
+    # Since net_cents and vat_rate are non-negative, their product will also be non-negative.
+    return int(net_cents * vat_rate + 0.5)
+=== END ===

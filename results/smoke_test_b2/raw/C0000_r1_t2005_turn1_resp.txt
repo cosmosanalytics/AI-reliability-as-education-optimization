@@ -1,0 +1,37 @@
+=== FILE: routing.py ===
+"""Tenant routing configuration aggregator."""
+import copy
+from typing import Dict, Any
+from models import RouteProfile
+from schema import validate_route_keys, get_default_network_settings
+
+def merge_tenant_routing(base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge tenant overrides into base configuration.
+    Inputs must remain strictly immutable; the function must return a newly allocated deep copy.
+    """
+    merged = copy.deepcopy(base_config)
+
+    def _deep_merge(target, source):
+        for k, v in source.items():
+            if k in target and isinstance(target[k], dict) and isinstance(v, dict):
+                _deep_merge(target[k], v)
+            else:
+                target[k] = copy.deepcopy(v)
+
+    _deep_merge(merged, tenant_overrides)
+    return merged
+
+def build_route_profile(tenant_id: str, base_config: Dict[str, Any], tenant_overrides: Dict[str, Any]) -> RouteProfile:
+    # Ensure base_config is deep-copied from a default if it's not provided or incomplete,
+    # to prevent mutation of shared default settings.
+    default_settings = get_default_network_settings()
+    
+    # Merge the provided base_config over the default settings
+    # This ensures that default settings are always present unless explicitly overridden.
+    effective_base_config = merge_tenant_routing(default_settings, base_config)
+    
+    cfg = merge_tenant_routing(effective_base_config, tenant_overrides)
+    
+    validate_route_keys(cfg)
+    return RouteProfile(tenant_id=tenant_id, settings=cfg)
+=== END ===

@@ -1,0 +1,51 @@
+{
+  "experiment": {
+    "name": "Tune-Set Factorial Screening",
+    "design": "2^{5-1} Resolution-V Fractional Factorial",
+    "defining_relation": "I = SPURK",
+    "parity_rule": "k = 1 if ((s + p + u + r) % 2 == 0) else 0",
+    "factors": {
+      "s": "Sources (HANDBOOK.md house conventions)",
+      "p": "Practice (PLACEBO.md balanced examples)",
+      "u": "Pytest Tool execution",
+      "r": "Review Checklist self-inspection",
+      "k": "Policy Retry mechanism"
+    },
+    "status": "DRY_RUN_VERIFIED",
+    "created_at": "2026-10-25T18:39:31.216603+00:00",
+    "updated_at": "2026-10-25T18:39:31.216603+00:00"
+  },
+  "run_config": {
+    "model_id": "gemini-2.5-flash",
+    "temperature": 0.7,
+    "top_p": 0.95,
+    "max_output_tokens": 16384,
+    "thinking_budget": 2048,
+    "commit_sha_freeze_json": "798af3b1de167e062de80a727acf1c86fb987a78"
+  },
+  "pricing": {
+    "pricing_source": "Google Generative AI / Gemini API Official Pricing (ai.google.dev/pricing, Oct 2026)",
+    "price_input_per_1m_usd": 0.3,
+    "price_output_per_1m_usd": 2.5,
+    "thoughts_billed_as_output": true,
+    "cost_formula": "cost_usd = (tokens_in * 0.30 / 1e6) + ((tokens_out + thoughts_tokens) * 2.50 / 1e6)"
+  },
+  "execution_scope": {
+    "tune_tasks_count": 46,
+    "cells_count": 16,
+    "runs_count": 5,
+    "total_scheduled_attempts": 3680,
+    "cost_cap_usd": 25.0
+  },
+  "cost_meter": {
+    "cumulative_tokens_in": 0,
+    "cumulative_tokens_out": 0,
+    "cumulative_thoughts_tokens": 0,
+    "cumulative_billed_tokens": 0,
+    "cumulative_cost_usd": 0.0,
+    "cost_cap_usd": 25.0,
+    "attempts_completed": 0,
+    "cost_cap_exceeded": false,
+    "halt_reason": null
+  }
+}

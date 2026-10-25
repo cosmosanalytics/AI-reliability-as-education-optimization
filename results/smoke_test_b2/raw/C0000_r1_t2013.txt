@@ -1,0 +1,72 @@
+=== FILE: csv_writer.py ===
+"""TSV serialization utilities."""
+from typing import List, Optional
+from schema import CustomerProfile
+from io_helpers import validate_tsv_header
+
+def escape_tsv_field(val: Optional[str]) -> str:
+    r"""Escape field for internal TSV audit log pipeline:
+    Records are tab-separated (\t), internal double quotes are escaped with backslash (\"),
+    newline characters are escaped as \n, and None/null values are serialized as \N.
+    Do NOT use RFC 4180 double-quoting.
+    """
+    if val is None:
+        return r"\N" # Serialize None/null as \N as per docstring
+    
+    # Escape characters in the specified order to avoid issues:
+    # 1. Escape literal backslashes if they are part of the data, to distinguish from escape sequences.
+    #    The docstring implies \ and n are separate, but \ itself is not mentioned as needing escape.
+    #    However, to escape " to \" and \n to \n, we must ensure that an existing \ isn't misinterpreted.
+    #    A common pattern is to escape the escape character itself first.
+    #    Let's assume for now that if a literal backslash appears, it should be preserved.
+    #    The rules are explicit for " and \n, but not for \.
+    #    Let's stick strictly to the stated rules:
+    #    - internal double quotes are escaped with backslash (\")
+    #    - newline characters are escaped as \n
+
+    # Replace newlines first to avoid replacing a '\n' from a previous step
+    # if we were to handle '\' generally.
+    # Example: "foo\nbar" -> "foo\nbar"
+    temp_val = val.replace('\n', r'\n')
+    
+    # Then replace double quotes.
+    # Example: 'Alice "Ace" Smith' -> 'Alice \"Ace\" Smith'
+    final_val = temp_val.replace('"', r'\"')
+    
+    return final_val
+
+def export_profiles_tsv(profiles: List[CustomerProfile]) -> str:
+    # The header uses literal backslash-t to represent tabs in the string,
+    # which will be interpreted as actual tabs by the join_tsv_lines or splitlines.
+    # However, the validate_tsv_header expects actual column names, not escaped delimiters.
+    # This header string itself is meant to be the first line of the TSV,
+    # where '\t' means a literal tab character.
+    header_line_str = "cust_id\tname\tnotes" # This is the actual string for the header line
+    
+    # The validation expects a list of column names, not the raw header line with delimiters.
+    # The current validation logic in io_helpers.py:validate_tsv_header correctly splits by '\t'.
+    # So, the header provided to validation should be the un-escaped column names.
+    if not validate_tsv_header(header_line_str, ["cust_id", "name", "notes"]):
+        # This check is technically redundant if the header_line_str is hardcoded correctly,
+        # but it serves as a safeguard.
+        raise ValueError("Invalid header")
+    
+    lines = [header_line_str]
+    for p in profiles:
+        # p.cust_id is an int, str() converts it.
+        # p.name is a str, escape_tsv_field handles it.
+        # p.notes is Optional[str], escape_tsv_field handles it.
+        f_name = escape_tsv_field(p.name)
+        f_notes = escape_tsv_field(p.notes)
+        lines.append(f"{p.cust_id}\t{f_name}\t{f_notes}")
+    
+    # The output needs to be a single string with lines separated by actual newline characters.
+    # The docstring for export_profiles_tsv doesn't specify line endings,
+    # but join_tsv_lines uses '\n' and count_records uses splitlines().
+    # So, '\n' is the correct line separator.
+    return "\n".join(lines)
+
+def count_records(payload: str) -> int:
+    lines = [l for l in payload.splitlines() if l.strip()]
+    return max(0, len(lines) - 1)
+=== END ===
