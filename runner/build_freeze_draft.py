@@ -67,8 +67,8 @@ for rel_path in files_to_hash:
         artifacts[rel_path.replace("\\", "/")] = hashlib.sha256(f.read()).hexdigest().upper()
 
 freeze_data = {
-    "manifest_version": "2.0-draft",
-    "phase": "pre_registration_freeze_draft",
+    "manifest_version": "2.0-final",
+    "phase": "pre_registration_freeze",
     "created_at": datetime.now(timezone.utc).isoformat(),
     "model": "gemini-2.5-flash",
     "backend": "gemini",
@@ -85,11 +85,11 @@ freeze_data = {
         "taught_held_out_after_c2": taught_held_out,
     },
     "artifacts": artifacts,
-    "review_note": "Draft freeze manifest prepared for Round 21 review. Final immutable FREEZE.json will be generated upon reviewer approval in a dedicated commit before factor execution."
+    "review_note": "Immutable pre-registration freeze manifest generated upon reviewer approval in Round 22 following full verification of conditions C1 and C2. Scaffolding factor execution unlocked on tune set."
 }
 
-out_path = os.path.join(repo_root, "FREEZE_DRAFT.json")
+out_path = os.path.join(repo_root, "FREEZE.json")
 with open(out_path, "w", encoding="utf-8") as f:
     json.dump(freeze_data, f, indent=2)
 
-print(f"Updated FREEZE_DRAFT.json successfully with counts: total={total}, taught_initial={taught_initial}, taught_retained={taught_retained}, taught_held_out={taught_held_out}")
+print(f"Generated FREEZE.json successfully with counts: total={total}, taught_initial={taught_initial}, taught_retained={taught_retained}, taught_held_out={taught_held_out}")

@@ -7,7 +7,7 @@ import os
 import pathlib
 
 repo_root = pathlib.Path(__file__).resolve().parents[1]
-log_file = repo_root / "tests" / "preflight_suite_e5_543.log"
+log_file = repo_root / "tests" / "preflight_suite_e5_544.log"
 
 cmd = [sys.executable, "-m", "pytest", "tests/test_suite_e5_preflight.py", "-n", "8", "-v", "--tb=short"]
 

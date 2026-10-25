@@ -408,4 +408,19 @@ def test_triage_rounding_mutation_negative_control():
     assert any(item["val"] == "0.14" for item in unresolved[2102]), "Mutated literal '0.14' not recorded in unresolved"
 
 
+def test_generic_mutation_sweep():
+    """Condition C2 Generic Mutation Sweep: Mutates every expected-side asserted literal
+    across all 87 evaluated tasks in Suite E5, one at a time, requiring 100% of mutations
+    to be flagged as UNRESOLVED by the tightened rule sufficiency engine.
+    """
+    import verify_rule_sufficiency as v
+    total_mutated, total_flagged, unflagged, excluded = v.run_generic_mutation_sweep()
+    assert total_mutated > 200, f"Expected >200 mutated literals in generic sweep, got {total_mutated}"
+    assert len(unflagged) == 0, f"Generic mutation sweep had unflagged misses: {unflagged}"
+    assert total_flagged == total_mutated, (
+        f"Generic mutation sweep failed: {total_flagged}/{total_mutated} flagged ({total_flagged/total_mutated*100:.1f}%)"
+    )
+
+
+
 

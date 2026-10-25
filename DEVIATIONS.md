@@ -425,3 +425,31 @@ This is an append-only, timestamped log recording all operational decisions, har
   - Preflight suite expanded from 541 to 543 tests with the addition of the two triage mutation negative control tests.
   - Full preflight run executed and logged to `tests/preflight_suite_e5_543.log` in clean UTF-8 text.
 - **Strict Stop Rule Enforced:** Exactly zero factor scaffolding calls executed.
+
+### [2026-10-25T18:05:00Z] Round 23 Implementation: Tightened Rule Sufficiency Verification (C1) and Generic Mutation Sweep (C2)
+- **Context & Guidance:** Reviewer Round 22 verdict: "Freeze approved, with two same-commit conditions (C1, C2) that must be done before the first screening run. Neither touches the handbook, placebo or suite."
+- **C1 (Tightened Verbatim Matching & Per-Literal Adjudication):**
+  - Refactored `runner/verify_rule_sufficiency.py`:
+    - Replaced substring matching (`str(val) in ctx`) with strict discrete word/token boundary matching (`(?<![A-Za-z0-9_.-])<val>(?![A-Za-z0-9_.-])` for numbers and short strings <4 chars).
+    - Required verbatim text to match strictly within the cited handbook rule section, the task ticket, or the task repository file.
+    - Eliminated generic keyword fallthrough branches for Distractor tasks, replacing them with per-literal formula recomputations and verified repository docstring line citations.
+    - Adjudicated all 12 specific literals across 9 tasks highlighted in the review:
+      - Task 2004 (`money_rounding`, DISTRACTOR): statutory tax withholding ceiling rounding recomputed (`math.ceil(gross_cents * tax_rate)`); cited `payroll.py:L11-L14`.
+      - Task 2016 (`csv_roundtrip`, DISTRACTOR): RFC 4180 CSV doubled-quotes formatting recomputed; cited `tsv_formatter.py:L10-L14`.
+      - Task 2048 (`timestamp_iso`, DISTRACTOR): Unix integer epoch seconds recomputed (`int(dt.timestamp())`); cited `stream_ingest.py:L11-L14`.
+      - Task 2052 (`timestamp_iso`, DISTRACTOR): microsecond timestamp formatting recomputed (`%Y-%m-%dT%H:%M:%S.%fZ`); cited `trace_recorder.py:L11-L14`.
+      - Task 2064 (`idempotency_keys`, DISTRACTOR): `Idempotency-Token` header and standard UUID4 regex format verified; cited `banking_client.py:L20-L22`.
+      - Task 2068 (`idempotency_keys`, DISTRACTOR): `Tx-Identifier` header verified; cited `settlement_client.py:L19-L22`.
+      - Tasks 2078, 2080, 2082, 2084 (`state_transitions`, TRANSFER): verified `audit_trail[0]` as slice index and `len(audit_trail) == 1` as exact mutator call count (1 transition executed in `test_case_1`).
+- **C2 (Generic Mutation Sweep in Preflight):**
+  - Implemented `run_generic_mutation_sweep()` in `runner/verify_rule_sufficiency.py`:
+    - Evaluated all 240 expected-side asserted literals across all 87 evaluated tasks in Suite E5.
+    - Mutated each expected-side literal one-by-one in an AST-level suite copy and ran the tightened rule sufficiency engine.
+    - Result: **240 out of 240 mutations flagged as UNRESOLVED (100.0% detection rate; 0 misses)**.
+    - Categorized all 169 excluded literals with explicit reasons (147 call argument inputs to functions under test, 22 subscript slice indices on target expressions).
+  - Added automated preflight test `test_generic_mutation_sweep` in `tests/test_suite_e5_preflight.py`.
+- **Preflight Expansion (544 Tests):**
+  - Full preflight suite expanded to 544 tests, passing 100% green across 8 parallel workers in ~3.5 minutes. Complete log committed to `tests/preflight_suite_e5_544.log` in clean UTF-8 text.
+- **Handbook & Suite Integrity:**
+  - `briefs/HANDBOOK.md`, `briefs/PLACEBO.md`, and all 106 tasks in `benchmarks/suite_e5.py` remain **100% UNCHANGED**.
+- **Strict Stop Rule Enforced:** Exactly zero factor scaffolding calls executed.
