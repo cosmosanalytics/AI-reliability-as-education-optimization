@@ -414,16 +414,11 @@ def run_single_attempt(
     last_tool_tested_patch = ""
     tool_budget_exhausted = False
 
-    # 1. Build standardized task prompt
-    # If traceback_files is defined in ticket and u_val == 0, present only traceback_files (minimal context package)
-    # and include the failing traceback excerpt per Section 8.2 & Round 12 protocol.
-    # When u_val == 1, supply whole repo and interactive tool instructions.
-    if u_val == 0 and "traceback_files" in ticket and ticket["traceback_files"]:
-        prompt_files = {
-            p: ticket["repo"][p] for p in ticket["traceback_files"] if p in ticket["repo"]
-        }
-    else:
-        prompt_files = ticket["repo"]
+    # 1. Build standardized task prompt (Round 13 E1 Baseline Definition)
+    # Per Round 13 E1 ruling: show ALL files in repository (non-test source files + visible tests)
+    # plus ticket issue and failing traceback excerpt across all cells.
+    # Factor u=1 specifically means "may run tests / interactive tools", not "see the files".
+    prompt_files = ticket["repo"]
 
     repo_listing = "".join(
         f"=== FILE: {p} ===\n{c.rstrip()}\n=== END ===\n"

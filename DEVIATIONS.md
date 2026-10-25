@@ -195,3 +195,24 @@ This is an append-only, timestamped log recording all operational decisions, har
 - **Integrity:** 0 truncations, 0 API errors, 0 retries, 0 protected file modifications. Total billed tokens: 284,629 ($0.0725 USD).
 - **Deliverables:** Generated `PILOT_CALIBRATION_REPORT.md`, `results/pilot_calibration/rows.json`, `results/pilot_calibration/rows.jsonl`.
 - **Stop Rule:** Execution strictly halted. Awaiting Round 13 Pre-Registration Review.
+
+### [2026-10-25T03:40:00Z] Round 13: Redefinition of Baseline B0 & Difficulty Pre-Registration
+- **Context:** Claude Round 13 review noted that under the previous B0 condition (presenting only the traceback file), all 12 Hidden Root Cause tasks were unfixable by construction (0% floor), creating a bimodal distribution (12 ceiling, 15 floor, 1 intermediate) that confounded knowledge factors ($s, p$) with file visibility. Furthermore, evaluating solely at $T=0.0$ resulted in near-deterministic runs (ICC = 0.966), making repeated runs redundant and under-estimating sample size requirements.
+- **Action & Redefinition of Baseline B0 (E1):**
+  - Updated `runner/agent_runner.py` line 417: B0 presents ALL repository files (all non-test source modules + visible test files), plus ticket issue and failing test traceback excerpt (`ticket["traceback_text"]`).
+  - Factor $u=1$ is strictly defined as "proactive interactive test running via the pytest tool loop", NOT file visibility. All agents in all cells can see the complete repository files statically in context.
+  - This removes the by-construction floor for hidden-root-cause tasks and allows baseline models to inspect and resolve cross-module dependencies.
+- **Two-Temperature Sampling Protocol (E2):**
+  - Profile 1: $T=0.0$ single run (28 attempts) to record deterministic baseline capability.
+  - Profile 2: $T=0.7$ across 5 repeats (140 attempts) to estimate true within-task sampling variance, intraclass correlation, and stochastic response behavior.
+  - Total attempts: 168 attempts.
+- **Pre-Registered Difficulty Contingency Rule (E3):**
+  - Before running, we formally pre-register: if fewer than 8 of the 28 tasks fall within the calibrated intermediate difficulty range ($15\% \le \bar{Y}_{B0} \le 85\%$) under the redefined B0, the calibration gate remains closed. The task suite will be expanded or modified (e.g. adding intermediate-difficulty tasks or adjusting prompt verbosity) per reviewer determination on baseline difficulty and fairness only.
+- **Qualitative Failure Diagnostics (E4):**
+  - Raw response inspection confirmed:
+    - 2001 (0%): Model attempted itemized recalculation in `pricing.py` instead of fixing `tax_engine.py` (which was hidden from B0). Solvable under redefined B0.
+    - 2004 (100%): In B0 there is no handbook to distract the agent, so the model followed the local docstring ceiling mandate directly.
+    - 2008 (0%): Model used shallow `.update(deltas)` on top-level dictionary instead of nested recursive update.
+    - 2016 (0%): Model implemented backslash escaping correctly, but hidden test assertion contained an unescaped single-quoted string literal mismatch.
+- **Paired Power Analysis (E5):**
+  - For $J = 13$ held-out tasks at $\alpha = 0.05$ (two-tailed, 80% power), the minimum detectable effect size is $\text{MDE} \approx 0.846 \cdot s_D$. For moderate task-to-task difference standard deviation ($s_D = 0.30$), $\text{MDE} \approx 25.4$ percentage points. If the true educational effect is $+15.0$ percentage points, detecting it requires $J \ge 37$ tasks (or $s_D \le 0.177$).
