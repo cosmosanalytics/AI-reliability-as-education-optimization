@@ -1,29 +1,33 @@
 #!/usr/bin/env python3
 """Screening Runner & Hard-Stop Cost Meter for Tune-Set Factorial Experiment (2^{5-1}).
 
-Round 23 Protocol Specifications:
+Round 24 Protocol Specifications (Option B Approved):
 1. Pinned Run Configuration in Screening Log Header:
    - model_id: gemini-2.5-flash
    - temperature: 0.7
    - top_p: 0.95
    - max_output_tokens: 16384
    - thinking_budget: 2048
-   - commit SHA of FREEZE.json: tracked and pinned
-2. Hard-Stop Cost Meter:
+   - commit SHA of FREEZE.json: tracked and pinned (a7ecb64)
+2. Hard-Stop Cost Meter & 50% Spend Threshold Pause:
    - Pricing Source: Google Generative AI / Gemini API Official Pricing (ai.google.dev/pricing, Oct 2026)
    - Input: $0.30 per 1M tokens ($0.00000030 / token)
    - Output: $2.50 per 1M tokens ($0.00000250 / token), with thoughts_tokens billed at standard output rate!
    - Cumulative cost formula:
        cost = (tokens_in * 0.30 / 1e6) + ((tokens_out + thoughts_tokens) * 2.50 / 1e6)
-   - If cumulative_cost_usd >= cost_cap, execution halts immediately, logs the event, and makes zero further API calls.
+   - If cumulative_cost_usd >= cost_cap ($37.85 USD), execution halts immediately, logs the event, and makes zero further API calls.
+   - 50% Threshold Pause Check:
+     If spend crosses 50% of the cap ($18.93 USD) before 40% of attempts (883 of 2,208) are done,
+     pause execution, generate and print running per-cell cost table, set status PAUSED_SPEND_THRESHOLD_REACHED,
+     and halt gracefully for operator review.
 3. Strict Stop Rule:
    - Screening factor cells are strictly gated. The script will NOT execute factor cells automatically
      unless explicitly invoked with --approved-for-execution.
    - Without --approved-for-execution, it prints the run config and validation plan, exiting safely.
 4. Factorial Design:
-   - 16 cells (C0000..C1111) under Resolution-V defining relation I = SPURK:
+   - 16 cells (C0000..C1111) under Resolution-V defining relation I = spurk:
        k = 1 if ((s + p + u + r) % 2 == 0) else 0
-   - Evaluated on the 46 tune tasks from benchmarks/splits_e5.json across 5 runs (3,680 total attempts).
+   - Evaluated on the 46 tune tasks from benchmarks/splits_e5.json across 3 runs (2,208 total attempts).
 """
 
 import argparse
@@ -56,14 +60,14 @@ from agent_runner import LiveModelBackend, compute_k_parity, run_single_attempt
 PRICE_INPUT_PER_1M = 0.30
 PRICE_OUTPUT_PER_1M = 2.50
 
-# Pinned default hyperparameters
+# Pinned default hyperparameters (Option B Approved)
 DEFAULT_MODEL_ID = "gemini-2.5-flash"
 DEFAULT_TEMPERATURE = 0.7
 DEFAULT_TOP_P = 0.95
 DEFAULT_MAX_OUTPUT_TOKENS = 16384
 DEFAULT_THINKING_BUDGET = 2048
-DEFAULT_RUNS = 5
-DEFAULT_COST_CAP_USD = 63.09  # Empirical 1.5x buffer over projected $42.06 USD for 3,680 attempts (Round 23 Item B2 smoke test: $37.85 for N=3, $63.09 for N=5)
+DEFAULT_RUNS = 3
+DEFAULT_COST_CAP_USD = 37.85  # Round 24 Option B Approved: N=3 runs per cell, 2,208 total attempts, projected $25.24 USD, hard-stop cap $37.85 USD
 
 
 def get_freeze_commit_sha(repo_root: str = REPO_ROOT) -> str:
@@ -81,8 +85,8 @@ def get_freeze_commit_sha(repo_root: str = REPO_ROOT) -> str:
             return sha
     except Exception:
         pass
-    # Fallback to the approved Round 23 freeze commit SHA
-    return "798af3b1de167e062de80a727acf1c86fb987a78"
+    # Fallback to the approved Round 24 freeze commit SHA (a7ecb64)
+    return "a7ecb643e20f5df1edb497d26298c9c1e2bea77c"
 
 
 def atomic_json_write(file_path: str, data) -> None:
@@ -103,6 +107,56 @@ def atomic_json_write(file_path: str, data) -> None:
             except Exception:
                 pass
         raise
+
+
+def compute_per_cell_cost_table(all_rows, cells=None):
+    """Computes running per-cell cost breakdown from row records."""
+    if cells is None:
+        cells = build_screening_cells()
+    cell_stats = {
+        c[0]: {
+            "attempts": 0,
+            "tokens_in": 0,
+            "tokens_out": 0,
+            "thoughts": 0,
+            "billed_tokens": 0,
+            "cost_usd": 0.0,
+            "mean_cost_per_attempt": 0.0,
+        }
+        for c in cells
+    }
+    for row in all_rows:
+        c = row.get("cell")
+        if c in cell_stats:
+            cell_stats[c]["attempts"] += 1
+            cell_stats[c]["tokens_in"] += row.get("tokens_in", 0)
+            cell_stats[c]["tokens_out"] += row.get("tokens_out", 0)
+            cell_stats[c]["thoughts"] += row.get("thoughts_tokens", 0)
+            cell_stats[c]["billed_tokens"] += row.get("total_billed_tokens", 0)
+            cell_stats[c]["cost_usd"] += row.get("cost_usd", 0.0)
+
+    for c, stats in cell_stats.items():
+        stats["cost_usd"] = round(stats["cost_usd"], 6)
+        stats["mean_cost_per_attempt"] = (
+            round(stats["cost_usd"] / stats["attempts"], 6)
+            if stats["attempts"] > 0
+            else 0.0
+        )
+    return cell_stats
+
+
+def format_per_cell_table(per_cell_table: dict) -> str:
+    """Formats running per-cell cost breakdown dictionary into a clean aligned table."""
+    headers = f"{'Cell':<8} | {'Attempts':<9} | {'In Tok':<10} | {'Out Tok':<10} | {'Thoughts':<10} | {'Cost (USD)':<11} | {'Mean $/Att':<11}"
+    sep = "-" * len(headers)
+    lines = [headers, sep]
+    for cell in sorted(per_cell_table.keys()):
+        st = per_cell_table[cell]
+        lines.append(
+            f"{cell:<8} | {st['attempts']:<9} | {st['tokens_in']:<10} | {st['tokens_out']:<10} | "
+            f"{st['thoughts']:<10} | ${st['cost_usd']:<10.4f} | ${st['mean_cost_per_attempt']:<10.4f}"
+        )
+    return "\n".join(lines)
 
 
 class CostMeter:
@@ -300,7 +354,7 @@ def load_tune_tasks(repo_root: str = REPO_ROOT):
 
 
 def build_screening_cells():
-    """Generates the 16 Resolution-V fractional factorial cells C0000..C1111 with parity defining relation I = SPURK."""
+    """Generates the 16 Resolution-V fractional factorial cells C0000..C1111 with parity defining relation I = spurk."""
     cells = [
         (f"C{s}{p}{u}{r}", s, p, u, r, compute_k_parity(s, p, u, r))
         for s in [0, 1]
@@ -344,7 +398,7 @@ def create_initial_header(
         "experiment": {
             "name": "Tune-Set Factorial Screening",
             "design": "2^{5-1} Resolution-V Fractional Factorial",
-            "defining_relation": "I = SPURK",
+            "defining_relation": "I = spurk",
             "parity_rule": "k = 1 if ((s + p + u + r) % 2 == 0) else 0",
             "factors": {
                 "s": "Sources (HANDBOOK.md house conventions)",
@@ -364,6 +418,7 @@ def create_initial_header(
             "max_output_tokens": max_output_tokens,
             "thinking_budget": thinking_budget,
             "commit_sha_freeze_json": freeze_sha,
+            "commit_sha_short": freeze_sha[:7] if freeze_sha else "a7ecb64",
         },
         "pricing": {
             "pricing_source": "Google Generative AI / Gemini API Official Pricing (ai.google.dev/pricing, Oct 2026)",
@@ -446,7 +501,7 @@ def run_screening(
     # STRICT STOP RULE VERIFICATION:
     if not approved_for_execution and not dry_run:
         print("\n[STRICT STOP RULE ENFORCED]")
-        print("Screening factor cells (s, p, u, r, k) are strictly gated per Round 23 protocol.")
+        print("Screening factor cells (s, p, u, r, k) are strictly gated per Round 24 protocol.")
         print("Zero API calls will be made without explicit invocation approval.")
         print("\nTo execute when approved by reviewer:")
         print(f"  python runner/run_screening.py --approved-for-execution --cost-cap {cost_cap}\n")
@@ -537,6 +592,34 @@ def run_screening(
                 for r in loaded:
                     k_tuple = (r.get("cell"), r.get("run"), r.get("ticket"))
                     existing_keys.add(k_tuple)
+                    # Ensure cost_usd and call_count exist in loaded rows
+                    if "cost_usd" not in r:
+                        r_tin = r.get("tokens_in", 0)
+                        r_tout = r.get("tokens_out", 0)
+                        r_tth = r.get("thoughts_tokens", 0)
+                        r["cost_usd"] = round(
+                            (r_tin * PRICE_INPUT_PER_1M / 1e6)
+                            + ((r_tout + r_tth) * PRICE_OUTPUT_PER_1M / 1e6),
+                            6,
+                        )
+                    if "call_count" not in r:
+                        r_code = r.get("cell", "")
+                        r_run = r.get("run", 1)
+                        r_tid = r.get("ticket", "")
+                        pfx = f"{r_code}_run{r_run}_{r_tid}"
+                        tr_file = os.path.join(raw_dir, f"{pfx}_transcript.json")
+                        cc = None
+                        if os.path.isfile(tr_file):
+                            try:
+                                with open(tr_file, "r", encoding="utf-8") as tf:
+                                    td = json.load(tf)
+                                    if isinstance(td, list):
+                                        cc = len(td)
+                            except Exception:
+                                pass
+                        if cc is None:
+                            cc = 1 + r.get("tool_call_count", 0) + (1 if r.get("r") == 1 else 0) + r.get("retries_done", 0)
+                        r["call_count"] = cc
                     existing_rows.append(r)
                     initial_in += r.get("tokens_in", 0)
                     initial_out += r.get("tokens_out", 0)
@@ -575,6 +658,46 @@ def run_screening(
         header_data["cost_meter"] = cost_meter.get_state()
         atomic_json_write(header_path, header_data)
         raise RuntimeError(cost_meter.halt_reason)
+
+    # Check 50% cap threshold pause check on resume
+    spend_threshold = cost_cap * 0.50
+    attempts_threshold = total_attempts * 0.40
+    if (
+        cost_meter.cumulative_cost_usd >= spend_threshold
+        and cost_meter.attempts_completed < attempts_threshold
+    ):
+        per_cell_table = compute_per_cell_cost_table(existing_rows, cells)
+        print("\n" + "=" * 80)
+        print("WARNING: SPEND THRESHOLD PAUSE TRIGGERED ON RESUME")
+        print(
+            f"Spend (${cost_meter.cumulative_cost_usd:.4f}) reached or crossed 50% of cap (${spend_threshold:.2f}) "
+            f"before 40% of attempts ({cost_meter.attempts_completed}/{int(attempts_threshold)}) were completed!"
+        )
+        print("Running per-cell cost breakdown table:")
+        print(format_per_cell_table(per_cell_table))
+        print("=" * 80 + "\n", flush=True)
+
+        header_data = create_initial_header(
+            freeze_sha=freeze_sha,
+            cost_cap_usd=cost_cap,
+            tune_tasks_count=len(tune_tasks),
+            cells_count=len(cells),
+            runs_count=runs,
+            model_id=model_id,
+            temperature=temperature,
+            top_p=top_p,
+            max_output_tokens=max_output_tokens,
+            thinking_budget=thinking_budget,
+        )
+        header_data["experiment"]["status"] = "PAUSED_SPEND_THRESHOLD_REACHED"
+        header_data["cost_meter"] = cost_meter.get_state()
+        header_data["running_per_cell_cost_table"] = per_cell_table
+        atomic_json_write(header_path, header_data)
+        raise RuntimeError(
+            f"PAUSED_SPEND_THRESHOLD_REACHED: Spend reached ${cost_meter.cumulative_cost_usd:.4f} "
+            f"(>= 50% cap ${spend_threshold:.2f}) before 40% of attempts "
+            f"({cost_meter.attempts_completed}/{int(attempts_threshold)}) were completed."
+        )
 
     # Client setup
     client = ScreeningModelBackend(
@@ -630,6 +753,29 @@ def run_screening(
         )
         res["order_idx"] = i
 
+        # Compute exact call_count from transcript or calculate exactly
+        prefix = f"{code}_run{r_idx}_{ticket['id']}"
+        transcript_path = os.path.join(raw_dir, f"{prefix}_transcript.json")
+        call_count = None
+        if os.path.isfile(transcript_path):
+            try:
+                with open(transcript_path, "r", encoding="utf-8") as tf:
+                    turns = json.load(tf)
+                    if isinstance(turns, list):
+                        call_count = len(turns)
+            except Exception:
+                pass
+        if call_count is None:
+            call_count = 1 + res.get("tool_call_count", 0) + (1 if r == 1 else 0) + res.get("retries_done", 0)
+        res["call_count"] = call_count
+
+        # Compute cost_usd for this attempt
+        tok_in = res.get("tokens_in", 0)
+        tok_out = res.get("tokens_out", 0)
+        tok_th = res.get("thoughts_tokens", 0)
+        attempt_cost = (tok_in * PRICE_INPUT_PER_1M / 1e6) + ((tok_out + tok_th) * PRICE_OUTPUT_PER_1M / 1e6)
+        res["cost_usd"] = round(attempt_cost, 6)
+
         with file_lock:
             all_rows.append(res)
             # Update cost meter and check hard-stop cap
@@ -659,10 +805,54 @@ def run_screening(
                 atomic_json_write(rows_path, all_rows)
                 raise exc
 
+            meter_state = cost_meter.get_state()
+
+            # 50% cap threshold pause check:
+            # "If spend crosses 50% of the cap ($18.93) before 40% of attempts (883 of 2,208) are done,
+            # pause and send me the running per-cell cost table before continuing."
+            spend_threshold_curr = cost_cap * 0.50
+            attempts_threshold_curr = total_attempts * 0.40
+            if (
+                cost_meter.cumulative_cost_usd >= spend_threshold_curr
+                and cost_meter.attempts_completed < attempts_threshold_curr
+            ):
+                per_cell_table = compute_per_cell_cost_table(all_rows, cells)
+                print("\n" + "=" * 80)
+                print("WARNING: SPEND THRESHOLD PAUSE TRIGGERED")
+                print(
+                    f"Spend (${cost_meter.cumulative_cost_usd:.4f}) reached or crossed 50% of cap (${spend_threshold_curr:.2f}) "
+                    f"before 40% of attempts ({cost_meter.attempts_completed}/{int(attempts_threshold_curr)}) were completed!"
+                )
+                print("Running per-cell cost breakdown table:")
+                print(format_per_cell_table(per_cell_table))
+                print("=" * 80 + "\n", flush=True)
+
+                header_data = create_initial_header(
+                    freeze_sha=freeze_sha,
+                    cost_cap_usd=cost_cap,
+                    tune_tasks_count=len(tune_tasks),
+                    cells_count=len(cells),
+                    runs_count=runs,
+                    model_id=model_id,
+                    temperature=temperature,
+                    top_p=top_p,
+                    max_output_tokens=max_output_tokens,
+                    thinking_budget=thinking_budget,
+                )
+                header_data["experiment"]["status"] = "PAUSED_SPEND_THRESHOLD_REACHED"
+                header_data["cost_meter"] = meter_state
+                header_data["running_per_cell_cost_table"] = per_cell_table
+                atomic_json_write(header_path, header_data)
+                atomic_json_write(rows_path, all_rows)
+                raise RuntimeError(
+                    f"PAUSED_SPEND_THRESHOLD_REACHED: Spend reached ${cost_meter.cumulative_cost_usd:.4f} "
+                    f"(>= 50% cap ${spend_threshold_curr:.2f}) before 40% of attempts "
+                    f"({cost_meter.attempts_completed}/{int(attempts_threshold_curr)}) were completed."
+                )
+
             # Update rows.json and header.json atomically
             atomic_json_write(rows_path, all_rows)
 
-            meter_state = cost_meter.get_state()
             header_data = create_initial_header(
                 freeze_sha=freeze_sha,
                 cost_cap_usd=cost_cap,
@@ -683,7 +873,8 @@ def run_screening(
 
             print(
                 f"[{len(all_rows)}/{len(schedule)}] Completed cell={code}, run={r_idx}, ticket={ticket['id']}: "
-                f"strict={res.get('final_strict')} | Cumulative Cost: ${meter_state['cumulative_cost_usd']:.4f} / ${cost_cap:.2f}",
+                f"strict={res.get('final_strict')} | Calls: {res.get('call_count')} | Cost: ${res.get('cost_usd'):.5f} | "
+                f"Cumulative Cost: ${meter_state['cumulative_cost_usd']:.4f} / ${cost_cap:.2f}",
                 flush=True,
             )
         return res
@@ -696,7 +887,7 @@ def run_screening(
                     fut.result()
                 except Exception as e:
                     print(f"Screening attempt exception: {e}", flush=True)
-                    if "HARD COST CAP EXCEEDED" in str(e):
+                    if "HARD COST CAP EXCEEDED" in str(e) or "PAUSED_SPEND_THRESHOLD_REACHED" in str(e):
                         # Cancel remaining futures
                         executor.shutdown(wait=False, cancel_futures=True)
                         raise
@@ -720,6 +911,7 @@ def run_screening(
     )
     header_data["experiment"]["status"] = "COMPLETED"
     header_data["cost_meter"] = meter_state
+    header_data["running_per_cell_cost_table"] = compute_per_cell_cost_table(all_rows, cells)
     atomic_json_write(header_path, header_data)
 
     print("\n================================================================================")

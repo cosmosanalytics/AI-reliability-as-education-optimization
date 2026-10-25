@@ -505,3 +505,30 @@ unner/analyze_pilot_calibration.py to official Google Generative AI / Gemini API
   - All 9 execution outputs, transcripts, tool logs, and grades are isolated under `results/smoke_test_b2/` and discarded.
   - Frozen artifacts in `FREEZE.json` remain pristine and unmodified (`benchmarks/suite_e5.py`, `benchmarks/splits_e5.json`, `briefs/HANDBOOK.md`, `briefs/PLACEBO.md`, `runner/agent_runner.py`).
 - **Strict Stop Rule Enforced:** Exactly zero factor scaffolding screening calls executed.
+
+
+### [2026-10-25T18:50:00Z] Reviewer Finding F4 Resolution: FREEZE.json Single-Artifact SHA-256 Hash Amendment
+- **Context & Guidance:** Reviewer Finding F4 noted that `FREEZE.json` was amended once post-Round 23 following the pricing constant accounting fix (Item B1) which updated `PILOT_CALIBRATION_REPORT.md`. An explicit audit trail record is required in `DEVIATIONS.md`.
+- **Action & Resolution:**
+  - Amended `FREEZE.json` to update the SHA-256 hash of `PILOT_CALIBRATION_REPORT.md`:
+    - **Old hash:** `6DD3D1834D6FBB387438FFEEC4CDFB7F8FBEB5402DF19760F7502DE29DC0DB11`
+    - **New hash:** `B9FAFDF8F7D9CCB063BD3837750DBAB235380153E2E42334BB6526712CDF4730`
+  - **Reason:** Financial reporting update only (updating pilot cost from $0.38 to $3.0092 USD); zero benchmark source code, tasks, briefs, or tests were altered.
+  - **Audit Commitment:** From launch on, `FREEZE.json`, the runner (`runner/run_screening.py`), the benchmarks (`benchmarks/suite_e5.py`), and the briefs (`briefs/`) are strictly frozen with zero further changes permitted.
+
+### [2026-10-25T18:55:00Z] Round 24 Implementation: Screening Experiment Design Selection (Option B Approved) & Operational Parameters
+- **Context:** Following the Item B2 empirical smoke test and budget extrapolation, the user evaluated two candidate screening experimental designs:
+  - **Option A (Full Design):** $N = 5$ runs per cell across 16 cells and 46 tune tasks (3,680 attempts), projected baseline spend $42.06 USD, hard-stop cap $63.09 USD.
+  - **Option B (Lean Design):** $N = 3$ runs per cell across 16 cells and 46 tune tasks (2,208 attempts), projected baseline spend $25.24 USD, hard-stop cap $37.85 USD.
+- **Formal Decision:**
+  - On 2026-10-25, the user reviewed the empirical budget extrapolation and formally chose **Option B** ($N = 3$ runs per cell, 2,208 total scheduled attempts, projected baseline spend $25.24 USD, hard-stop cap $37.85 USD).
+  - **Option A** ($N = 5$ runs, 3,680 attempts, $63.09 cap) is recorded as **NOT approved**.
+- **Scientific & Statistical Justification:**
+  - Screening serves specifically to identify the candidate scaffolding configuration $\theta^*$; the confirmatory study on fresh held-out data decides whether it generalizes.
+  - Per reviewer finding F3, the extra two runs per cell ($N=5$ vs $N=3$) buy little against task-to-task variation, as variance is dominated by between-task heterogeneity rather than within-task run-to-run stochasticity.
+  - Option B provides sufficient statistical power ($\beta \ge 0.80$ for main effects $\Delta \ge 5.0\%$) while providing a 40% cost reduction ($16.82 USD saved) and keeping total projected screening spend comfortably within budget ($25.24 projected, $37.85 hard-stop cap).
+- **Operational Implementation:**
+  - Configured default `--runs 3` and default `--cost-cap 37.85` in `runner/run_screening.py`.
+  - Added mid-run spend threshold pause guard: if cumulative spend crosses 50% of the cap ($18.93 USD) before 40% of attempts (883 of 2,208) are done, the runner pauses execution, generates a per-cell cost breakdown table, updates status to `PAUSED_SPEND_THRESHOLD_REACHED`, and halts gracefully for operator review.
+  - Verified every attempt row in `rows.json` explicitly logs `cost_usd` (computed via $0.30/1M in, $2.50/1M out rates) and `call_count` (exact model turn count from transcripts).
+  - Stamped frozen commit SHA `a7ecb64` and parity defining relation $I = \text{spurk}$ ($k = 1$ if $(s + p + u + r) \pmod 2 == 0$ else 0) into `screening_log_header.json`.

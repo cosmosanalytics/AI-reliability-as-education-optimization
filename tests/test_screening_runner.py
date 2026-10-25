@@ -1,15 +1,18 @@
-"""Unit tests for Screening Runner and Cost Meter (Round 23 Item B1).
+"""Unit tests for Screening Runner and Cost Meter (Round 24 Option B Approved).
 
 Tests:
-1. compute_k_parity(s, p, u, r) satisfies Resolution-V defining relation I = SPURK.
+1. compute_k_parity(s, p, u, r) satisfies Resolution-V defining relation I = spurk.
 2. Verification of all 16 cell briefs in briefs/C0000.md .. C1111.md.
 3. Pricing formula calculation: $0.30/1M in, $2.50/1M out (including thoughts_tokens).
 4. Hard-stop cost meter cap trip behavior and thread-safety.
 5. Atomic JSON file updates and crash-safety.
 6. Strict Stop Rule enforcement (no execution without explicit approval).
 7. Tune task dataset loading: exactly 46 tasks from splits_e5.json.
-8. Pinned metadata header fields and commit SHA of FREEZE.json.
+8. Pinned metadata header fields and commit SHA of FREEZE.json (a7ecb64).
 9. Pricing constants and thoughts_tokens inclusion in analyze_pilot_calibration.py.
+10. Row-level cost_usd and call_count calculation and inclusion.
+11. 50% cap threshold pause check ($18.93 spend before 883 attempts triggers PAUSED_SPEND_THRESHOLD_REACHED).
+12. Running per-cell cost table computation and formatting.
 """
 
 import json
@@ -24,11 +27,15 @@ sys.path.insert(0, os.path.join(REPO_ROOT, "benchmarks"))
 
 from run_screening import (
     CostMeter,
+    DEFAULT_COST_CAP_USD,
+    DEFAULT_RUNS,
     PRICE_INPUT_PER_1M,
     PRICE_OUTPUT_PER_1M,
     atomic_json_write,
     build_screening_cells,
+    compute_per_cell_cost_table,
     create_initial_header,
+    format_per_cell_table,
     get_freeze_commit_sha,
     load_tune_tasks,
     run_screening,
@@ -39,7 +46,7 @@ import suite_e5
 
 
 def test_resolution_v_parity():
-    """Verify compute_k_parity implements I = SPURK for all 16 cells."""
+    """Verify compute_k_parity implements I = spurk for all 16 cells."""
     cells = build_screening_cells()
     assert len(cells) == 16, f"Expected 16 cells, got {len(cells)}"
 
@@ -198,7 +205,7 @@ def test_tune_tasks_count_and_stratification():
 
 
 def test_strict_stop_rule_and_metadata_header():
-    """Verify run_screening enforces Strict Stop Rule and logs pinned metadata header."""
+    """Verify run_screening enforces Strict Stop Rule and logs pinned metadata header with Option B defaults."""
     with tempfile.TemporaryDirectory() as tmp_dir:
         res = run_screening(
             output_dir=tmp_dir,
@@ -214,6 +221,11 @@ def test_strict_stop_rule_and_metadata_header():
         with open(header_path, "r", encoding="utf-8") as f:
             header = json.load(f)
 
+        # Check defining relation and parity rule
+        exp = header["experiment"]
+        assert exp["defining_relation"] == "I = spurk"
+        assert exp["parity_rule"] == "k = 1 if ((s + p + u + r) % 2 == 0) else 0"
+
         # Check pinned run config
         run_cfg = header["run_config"]
         assert run_cfg["model_id"] == "gemini-2.5-flash"
@@ -221,6 +233,7 @@ def test_strict_stop_rule_and_metadata_header():
         assert run_cfg["top_p"] == 0.95
         assert run_cfg["max_output_tokens"] == 16384
         assert run_cfg["thinking_budget"] == 2048
+        assert run_cfg["commit_sha_freeze_json"].startswith("a7ecb64")
         assert len(run_cfg["commit_sha_freeze_json"]) == 40
 
         # Check pricing and cost meter
@@ -229,11 +242,13 @@ def test_strict_stop_rule_and_metadata_header():
         assert pricing["price_output_per_1m_usd"] == 2.50
         assert pricing["thoughts_billed_as_output"] is True
 
+        # Check Option B operational parameters
         scope = header["execution_scope"]
         assert scope["tune_tasks_count"] == 46
         assert scope["cells_count"] == 16
-        assert scope["runs_count"] == 5
-        assert scope["total_scheduled_attempts"] == 3680
+        assert scope["runs_count"] == 3
+        assert scope["total_scheduled_attempts"] == 2208
+        assert scope["cost_cap_usd"] == 37.85
 
         # Verify no rows.json was written (zero model execution)
         assert not os.path.exists(os.path.join(tmp_dir, "rows.json"))
@@ -267,3 +282,112 @@ def test_analyze_pilot_calibration_constants():
     assert "PRICE_OUTPUT_PER_1M = 2.50" in content or "2.50" in content
     assert "thoughts_tokens" in content
     assert "Oct 2026" in content or "October 2026" in content
+
+
+def test_per_cell_cost_table_computation_and_formatting():
+    """Verify compute_per_cell_cost_table and format_per_cell_table."""
+    rows = [
+        {
+            "cell": "C0000",
+            "tokens_in": 1000,
+            "tokens_out": 500,
+            "thoughts_tokens": 1500,
+            "total_billed_tokens": 3000,
+            "cost_usd": 0.0053,
+        },
+        {
+            "cell": "C0000",
+            "tokens_in": 1200,
+            "tokens_out": 600,
+            "thoughts_tokens": 1800,
+            "total_billed_tokens": 3600,
+            "cost_usd": 0.00636,
+        },
+        {
+            "cell": "C1111",
+            "tokens_in": 10000,
+            "tokens_out": 800,
+            "thoughts_tokens": 4000,
+            "total_billed_tokens": 14800,
+            "cost_usd": 0.015,
+        },
+    ]
+
+    table = compute_per_cell_cost_table(rows)
+    assert len(table) == 16
+    assert table["C0000"]["attempts"] == 2
+    assert table["C0000"]["tokens_in"] == 2200
+    assert table["C0000"]["cost_usd"] == 0.01166
+    assert table["C0000"]["mean_cost_per_attempt"] == round(0.01166 / 2, 6)
+
+    assert table["C1111"]["attempts"] == 1
+    assert table["C1111"]["tokens_in"] == 10000
+    assert table["C1111"]["cost_usd"] == 0.015
+
+    assert table["C1000"]["attempts"] == 0
+    assert table["C1000"]["cost_usd"] == 0.0
+    assert table["C1000"]["mean_cost_per_attempt"] == 0.0
+
+    formatted = format_per_cell_table(table)
+    assert "Cell" in formatted
+    assert "Attempts" in formatted
+    assert "Cost (USD)" in formatted
+    assert "C0000" in formatted
+    assert "C1111" in formatted
+
+
+def test_spend_threshold_pause_check():
+    """Verify that spend reaching 50% of cap ($18.93) before 40% attempts (883) triggers PAUSED_SPEND_THRESHOLD_REACHED."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        rows_path = os.path.join(tmp_dir, "rows.json")
+        header_path = os.path.join(tmp_dir, "screening_log_header.json")
+
+        # Create 10 attempts that consumed high tokens reaching $19.00 USD (>= $18.93 USD 50% cap threshold)
+        # $19.00 USD across 10 attempts is < 883 attempts (40% of 2208)
+        simulated_rows = []
+        for i in range(10):
+            simulated_rows.append(
+                {
+                    "cell": "C1111",
+                    "s": 1,
+                    "p": 1,
+                    "u": 1,
+                    "r": 1,
+                    "k": 1,
+                    "run": 1,
+                    "ticket": f"ticket_{2001+i}",
+                    "tokens_in": 1_000_000,       # 1M in = $0.30
+                    "tokens_out": 300_000,        # 300k out = $0.75
+                    "thoughts_tokens": 340_000,   # 340k th = $0.85 -> $1.90 per attempt x 10 = $19.00 USD
+                    "total_billed_tokens": 1_640_000,
+                    "cost_usd": 1.90,
+                    "call_count": 3,
+                }
+            )
+
+        with open(rows_path, "w", encoding="utf-8") as f:
+            json.dump(simulated_rows, f, indent=2)
+
+        # Invoking run_screening with approved_for_execution should detect threshold on resume
+        with pytest.raises(RuntimeError) as exc_info:
+            run_screening(
+                output_dir=tmp_dir,
+                cost_cap=37.85,
+                runs=3,
+                approved_for_execution=True,
+                repo_root=REPO_ROOT,
+            )
+
+        assert "PAUSED_SPEND_THRESHOLD_REACHED" in str(exc_info.value)
+
+        # Verify header status and recorded running per-cell cost table
+        assert os.path.exists(header_path)
+        with open(header_path, "r", encoding="utf-8") as f:
+            header = json.load(f)
+
+        assert header["experiment"]["status"] == "PAUSED_SPEND_THRESHOLD_REACHED"
+        assert header["cost_meter"]["cumulative_cost_usd"] == 19.0
+        assert header["cost_meter"]["attempts_completed"] == 10
+        assert "running_per_cell_cost_table" in header
+        assert header["running_per_cell_cost_table"]["C1111"]["attempts"] == 10
+        assert header["running_per_cell_cost_table"]["C1111"]["cost_usd"] == 19.0
