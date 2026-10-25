@@ -532,3 +532,26 @@ unner/analyze_pilot_calibration.py to official Google Generative AI / Gemini API
   - Added mid-run spend threshold pause guard: if cumulative spend crosses 50% of the cap ($18.93 USD) before 40% of attempts (883 of 2,208) are done, the runner pauses execution, generates a per-cell cost breakdown table, updates status to `PAUSED_SPEND_THRESHOLD_REACHED`, and halts gracefully for operator review.
   - Verified every attempt row in `rows.json` explicitly logs `cost_usd` (computed via $0.30/1M in, $2.50/1M out rates) and `call_count` (exact model turn count from transcripts).
   - Stamped frozen commit SHA `a7ecb64` and parity defining relation $I = \text{spurk}$ ($k = 1$ if $(s + p + u + r) \pmod 2 == 0$ else 0) into `screening_log_header.json`.
+
+
+### [2026-10-25T22:30:00Z] Round 25 Review Finding B1 Resolution: Re-labeling Screening A, Programmatic Brief Builder, and Re-Run Scope Specification
+- **Context:** In Round 25 Review, peer review identified that the 16 cell briefs in `briefs/C*.md` dating from Phase 0 contained generic process advice (W01-W16) and generic worked examples rather than the pre-registered `briefs/HANDBOOK.md` (H01-H16) and `briefs/P3.md`.
+- **Data Treatment for Completed Campaign:**
+  - All 2,208 executed attempts ($22.77 USD spend) are preserved and designated honestly as **"Screening A: generic process book and generic worked examples (not the pre-registered handbook)"**.
+  - Reported as an exploratory finding demonstrating that generic process advice and generic examples yield small, statistically indistinguishable main effects (-1.8 pp to +1.6 pp, all 95% CIs spanning zero). No $\theta^*$ selection is derived from Screening A.
+- **Corrective Engineering Implemented:**
+  1. Archived old briefs to `briefs/archive_phase0/` to prevent accidental loading.
+  2. Implemented programmatic brief builder `runner/build_briefs.py` constructing each cell brief directly from frozen files without manual copy-paste:
+     - Fixed header + (`HANDBOOK.md` if $s=1$) + (`P3.md` if $p=1$) + ($u$ interactive tool instructions if $u=1$) + ($r$ self-review checklist if $r=1$).
+  3. Created preflight test suite in `tests/test_brief_builder.py` (6/6 passing) verifying:
+     - Verbatim presence and SHA-256 match of `HANDBOOK.md` for all $s=1$ cells; zero H-rule text and zero handbook error codes for $s=0$ cells.
+     - Verbatim presence and SHA-256 match of `P3.md` for all $p=1$ cells; zero P3 text for $p=0$ cells.
+     - Absolute absence of `PLACEBO.md` across all 16 screening cells.
+     - Exact 100.0% byte identity for the 4 cells with $s=0, p=0$ (`C0000`, `C0001`, `C0010`, `C0011`) against their archived Phase 0 counterparts and `rows.json` records.
+  4. Amended `FREEZE.json` to record hashes of all 16 programmatic briefs, `briefs/P3.md`, and preflight verification metadata.
+  5. Shell variable interpolation audit: Documented that PowerShell stripped the dollar sign in commit `bc9b326` commit message (`spend .77 USD` instead of `spend $22.77 USD`).
+- **Screening B Scope & Budget Parameters:**
+  - Cells `C0000`, `C0001`, `C0010`, `C0011` ($s=0, p=0$) are 100% invariant and preserved (552 attempts).
+  - The remaining 12 cells ($s=1$ or $p=1$) require execution: 12 cells $\times$ 46 tune tasks $\times$ 3 runs = **1,656 attempts**.
+  - Projected baseline spend: **$19.20 USD** (based on measured unit costs plus handbook token footprint); proposed 1.5x hard-stop cap: **$28.80 USD**.
+  - Execution strictly gated under `--approved-for-execution` pending explicit user budget sign-off.

@@ -394,6 +394,11 @@ def create_initial_header(
 ) -> dict:
     """Constructs the pinned metadata header for screening_log_header.json."""
     total_attempts = tune_tasks_count * cells_count * runs_count
+    handbook_path = os.path.join(REPO_ROOT, "briefs", "HANDBOOK.md")
+    practice_path = os.path.join(REPO_ROOT, "briefs", "P3.md")
+    handbook_tok = int(len(open(handbook_path, "r", encoding="utf-8").read()) / 3.8) if os.path.exists(handbook_path) else 1369
+    practice_tok = int(len(open(practice_path, "r", encoding="utf-8").read()) / 3.8) if os.path.exists(practice_path) else 1050
+
     return {
         "experiment": {
             "name": "Tune-Set Factorial Screening",
@@ -401,11 +406,17 @@ def create_initial_header(
             "defining_relation": "I = spurk",
             "parity_rule": "k = 1 if ((s + p + u + r) % 2 == 0) else 0",
             "factors": {
-                "s": "Sources (HANDBOOK.md house conventions)",
-                "p": "Practice (PLACEBO.md balanced examples)",
-                "u": "Pytest Tool execution",
-                "r": "Review Checklist self-inspection",
-                "k": "Policy Retry mechanism",
+                "s": f"Sources: briefs/HANDBOOK.md (Rules H01-H16, ~{handbook_tok:,} tokens)",
+                "p": f"Practice: briefs/P3.md (two worked examples, ~{practice_tok:,} tokens)",
+                "u": "Pytest Tool execution (interactive tool loop sandbox)",
+                "r": "Review Checklist self-inspection (mandatory intermediate turn)",
+                "k": "Policy Retry mechanism (parity-governed single retry turn)",
+            },
+            "inserted_blocks": {
+                "s_file": "briefs/HANDBOOK.md",
+                "s_approx_tokens": handbook_tok,
+                "p_file": "briefs/P3.md",
+                "p_approx_tokens": practice_tok,
             },
             "status": "INITIALIZED",
             "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),

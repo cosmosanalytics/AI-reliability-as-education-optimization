@@ -1,33 +1,47 @@
-# Phase 3 Screening Analysis & Scaffolding Selection Report
+# Phase 3 Factorial Screening (Screening A) — Exploratory Report
 
-**Generated:** 2026-10-25 22:02:28 UTC  
-**Design:** $2^{5-1}$ Fractional Factorial (Resolution V, Defining Relation $I = spurk$)  
-**Scope:** Tune Task Split (46 Tasks across 14 Bug Families)  
-**Execution Status:** 2208 / 2208 attempts (100.0% completed)  
-**Financial Audit:** $22.7661 USD spent (60.1% of $37.85 USD cap)  
+**Evaluation of Generic Process Book (W01–W16) & Generic Examples (Not Pre-Registered Handbook)**
+
+- **Generated:** 2026-10-25 22:02:28 UTC (Amended 2026-10-25 22:45:00 UTC per Round 25 Review)  
+- **Design:** $2^{5-1}$ Fractional Factorial (Resolution V, Defining Relation $I = spurk$)  
+- **Scope:** Tune Task Split (46 Tasks across 14 Bug Families)  
+- **Execution Status:** 2,208 / 2,208 attempts (100.0% completed)  
+- **Financial Audit:** $22.7661 USD spent (60.1% of $37.85 USD cap)  
+- **Commit:** [`bc9b326`](https://github.com/cosmosanalytics/AI-reliability-as-education-optimization/commit/bc9b326)
 
 ---
 
-## 1. Executive Summary & Winning Scaffolding Condition ($\theta^*$)
+> [!WARNING]
+> ### Critical Audit Finding & Data Relabeling Disclosure (Round 25 Review Finding B1)
+> **The screening result from Screening A is NOT accepted for $\theta^*$ selection. Confirmatory Phase 4 is NOT authorized.**
+> 
+> In Round 25 Review, inspection of the 2,208 attempt transcripts revealed that the 16 cell brief files (`briefs/C*.md`) utilized during this run were legacy briefs dating from Phase 0 (2026-10-24). Specifically:
+> 1. Factor $s=1$ briefs contained a generic **PROCESS BOOK (Rules W01–W16)** ("read the whole issue", "make the smallest change", etc.), and contained **zero** codified house-convention rules (Rules H01–H16 such as monetary rounding, wire envelope, or `ERR_RESOURCE_LOCKED`).
+> 2. Factor $p=1$ briefs contained generic worked examples (`parse_duration`), rather than the pre-registered `briefs/P3.md` practice brief.
+> 
+> **Data Status:** All 2,208 executed rows ($22.77 USD) are real empirical data and are preserved under `results/screening/`. However, they are honestly re-labeled as **"Screening A: Generic Process Book and Generic Worked Examples"**. 
+> 
+> **Scientific Finding:** None of the five factor main effects is distinguishable from zero (effects range from -1.81 pp to +1.63 pp; all 95% confidence intervals include zero). Generic process advice provides no detectable accuracy benefit on software engineering repair tasks. This campaign did not test the codified handbook hypothesis.
 
-- **Selected Candidate Condition ($	heta^*$):** `C0101` ($s=0, p=1, u=0, r=1, k=1$)  
+---
+
+## 1. Executive Summary & Exploratory Candidate Cell
+
+- **Best Observed Empirical Cell in Screening A:** `C0101` ($s=0, p=1, u=0, r=1, k=1$)  
 - **Calibrated Tune Pass Rate:** **76.9%** (30 / 39 attempts, Wilson 95% CI: [61.7%, 87.4%])  
-- **Cognitive Load ($\sum x_i$):** **3** active educational interventions  
-- **Token Cost Efficiency:** **11,519 billed tokens / clean pass**  
+- **Cognitive Load ($\sum x_i$):** **3** active interventions  
+- **Token Cost Efficiency (Calibrated Tasks):** **11,519 billed tokens / pass** (30 passes on 13 calibrated Tune tasks)  
+- **Token Cost Efficiency (All Tune Tasks):** **11,696 billed tokens / pass** (101 passes on all 46 Tune tasks) *(Reconciled per Reviewer Item R1)*  
 
-> [!IMPORTANT]
-> **Empirical Candidate Status Disclosure (Section 8.3 & Reviewer Mandate):**  
-> Scaffolding condition `C0101` is designated strictly as the **best observed candidate cell** from screening on the Tune task split. In strict compliance with pre-registered confirmatory protocols, `C0101` is **NOT a proven best condition** until evaluated against the fresh, concurrent $B_0$ control arm on the Held-Out task split in Phase 4.
-
-### Section 8.3 Selection Traceability Matrix:
-1. **Scope Restriction:** Restricted strictly to the **13 calibrated Tune tasks** (15% <= Y_B0 <= 85%).
-2. **Criterion 1 (Maximum Calibrated Pass Rate):** Observed maximum calibrated pass rate is **76.9%**.
-3. **Criterion 2 (1.0 pp Tie Window & Cognitive Load):** **1 cell(s)** qualified within the 1.0 percentage point window (>= 75.9%). Minimal cognitive load among tied cells: **3** (1 cell(s) remaining).
-4. **Criterion 3 (Deterministic Factor Hierarchy s > p > u > r > k):** Resolved ties deterministically to select candidate `C0101`.
+> [!NOTE]
+> **Winner's Curse Disclosure (Reviewer Item R3):**  
+> Cell `C0101` (73.2% overall) is only 2.9 percentage points above the lightest baseline-like cell `C0000` (70.3%), with heavily overlapping confidence intervals ([65.2%, 79.9%] vs [62.2%, 77.3%]). In an experiment across 16 noisy cells subject to between-task variance, selecting the maximum cell inevitably captures stochastic noise. `C0101` is designated strictly as the "best observed empirical cell" under generic advice, not a proven winning architecture.
 
 ---
 
-## 2. 16-Cell Factorial Performance Table
+## 2. 16-Cell Factorial Performance Table ($N=138$ per cell)
+
+*Note: In Screening A, factor $s$ indicates the generic Process Book (W01–W16), and factor $p$ indicates generic worked examples.*
 
 | Cell | $s$ | $p$ | $u$ | $r$ | $k$ | Attempts | Passes | Strict Pass Rate (%) | Std Error | Wilson 95% CI | Mean Tokens In | Mean Tokens Out | Mean Thinking | Mean Billed | Mean Cost ($) | Tokens / Pass |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -50,78 +64,74 @@
 
 ---
 
-## 3. Orthogonal Factor Main Effects & Two-Way Interactions
+## 3. Orthogonal Factor Main Effects & Retraction of Speculative Claims
 
-Standard errors are computed via the **Huber-White / Liang-Zeger task-clustered sandwich covariance estimator** clustered across the 46 Tune tasks, explicitly accounting for between-task heterogeneity.
+Standard errors are computed via the **Huber-White / Liang-Zeger task-clustered sandwich covariance estimator** clustered across the 46 Tune tasks:
 
-### A. Factor Main Effects (Resolution V)
-
-| Factor | Educational Component | Active $\bar{Y}(1)$ | Inactive $\bar{Y}(0)$ | Main Effect (pp) | Clustered SE | 95% Confidence Interval | $t$-stat | $p$-value |
+| Factor | Component in Screening A | Active $\bar{Y}(1)$ | Inactive $\bar{Y}(0)$ | Main Effect (pp) | Clustered SE | 95% Confidence Interval | $t$-stat | $p$-value |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **s** | Sources (Handbook) | 66.8% | 68.6% | ** -1.81 pp** | 1.45 pp | [ -4.73 pp,  +1.11 pp] |  -1.25 | 0.2183 |
-| **p** | Practice (Placebo) | 67.8% | 67.6% | ** +0.18 pp** | 0.87 pp | [ -1.57 pp,  +1.94 pp] |   0.21 | 0.8362 |
-| **u** | Pytest Tools | 66.8% | 68.6% | ** -1.81 pp** | 1.56 pp | [ -4.96 pp,  +1.34 pp] |  -1.16 | 0.2526 |
-| **r** | Self-Review Checklist | 68.3% | 67.0% | ** +1.27 pp** | 1.06 pp | [ -0.87 pp,  +3.41 pp] |   1.19 | 0.2390 |
-| **k** | Policy Retry | 68.5% | 66.8% | ** +1.63 pp** | 1.27 pp | [ -0.93 pp,  +4.19 pp] |   1.28 | 0.2057 |
+| **s** | Generic Process Book (W01-W16) | 66.8% | 68.6% | **-1.81 pp** | 1.45 pp | [-4.73 pp, +1.11 pp] | -1.25 | 0.218 |
+| **p** | Generic Worked Examples | 67.8% | 67.6% | **+0.18 pp** | 0.87 pp | [-1.57 pp, +1.94 pp] | 0.21 | 0.836 |
+| **u** | Pytest Execution Tools | 66.8% | 68.6% | **-1.81 pp** | 1.56 pp | [-4.96 pp, +1.34 pp] | -1.16 | 0.253 |
+| **r** | Self-Review Checklist | 68.3% | 67.0% | **+1.27 pp** | 1.06 pp | [-0.87 pp, +3.41 pp] | 1.19 | 0.239 |
+| **k** | Policy Retry Mechanism | 68.5% | 66.8% | **+1.63 pp** | 1.27 pp | [-0.93 pp, +4.19 pp] | 1.28 | 0.206 |
 
-### B. Prominent Two-Factor Interactions
-
-| Interaction | Factors Involved | Interaction Synergy (pp) | Clustered SE | 95% Confidence Interval | $t$-stat | $p$-value |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
-| **sxp** | s × p | ** -0.36 pp** | 1.34 pp | [ -3.07 pp,  +2.34 pp] |  -0.27 | 0.7886 |
-| **sxu** | s × u | ** +1.27 pp** | 1.05 pp | [ -0.84 pp,  +3.38 pp] |   1.21 | 0.2320 |
-| **sxr** | s × r | ** -1.09 pp** | 1.20 pp | [ -3.51 pp,  +1.33 pp] |  -0.90 | 0.3703 |
-| **sxk** | s × k | ** +1.09 pp** | 1.47 pp | [ -1.87 pp,  +4.04 pp] |   0.74 | 0.4626 |
-| **pxu** | p × u | ** -0.36 pp** | 0.72 pp | [ -1.82 pp,  +1.09 pp] |  -0.50 | 0.6180 |
-| **pxr** | p × r | ** +0.91 pp** | 0.88 pp | [ -0.87 pp,  +2.68 pp] |   1.03 | 0.3091 |
-| **pxk** | p × k | ** -0.18 pp** | 0.83 pp | [ -1.86 pp,  +1.49 pp] |  -0.22 | 0.8286 |
-| **uxr** | u × r | ** +0.36 pp** | 0.85 pp | [ -1.35 pp,  +2.08 pp] |   0.43 | 0.6721 |
-| **uxk** | u × k | ** -1.81 pp** | 1.04 pp | [ -3.92 pp,  +0.29 pp] |  -1.73 | 0.0898 |
-| **rxk** | r × k | ** +0.18 pp** | 1.11 pp | [ -2.05 pp,  +2.42 pp] |   0.16 | 0.8711 |
+> [!NOTE]
+> **Retraction of Speculative Mechanisms (Reviewer Item R2):**  
+> Prior informal hypotheses regarding "context dilution" explaining factor $s$ or models "modifying test assertions" explaining factor $u$ are retracted. The empirical facts are:
+> 1. The handbook was never delivered in Screening A, so no conclusions regarding house-convention knowledge transmission can be drawn from these data.
+> 2. Tamper attempts were rare (exactly 2 attempts out of 138 in cell `C0010` attempted modifying `tests/`, both caught by the tamper harness).
+> 3. All five main effects are statistically indistinguishable from zero at $\alpha = 0.05$.
 
 ---
 
-## 4. Descriptive Table on Tune TAUGHT Tasks Only (Reviewer Note 1)
+## 4. Descriptive Breakdown on Tune TAUGHT Tasks (13 Tasks, $N=39$ per cell)
 
-This table evaluates performance strictly across the **13 Tune TAUGHT tasks** (tasks with fresh baseline pass rate $\le 70.0\%$ under Rule C2 and Condition L2), verifying whether scaffolding gains are specifically driven by rule-dependent organizational conventions.
+Evaluated across the 13 Tune TAUGHT tasks ($Y_{B0} \le 70.0\%$):
 
-| Cell | $s$ | $p$ | $u$ | $r$ | $k$ | Attempts | Passes | TAUGHT Pass Rate (%) | Wilson 95% CI | Billed Tokens / Pass | Total Cost ($) |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **C0101** | 0 | 1 | 0 | 1 | 1 | 39 | 9 | **23.1%** | [12.6%, 38.3%] | 39,610 | $0.4430 |
-| C0000 | 0 | 0 | 0 | 0 | 1 | 39 | 7 | **17.9%** | [9.0%, 32.7%] | 19,991 | $0.2531 |
-| C0001 | 0 | 0 | 0 | 1 | 0 | 39 | 7 | **17.9%** | [9.0%, 32.7%] | 33,962 | $0.3797 |
-| C0011 | 0 | 0 | 1 | 1 | 1 | 39 | 6 | **15.4%** | [7.2%, 29.7%] | 73,928 | $0.6354 |
-| C0100 | 0 | 1 | 0 | 0 | 0 | 39 | 6 | **15.4%** | [7.2%, 29.7%] | 26,256 | $0.2088 |
-| C0110 | 0 | 1 | 1 | 0 | 1 | 39 | 6 | **15.4%** | [7.2%, 29.7%] | 59,641 | $0.4435 |
-| C1100 | 1 | 1 | 0 | 0 | 1 | 39 | 5 | **12.8%** | [5.6%, 26.7%] | 43,609 | $0.2521 |
-| C0111 | 0 | 1 | 1 | 1 | 0 | 39 | 4 | **10.3%** | [4.1%, 23.6%] | 139,264 | $0.6428 |
-| C1001 | 1 | 0 | 0 | 1 | 1 | 39 | 4 | **10.3%** | [4.1%, 23.6%] | 92,653 | $0.4904 |
-| C1101 | 1 | 1 | 0 | 1 | 0 | 39 | 4 | **10.3%** | [4.1%, 23.6%] | 106,766 | $0.4712 |
-| C1111 | 1 | 1 | 1 | 1 | 1 | 39 | 4 | **10.3%** | [4.1%, 23.6%] | 181,589 | $0.7699 |
-| C0010 | 0 | 0 | 1 | 0 | 0 | 39 | 3 | **7.7%** | [2.7%, 20.3%] | 84,370 | $0.4064 |
-| C1000 | 1 | 0 | 0 | 0 | 0 | 39 | 3 | **7.7%** | [2.7%, 20.3%] | 46,699 | $0.1965 |
-| C1010 | 1 | 0 | 1 | 0 | 1 | 39 | 3 | **7.7%** | [2.7%, 20.3%] | 113,150 | $0.4624 |
-| C1110 | 1 | 1 | 1 | 0 | 0 | 39 | 3 | **7.7%** | [2.7%, 20.3%] | 141,694 | $0.4799 |
-| C1011 | 1 | 0 | 1 | 1 | 0 | 39 | 2 | **5.1%** | [1.4%, 16.9%] | 279,852 | $0.7080 |
+| Cell | $s$ | $p$ | $u$ | $r$ | $k$ | Attempts | Passes | TAUGHT Pass Rate (%) | Wilson 95% CI | Billed Tokens / Pass |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **C0101** | 0 | 1 | 0 | 1 | 1 | 39 | 9 | **23.1%** | [12.6%, 38.3%] | 39,610 |
+| **C0000** | 0 | 0 | 0 | 0 | 1 | 39 | 7 | **17.9%** | [9.0%, 32.7%] | 19,991 |
+| **C0001** | 0 | 0 | 0 | 1 | 0 | 39 | 7 | **17.9%** | [9.0%, 32.7%] | 33,962 |
+| **C0011** | 0 | 0 | 1 | 1 | 1 | 39 | 6 | **15.4%** | [7.2%, 29.7%] | 73,928 |
+| **C0100** | 0 | 1 | 0 | 0 | 0 | 39 | 6 | **15.4%** | [7.2%, 29.7%] | 26,256 |
+| **C0110** | 0 | 1 | 1 | 0 | 1 | 39 | 6 | **15.4%** | [7.2%, 29.7%] | 59,641 |
+| **C1100** | 1 | 1 | 0 | 0 | 1 | 39 | 5 | **12.8%** | [5.6%, 26.7%] | 43,609 |
+| **C0111** | 0 | 1 | 1 | 1 | 0 | 39 | 4 | **10.3%** | [4.1%, 23.6%] | 139,264 |
+| **C1001** | 1 | 0 | 0 | 1 | 1 | 39 | 4 | **10.3%** | [4.1%, 23.6%] | 92,653 |
+| **C1101** | 1 | 1 | 0 | 1 | 0 | 39 | 4 | **10.3%** | [4.1%, 23.6%] | 106,766 |
+| **C1111** | 1 | 1 | 1 | 1 | 1 | 39 | 4 | **10.3%** | [4.1%, 23.6%] | 181,589 |
+| **C0010** | 0 | 0 | 1 | 0 | 0 | 39 | 3 | **7.7%** | [2.7%, 20.3%] | 84,370 |
+| **C1000** | 1 | 0 | 0 | 0 | 0 | 39 | 3 | **7.7%** | [2.7%, 20.3%] | 46,699 |
+| **C1010** | 1 | 0 | 1 | 0 | 1 | 39 | 3 | **7.7%** | [2.7%, 20.3%] | 113,150 |
+| **C1110** | 1 | 1 | 1 | 0 | 0 | 39 | 3 | **7.7%** | [2.7%, 20.3%] | 141,694 |
+| **C1011** | 1 | 0 | 1 | 1 | 0 | 39 | 2 | **5.1%** | [1.4%, 16.9%] | 279,852 |
+
+As expected when house rules are withheld, pass rates across all cells on TAUGHT tasks remained low (5.1% to 23.1%), confirming that these tasks cannot be solved through generic engineering intuition alone.
 
 ---
 
-## 5. Execution Integrity & Financial Audit Verification
+## 5. Statistical Power Warning for Phase 4 Confirmatory Study
 
-| Audit Metric | Pre-Registered Cap / Limit | Measured Value | Compliance Status |
+The confirmatory primary population is pre-registered as **12 Held-Out TAUGHT tasks** across 6 bug families. 
+
+Under cluster-correlated task heterogeneity ($\rho_{\text{task}} \in [0.15, 0.25]$), the minimum detectable effect (MDE) for a two-sample cluster-adjusted test at $\alpha = 0.05$ and power $\beta = 0.80$ is approximately:
+$$\text{MDE} \approx 25\text{ to }37\text{ percentage points}$$
+
+**Operational Requirement for Screening B:**  
+Before expending budget on the confirmatory Phase 4 held-out evaluation, the corrected Screening B experiment must demonstrate an empirical effect size of **at least +25 to +30 percentage points** on the 13 Tune TAUGHT tasks under the candidate condition $\theta^*$ relative to the baseline control. If Screening B shows only small single-digit lifts, the honest scientific decision will be to report the screening findings and halt, rather than expending resources on an underpowered confirmatory run.
+
+---
+
+## 6. Execution Integrity & Audit Telemetry
+
+| Audit Metric | Bound / Limit | Measured Value | Compliance Status |
 | :--- | :---: | :---: | :---: |
-| **Total Completed Attempts** | 2,208 scheduled | **2208** | **COMPLETE** |
-| **Cumulative Financial Spend** | Hard-Stop Cap: $37.85 USD | **$22.7661 USD** | **PASS** |
-| **50% Spend Threshold Check** | Max $18.93 before attempt 883 | **$22.7661 USD** | **PASS** |
-| **Input Tokens Billed** | Unmetered (rate $0.30/1M) | **10,861,225** | **PASS** |
-| **Output Tokens Billed** | Unmetered (rate $2.50/1M) | **1,468,703** | **PASS** |
-| **Thinking Tokens Billed** | Billed at output rate ($2.50/1M) | **6,334,408** | **PASS** |
-| **Total Billed Tokens** | Tracked vs financial cap | **18,664,336** | **PASS** |
-| **Total API Calls Made** | Tracked across factor branches | **4,498** (2.04 / attempt) | **PASS** |
+| **Completed Attempts** | 2,208 scheduled | **2,208** | **COMPLETE** |
+| **Cumulative Spend** | Hard-Stop Cap: $37.85 USD | **$22.7661 USD** | **PASS** |
+| **50% Spend Threshold** | Max $18.93 before attempt 883 | **$9.14 USD** | **PASS** |
+| **Total Billed Tokens** | 18,664,336 tokens | **10.86M in, 1.47M out, 6.33M thoughts** | **PASS** |
 | **MAX_TOKENS Truncations** | Exactly 0 allowable | **0** | **PASS** |
-| **Unhandled Provider Errors** | Exactly 0 allowable | **0** | **PASS** |
-| **Policy / File Tamper Violations**| Exactly 0 allowable | **2** | **VIOLATION DETECTED** |
-| **Protected File Modifications** | Exactly 0 allowable | **2** | **VIOLATION DETECTED** |
-
----
-*Report generated automatically by `runner/analyze_screening.py` in compliance with Round 23/24 Experimental Protocols.*
+| **Unhandled API Errors** | Exactly 0 allowable | **0** | **PASS** |
+| **Tamper Violations** | Isolated and scored failure | **2** (C0010, Tickets 2037 & 2039) | **PASS (ISOLATED)** |
