@@ -27,15 +27,21 @@
 | `calendar_recurrence` | 2010 | Subscription Active Window Evaluator | `TAUGHT` | 8/8 | 7/8 | 8/8 | 8/8 |
 | `calendar_recurrence` | 2012 | Audit Log Retention Window | `TAUGHT` | 8/8 | 8/8 | 8/8 | 8/8 |
 
-## 3. Plain-Language Reading (5 Lines)
+## 3. Arm Below Rule-Only or Baseline Analysis
+
+- **`state_transitions` (Rule H15):** Rule-only R scored 16/16 (100.0%) while Full Handbook F scored 13/16 (81.2%), a difference of -18.8 pts.
+  - **Failing Tasks & Runs:** All 3 misses occurred on **Task 2078** (Payment Escrow Lifecycle) in runs `r1`, `r3`, and `r4` (Task 2078 arm F pass rate: 1/4).
+  - **Patch Difference Analysis:** In the failing F patches for Task 2078, the model incorporated Rule H03 (Container Immutability) concepts from the broader handbook, altering how escrow dictionaries were copied/mutated in place. By contrast, under Rule-only R, the model received only Rule H15 and focused strictly on the finite state machine transition validation and audit tuples without introducing secondary container transformations. None of the runs committed policy violations.
+
+## 4. Plain-Language Reading (5 Lines)
 
 1. Unknown end (state_transitions, Pos 1): Unaided baseline B0 was 0/16 (0.0%) and Placebo P was 0/16 (0.0%).
 2. Education on unknown end: Rule-only R achieved 16/16 (100.0%, gain: +100.0 pts) and Full Handbook F achieved 13/16 (81.2%, gain: +81.2 pts).
-3. Ceiling end (calendar_recurrence, Pos 14): Unaided baseline B0 is already at ceiling 16/16 (100.0%).
+3. Ceiling end (calendar_recurrence, Pos 14): Unaided baseline B0 is at ceiling 16/16 (100.0%).
 4. Education on ceiling end: Arms P (15/16), R (16/16), and F (16/16) exhibit zero headroom with gain = +0.0 pts.
-5. The hypothesis is sharply supported at the extrema: maximum gain occurs where the model lacks prior knowledge (gain +81.2 pts), while ceiling tasks yield 0.0 pts gain.
+5. Result across endpoints: state_transitions gained +100.0 (rule) and +81.2 (full); calendar_recurrence gained 0.0.
 
-## 4. Verification Artifacts & Links
+## 5. Verification Artifacts & Links
 
 - **Raw Outputs Directory:** [`results/stage1/raw/`](file:///C:/Users/richa/ai-engineering/repo_push/results/stage1/raw)
 - **Consolidated Results:** [`results/stage1/results.json`](file:///C:/Users/richa/ai-engineering/repo_push/results/stage1/results.json)
