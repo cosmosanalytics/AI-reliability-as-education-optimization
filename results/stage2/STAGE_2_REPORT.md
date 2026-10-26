@@ -60,10 +60,10 @@ Ordered by baseline pass rate / display position (Positions 1–3: Unknown end; 
   - **Patch Difference Analysis:** Under arm F, the model attempted cross-rule adherence by proactively implementing Rule H04 (Structured Service Exception Hierarchy) alongside Rule H13. In Task 2063 `r1`, it added a `ServiceError` class in `errors.py` with type annotations `Dict[str, Any]` without importing them from `typing`, triggering a test collection `NameError: name 'Dict' is not defined`. In Task 2065 `r2` and Task 2067 `r1`, similar auxiliary exception handling code introduced syntax or collection failures. Under Rule-only R, the model focused purely on `X-Idempotency-Key` headers without touching exception classes, achieving a perfect 16/16.
 - **`timestamp_iso` (Rule H09):** Full Handbook F (87.5%) scored below Rule-Only R (100.0%), diff = -12.5 pts.
   - **Tasks & Runs Affected:** Task 2047 `r3` and Task 2049 `r2` (each 3/4 under F vs 4/4 under R).
-  - **Patch Difference Analysis:** In both failing runs, visible tests passed, but the model attempted to conform to Rule H08 (wire envelope format) by wrapping or renaming payload metadata fields alongside ISO formatting, which conflicted with hidden test assertions expecting specific unwrapped top-level keys. Under Rule-only R, the model changed only the timestamp formatting to canonical UTC ISO with millisecond precision, passing 16/16.
+  - **Patch Difference Analysis:** These are formatting bugs where the patches use naive `isoformat(timespec='milliseconds') + 'Z'`. The visible tests pass, but hidden tests fail on the exact canonical ISO representation.
 - **`cache_ttl` (Rule H11):** Rule-Only R (93.8%) scored slightly below Baseline B0 (100.0%), diff = -6.2 pts.
   - **Task & Run Affected:** Task 2026 `r2` (3/4 under R vs 4/4 under B0).
-  - **Patch Difference Analysis:** In Task 2026 `r2`, the model over-normalized a tenant prefix string that the task contract already handled, causing a single edge-case hidden test assertion to fail.
+  - **Patch Difference Analysis:** In Task 2026 `r2`, the patch extraneous added a quota check inside `is_active`, which caused an edge-case hidden assertion to fail.
 
 ## 4. Plain-Language Reading (5 Lines)
 
@@ -71,7 +71,7 @@ Ordered by baseline pass rate / display position (Positions 1–3: Unknown end; 
 2. Ceiling end (positions 12–14): timestamp_iso (Pos 12) baseline was 15/16 and gained +6.2 (rule) and -6.2 (full); cache_ttl (Pos 13) baseline was 16/16 and gained -6.2 (rule) and +0.0 (full); calendar_recurrence (Pos 14) baseline was 16/16 and gained +0.0 (rule) and +0.0 (full).
 3. Placebo arm performance across all 6 families tracked baseline closely: state_transitions P=0.0%, idempotency_keys P=0.0%, service_errors P=0.0%, timestamp_iso P=75.0%, cache_ttl P=100.0%, calendar_recurrence P=93.8%.
 4. Full handbook gains on unknown end average +87.5 pts (range: +81.2 to +100.0 pts), while ceiling end full handbook gains average -2.1 pts (range: -6.2 to +0.0 pts).
-5. Cross-rule interference in the full handbook accounted for all instances where arm F scored below rule-only arm R (details in Section 3).
+5. Cross-rule interference is likely in two families (state_transitions and idempotency_keys), while sampling noise is likely in the other two (timestamp_iso and cache_ttl).
 
 ## 5. Verification Artifacts & Links
 
