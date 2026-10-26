@@ -69,22 +69,23 @@ FAMILY_TO_RULE = {
     "state_transitions": "H15",
 }
 
-# Earlier pilot rank for tie breaking (lower pilot pass rate = earlier rank)
+# Earlier pilot rank computed on Taught and Transfer tasks from results/pilot_calibration/rows.json
+# (lower pass rate = earlier rank; ties broken alphabetically)
 PILOT_RANKS = {
-    "state_transitions": 1,
-    "wire_envelope": 2,
-    "csv_roundtrip": 3,
-    "event_ordering": 4,
-    "idempotency_keys": 5,
-    "service_errors": 6,
-    "permission_prefix": 7,
-    "metric_percentiles": 8,
-    "config_merge": 9,
-    "money_rounding": 10,
-    "config_lists": 11,
-    "timestamp_iso": 12,
-    "cache_ttl": 13,
-    "calendar_recurrence": 14,
+    "state_transitions": 1,     # 0.0% (0/48)
+    "event_ordering": 2,        # 16.7% (2/12)
+    "wire_envelope": 3,         # 43.3% (26/60)
+    "csv_roundtrip": 4,         # 50.0% (12/24)
+    "idempotency_keys": 5,      # 50.0% (24/48)
+    "permission_prefix": 6,     # 50.0% (6/12)
+    "service_errors": 7,        # 50.0% (24/48)
+    "config_lists": 8,          # 66.7% (16/24)
+    "metric_percentiles": 9,    # 66.7% (32/48)
+    "money_rounding": 10,       # 66.7% (12/18)
+    "config_merge": 11,         # 83.3% (5/6)
+    "timestamp_iso": 12,        # 95.2% (40/42)
+    "cache_ttl": 13,            # 100.0% (24/24)
+    "calendar_recurrence": 14,  # 100.0% (12/12)
 }
 
 # Task specification per family (first N in numeric order)
@@ -431,10 +432,11 @@ def main():
         key=lambda x: (x["baseline_pct"], x["pilot_rank"], x["family"])
     )
 
-    # Assign ranks (ties share rank)
+    # Assign ranks (ties share rank) and display positions (1-14)
     prev_pct = None
     prev_rank = 0
     for idx, f in enumerate(sorted_fams):
+        f["display_pos"] = idx + 1
         if prev_pct is not None and abs(f["baseline_pct"] - prev_pct) < 1e-9:
             f["rank"] = prev_rank
         else:
@@ -445,9 +447,9 @@ def main():
     # Write ranking.csv
     csv_path = os.path.join(results_dir, "ranking.csv")
     with open(csv_path, "w", encoding="utf-8") as csv_file:
-        csv_file.write("rank,family,rule_id,tasks_used,k,n,baseline_pct\n")
+        csv_file.write("display_pos,rank,family,rule_id,tasks_used,k,n,baseline_pct,pilot_rank\n")
         for f in sorted_fams:
-            csv_file.write(f"{f['rank']},{f['family']},{f['rule_id']},{f['tasks_used']},{f['k']},{f['n']},{f['baseline_pct']:.2f}\n")
+            csv_file.write(f"{f['display_pos']},{f['rank']},{f['family']},{f['rule_id']},{f['tasks_used']},{f['k']},{f['n']},{f['baseline_pct']:.2f},{f['pilot_rank']}\n")
 
     # Generate Markdown Report
     report_path = os.path.join(results_dir, "STAGE_0_REPORT.md")
@@ -464,13 +466,33 @@ def main():
         rep_file.write(f"- **Total Wall-Clock Run Duration:** ~337s (5m 37s across 8 parallel workers)\n\n")
 
         rep_file.write("## 1. Family Baseline Ranking Table\n\n")
-        rep_file.write("Rank 1 = lowest baseline pass rate (greatest lack of unaided knowledge, highest headroom for handbook gain).\n\n")
-        rep_file.write("| Rank | Bug Family | Rule ID | Tasks Used | k / n | Baseline (%) | Pilot Rank (Tie-Breaker) |\n")
-        rep_file.write("|:---:|:---|:---:|:---|:---:|:---:|:---:|\n")
+        rep_file.write("Display position 1 = lowest baseline pass rate (greatest lack of unaided knowledge, highest headroom for handbook gain).\n")
+        rep_file.write("Ties share a rank; display order broken by earlier pilot rank on Taught/Transfer tasks (`results/pilot_calibration/rows.json`), then alphabetically.\n\n")
+        rep_file.write("| Pos | Tied Rank | Bug Family | Rule ID | Tasks Used | k / n | Baseline (%) | Pilot Rank (Taught/Transfer) | Confidence Note |\n")
+        rep_file.write("|:---:|:---:|:---|:---:|:---|:---:|:---:|:---:|:---|\n")
         for f in sorted_fams:
-            rep_file.write(f"| **{f['rank']}** | `{f['family']}` | {f['rule_id']} | {f['tasks_used']} | {f['k']}/{f['n']} | **{f['baseline_pct']:.2f}%** | {f['pilot_rank']} |\n")
+            conf = "Standard"
+            if f["family"] == "config_merge":
+                conf = "**Low Confidence** (1 task, 8 att: 1/8 vs 5/6 pilot)"
+            elif f["family"] in ("metric_percentiles", "money_rounding", "config_lists"):
+                conf = "**Low Confidence** (narrow 1-2 pass margin across adjacent families: 56.25% - 62.50%)"
+            rep_file.write(f"| **{f['display_pos']}** | {f['rank']} | `{f['family']}` | {f['rule_id']} | {f['tasks_used']} | {f['k']}/{f['n']} | **{f['baseline_pct']:.2f}%** | {f['pilot_rank']} | {conf} |\n")
 
-        rep_file.write("\n## 2. Per-Task Breakdown\n\n")
+        rep_file.write("\n## 2. Stage Plan Assignments (By Display Position)\n\n")
+        rep_file.write("To avoid ambiguity from tied ranks, protocol stages are partitioned strictly by display position:\n\n")
+        rep_file.write("- **Stage 1 (One family on each end):**\n")
+        rep_file.write("  - Unknown end (Pos 1): `state_transitions` (Rule H15)\n")
+        rep_file.write("  - Ceiling end (Pos 14): `calendar_recurrence` (Rule H05)\n")
+        rep_file.write("- **Stage 2 (Two more families on each end):**\n")
+        rep_file.write("  - Unknown end (Pos 2–3): `idempotency_keys` (Rule H13), `service_errors` (Rule H04)\n")
+        rep_file.write("  - Ceiling end (Pos 12–13): `timestamp_iso` (Rule H09), `cache_ttl` (Rule H11)\n")
+        rep_file.write("- **Stage 3 (Two more families on each end):**\n")
+        rep_file.write("  - Unknown end (Pos 4–5): `config_merge` (Rule H03), `event_ordering` (Rule H07)\n")
+        rep_file.write("  - Ceiling end (Pos 10–11): `money_rounding` (Rule H02), `config_lists` (Rule H12)\n")
+        rep_file.write("- **Stage 4 (Remaining 4 middle families):**\n")
+        rep_file.write("  - Middle (Pos 6–9): `wire_envelope` (Rule H08), `csv_roundtrip` (Rule H10), `permission_prefix` (Rule H06), `metric_percentiles` (Rule H14)\n")
+
+        rep_file.write("\n## 3. Per-Task Breakdown\n\n")
         rep_file.write("| Family | Task ID | Description | Class | Passes (k/n) | Pass Rate (%) |\n")
         rep_file.write("|:---|:---:|:---|:---:|:---:|:---:|\n")
         for f in sorted_fams:
@@ -484,7 +506,7 @@ def main():
                 tpct = (tk / tn * 100.0) if tn > 0 else 0.0
                 rep_file.write(f"| `{fam}` | {tid} | {t.get('name', '')} | `{t.get('class_tag', '')}` | {tk}/{tn} | {tpct:.1f}% |\n")
 
-        rep_file.write("\n## 3. Protocol Compliance & Verification Artifacts\n\n")
+        rep_file.write("\n## 4. Protocol Compliance & Verification Artifacts\n\n")
         rep_file.write(f"- **Raw Outputs Directory:** [`results/stage0_ranking/raw/`](file:///{raw_dir.replace(os.sep, '/')})\n")
         rep_file.write(f"- **Schedule Order File:** [`results/stage0_ranking/schedule_order.json`](file:///{schedule_file.replace(os.sep, '/')})\n")
         rep_file.write(f"- **Consolidated CSV:** [`results/stage0_ranking/ranking.csv`](file:///{csv_path.replace(os.sep, '/')})\n")
