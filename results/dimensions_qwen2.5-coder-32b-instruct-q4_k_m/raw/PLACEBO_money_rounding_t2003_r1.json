@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "PLACEBO",
+  "dimension": "Books (control)",
+  "family": "money_rounding",
+  "rule_id": "H02",
+  "task_id": 2003,
+  "run_idx": 1,
+  "stage": "extremes",
+  "order_idx": 31,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "converter.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2128,
+  "candidate_tokens": 228,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: converter.py ===\n\"\"\"Currency amount converter interface.\"\"\"\nfrom decimal import Decimal\nfrom rates import FxQuote, ConversionSummary\nfrom fx_engine import apply_fx_rate\n\ndef convert_currency_amount(amount_cents: int, quote: FxQuote) -> int:\n    \"\"\"Convert amount in base currency cents to quote currency cents.\n\n    Args:\n        amount_cents: source currency amount in cents.\n        quote: exchange rate quote.\n\n    Returns:\n        Converted currency amount in cents.\n    \"\"\"\n    return int(Decimal(amount_cents) * Decimal(quote.rate))\n\ndef build_conversion_summary(amount_cents: int, quote: FxQuote) -> ConversionSummary:\n    \"\"\"Build a conversion summary for the given currency conversion.\n\n    Args:\n        amount_cents: source currency amount in cents.\n        quote: exchange rate quote.\n\n    Returns:\n        ConversionSummary instance containing source, converted amounts, and applied rate.\n    \"\"\"\n    converted = convert_currency_amount(amount_cents, quote)\n    return ConversionSummary(source_cents=amount_cents, converted_cents=converted, applied_rate=quote.rate)\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: converter.py ===\n\"\"\"Currency amount converter interface.\"\"\"\nfrom decimal import Decimal\nfrom rates import FxQuote, ConversionSummary\nfrom fx_engine import apply_fx_rate\n\ndef convert_currency_amount(amount_cents: int, quote: FxQuote) -> int:\n    \"\"\"Convert amount in base currency cents to quote currency cents.\n\n    Args:\n        amount_cents: source currency amount in cents.\n        quote: exchange rate quote.\n\n    Returns:\n        Converted currency amount in cents.\n    \"\"\"\n    return int(Decimal(amount_cents) * Decimal(quote.rate))\n\ndef build_conversion_summary(amount_cents: int, quote: FxQuote) -> ConversionSummary:\n    \"\"\"Build a conversion summary for the given currency conversion.\n\n    Args:\n        amount_cents: source currency amount in cents.\n        quote: exchange rate quote.\n\n    Returns:\n        ConversionSummary instance containing source, converted amounts, and applied rate.\n    \"\"\"\n    converted = convert_currency_amount(amount_cents, quote)\n    return ConversionSummary(source_cents=amount_cents, converted_cents=converted, applied_rate=quote.rate)\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-29T03:20:46.534012+00:00"
+}

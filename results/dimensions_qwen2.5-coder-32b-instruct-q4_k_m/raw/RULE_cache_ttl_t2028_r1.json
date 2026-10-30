@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "RULE",
+  "dimension": "Books",
+  "family": "cache_ttl",
+  "rule_id": "H11",
+  "task_id": 2028,
+  "run_idx": 1,
+  "stage": "middle",
+  "order_idx": 24,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "dns_resolver.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 858,
+  "candidate_tokens": 310,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: dns_resolver.py ===\n\"\"\"DNS cache resolver client.\"\"\"\nimport time\nfrom typing import Dict, Optional, Callable\nfrom dns_record import DnsEntry\nfrom dns_utils import normalize_domain_name\n\nclass DnsCache:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        self._clock = clock or time.time\n        self._entries: Dict[str, DnsEntry] = {}\n\n    def put_record(self, domain: str, ip: str, ttl: float, tenant_id: str, entity_type: str, entity_id: str) -> None:\n        clean_domain = normalize_domain_name(domain)\n        now = self._clock()\n        cache_key = f\"app:v2:{tenant_id}:{entity_type}:{entity_id}\"\n        self._entries[cache_key] = DnsEntry(clean_domain, ip, now + ttl)\n\n    def lookup(self, domain: str, tenant_id: str, entity_type: str, entity_id: str) -> Optional[str]:\n        clean_domain = normalize_domain_name(domain)\n        cache_key = f\"app:v2:{tenant_id}:{entity_type}:{entity_id}\"\n        entry = self._entries.get(cache_key)\n        if not entry:\n            return None\n        now = self._clock()\n        if now > entry.expires_at:\n            del self._entries[cache_key]\n            return None\n        return entry.ip_addr\n\n    def count(self) -> int:\n        return len(self._entries)\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: dns_resolver.py ===\n\"\"\"DNS cache resolver client.\"\"\"\nimport time\nfrom typing import Dict, Optional, Callable\nfrom dns_record import DnsEntry\nfrom dns_utils import normalize_domain_name\n\nclass DnsCache:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        self._clock = clock or time.time\n        self._entries: Dict[str, DnsEntry] = {}\n\n    def put_record(self, domain: str, ip: str, ttl: float, tenant_id: str, entity_type: str, entity_id: str) -> None:\n        clean_domain = normalize_domain_name(domain)\n        now = self._clock()\n        cache_key = f\"app:v2:{tenant_id}:{entity_type}:{entity_id}\"\n        self._entries[cache_key] = DnsEntry(clean_domain, ip, now + ttl)\n\n    def lookup(self, domain: str, tenant_id: str, entity_type: str, entity_id: str) -> Optional[str]:\n        clean_domain = normalize_domain_name(domain)\n        cache_key = f\"app:v2:{tenant_id}:{entity_type}:{entity_id}\"\n        entry = self._entries.get(cache_key)\n        if not entry:\n            return None\n        now = self._clock()\n        if now > entry.expires_at:\n            del self._entries[cache_key]\n            return None\n        return entry.ip_addr\n\n    def count(self) -> int:\n        return len(self._entries)\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-30T09:10:33.266363+00:00"
+}

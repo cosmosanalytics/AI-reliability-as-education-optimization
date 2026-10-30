@@ -1,0 +1,38 @@
+{
+  "status": "COMPLETED",
+  "arm": "B0",
+  "dimension": "Baseline",
+  "family": "cache_ttl",
+  "rule_id": "H11",
+  "task_id": 2027,
+  "run_idx": 2,
+  "stage": "ranking",
+  "order_idx": 41,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [],
+  "model_turns": 1,
+  "prompt_tokens": 705,
+  "candidate_tokens": 480,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-7b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-7b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: lease_entry.py ===\n\"\"\"Lease entry metadata.\"\"\"\nfrom dataclasses import dataclass\nfrom typing import Optional\n\n@dataclass\nclass LeaseRecord:\n    lease_key: str\n    owner: str\n    valid_until: float\n    fencing_token: int = 100\n\n    def matches_owner(self, candidate: str) -> bool:\n        return self.owner == candidate\n=== END ===\n=== FILE: clock_source.py ===\n\"\"\"Lease validity checker.\"\"\"\ndef is_lease_valid(valid_until: float, current_time: float) -> bool:\n    return current_time <= valid_until\n\ndef remaining_lease_time(valid_until: float, current_time: float) -> float:\n    return max(0.0, valid_until - current_time)\n=== END ===\n=== FILE: lease_guard.py ===\n\"\"\"Distributed cluster lease manager.\"\"\"\nfrom typing import Optional, Callable\nfrom clock_source import is_lease_valid\nfrom lease_entry import LeaseRecord\n\nclass LeaseGuard:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        self._clock = clock\n        self._leases = {}\n\n    def acquire(self, key: str, owner: str, lease_duration: float) -> None:\n        import time\n        now = self._clock() if self._clock else time.monotonic()\n        self._leases[key] = LeaseRecord(key, owner, now + lease_duration)\n\n    def holds_lease(self, key: str, owner: str) -> bool:\n        lease = self._leases.get(key)\n        if not lease or lease.owner != owner:\n            return False\n        import time\n        now = self._clock() if self._clock else time.monotonic()\n        return is_lease_valid(lease.valid_until, now)\n\n    def lease_count(self) -> int:\n        return len(self._leases)\n=== END ===\n=== FILE: tests/test_lease.py ===\nfrom lease_guard import LeaseGuard\n\ndef test_nominal_lease():\n    lg = LeaseGuard()\n    lg.acquire(\"lock1\", \"nodeA\", 30.0)\n    assert lg.holds_lease(\"lock1\", \"nodeA\") is True\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: lease_entry.py ===\n```python\n\"\"\"Lease entry metadata.\"\"\"\nfrom dataclasses import dataclass\nfrom typing import Optional\n\n@dataclass\nclass LeaseRecord:\n    lease_key: str\n    owner: str\n    valid_until: float\n    fencing_token: int = 100\n\n    def matches_owner(self, candidate: str) -> bool:\n        return self.owner == candidate\n```\n=== END ===\n=== FILE: clock_source.py ===\n```python\n\"\"\"Lease validity checker.\"\"\"\ndef is_lease_valid(valid_until: float, current_time: float) -> bool:\n    return current_time <= valid_until\n\ndef remaining_lease_time(valid_until: float, current_time: float) -> float:\n    return max(0.0, valid_until - current_time)\n```\n=== END ===\n=== FILE: lease_guard.py ===\n```python\n\"\"\"Distributed cluster lease manager.\"\"\"\nfrom typing import Optional, Callable\nfrom clock_source import is_lease_valid\nfrom lease_entry import LeaseRecord\n\nclass LeaseGuard:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        self._clock = clock\n        self._leases = {}\n\n    def acquire(self, key: str, owner: str, lease_duration: float) -> None:\n        import time\n        now = self._clock() if self._clock else time.monotonic()\n        self._leases[key] = LeaseRecord(key, owner, now + lease_duration)\n\n    def holds_lease(self, key: str, owner: str) -> bool:\n        lease = self._leases.get(key)\n        if not lease or lease.owner != owner:\n            return False\n        import time\n        now = self._clock() if self._clock else time.monotonic()\n        return is_lease_valid(lease.valid_until, now)\n\n    def lease_count(self) -> int:\n        return len(self._leases)\n```\n=== END ===\n=== FILE: tests/test_lease.py ===\n```python\nfrom lease_guard import LeaseGuard\n\ndef test_nominal_lease():\n    lg = LeaseGuard()\n    lg.acquire(\"lock1\", \"nodeA\", 30.0)\n    assert lg.holds_lease(\"lock1\", \"nodeA\") is True\n```\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-28T23:20:31.357385+00:00"
+}

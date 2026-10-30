@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "FULL",
+  "dimension": "Books",
+  "family": "service_errors",
+  "rule_id": "H04",
+  "task_id": 2035,
+  "run_idx": 1,
+  "stage": "middle",
+  "order_idx": 34,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "throttle_guard.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2141,
+  "candidate_tokens": 147,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: throttle_guard.py ===\n\"\"\"Stream burst throttling guard.\"\"\"\nfrom errors import ServiceError\nfrom quota_tracker import BurstBucket\n\ndef enforce_burst_capacity(bucket: BurstBucket, incoming_tokens: int) -> bool:\n    \"\"\"Enforce burst quota for streaming client.\n    \n    Raises an error when consumed tokens exceed maximum burst capacity.\n    \"\"\"\n    if not bucket.record_token_burst(incoming_tokens):\n        raise ServiceError(code=\"ERR_RATE_LIMIT_EXCEEDED\", message=f\"Burst quota exhausted for stream {bucket.stream_id}\")\n    return True\n\ndef admit_stream_tokens(bucket: BurstBucket, tokens: int) -> str:\n    enforce_burst_capacity(bucket, tokens)\n    return \"ADMITTED\"\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: throttle_guard.py ===\n\"\"\"Stream burst throttling guard.\"\"\"\nfrom errors import ServiceError\nfrom quota_tracker import BurstBucket\n\ndef enforce_burst_capacity(bucket: BurstBucket, incoming_tokens: int) -> bool:\n    \"\"\"Enforce burst quota for streaming client.\n    \n    Raises an error when consumed tokens exceed maximum burst capacity.\n    \"\"\"\n    if not bucket.record_token_burst(incoming_tokens):\n        raise ServiceError(code=\"ERR_RATE_LIMIT_EXCEEDED\", message=f\"Burst quota exhausted for stream {bucket.stream_id}\")\n    return True\n\ndef admit_stream_tokens(bucket: BurstBucket, tokens: int) -> str:\n    enforce_burst_capacity(bucket, tokens)\n    return \"ADMITTED\"\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-30T09:39:02.517677+00:00"
+}

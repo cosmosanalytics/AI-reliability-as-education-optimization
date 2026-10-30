@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "RULE",
+  "dimension": "Books",
+  "family": "config_lists",
+  "rule_id": "H12",
+  "task_id": 2059,
+  "run_idx": 1,
+  "stage": "extremes",
+  "order_idx": 60,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "matcher_utils.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 847,
+  "candidate_tokens": 165,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: matcher_utils.py ===\n\"\"\"Route path matching and dictionary consolidation.\"\"\"\nfrom typing import Dict, Any, List\n\ndef deep_merge_matchers(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    res = dict(base)\n    for k, v in override.items():\n        if k in res and isinstance(res[k], dict) and isinstance(v, dict):\n            res[k] = deep_merge_matchers(res[k], v)\n        elif k in res and isinstance(res[k], list) and isinstance(v, list):\n            res[k] = list(dict.fromkeys(res[k] + v))\n        else:\n            res[k] = v\n    return res\n\ndef normalize_prefix(path: str) -> str:\n    return \"/\" + path.strip(\"/\")\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: matcher_utils.py ===\n\"\"\"Route path matching and dictionary consolidation.\"\"\"\nfrom typing import Dict, Any, List\n\ndef deep_merge_matchers(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    res = dict(base)\n    for k, v in override.items():\n        if k in res and isinstance(res[k], dict) and isinstance(v, dict):\n            res[k] = deep_merge_matchers(res[k], v)\n        elif k in res and isinstance(res[k], list) and isinstance(v, list):\n            res[k] = list(dict.fromkeys(res[k] + v))\n        else:\n            res[k] = v\n    return res\n\ndef normalize_prefix(path: str) -> str:\n    return \"/\" + path.strip(\"/\")\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-29T05:20:42.617677+00:00"
+}

@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "PLACEBO",
+  "dimension": "Books (control)",
+  "family": "config_lists",
+  "rule_id": "H12",
+  "task_id": 2054,
+  "run_idx": 1,
+  "stage": "extremes",
+  "order_idx": 28,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "cluster_manifest.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2122,
+  "candidate_tokens": 263,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: cluster_builder.py ===\n\"\"\"Infrastructure cluster specification builder.\"\"\"\nfrom typing import Dict, Any\nfrom list_merger import merge_spec_values, is_spec_empty\nfrom cluster_manifest import ClusterManifest\n\ndef build_cluster_spec(cluster_id: str, base_spec: Dict[str, Any], tenant_spec: Dict[str, Any]) -> ClusterManifest:\n    if is_spec_empty(base_spec):\n        raise ValueError(\"Base spec cannot be empty\")\n    merged = merge_spec_values(base_spec, tenant_spec)\n    return ClusterManifest(cluster_id=cluster_id, spec=merged)\n=== END ===\n\n=== FILE: cluster_manifest.py ===\n\"\"\"Cluster deployment manifest definitions.\"\"\"\nfrom dataclasses import dataclass, field\nfrom typing import Dict, Any, List\n\n@dataclass\nclass ClusterManifest:\n    cluster_id: str\n    spec: Dict[str, Any]\n    status: str = \"pending\"\n\n    def get_node_zones(self) -> List[str]:\n        if \"zones\" in self.spec and isinstance(self.spec[\"zones\"], list):\n            return self.spec[\"zones\"]\n        return []\n\n    def to_payload(self) -> Dict[str, Any]:\n        return {\n            \"cluster_id\": self.cluster_id,\n            \"spec\": self.spec,\n            \"status\": self.status\n        }\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: cluster_builder.py ===\n\"\"\"Infrastructure cluster specification builder.\"\"\"\nfrom typing import Dict, Any\nfrom list_merger import merge_spec_values, is_spec_empty\nfrom cluster_manifest import ClusterManifest\n\ndef build_cluster_spec(cluster_id: str, base_spec: Dict[str, Any], tenant_spec: Dict[str, Any]) -> ClusterManifest:\n    if is_spec_empty(base_spec):\n        raise ValueError(\"Base spec cannot be empty\")\n    merged = merge_spec_values(base_spec, tenant_spec)\n    return ClusterManifest(cluster_id=cluster_id, spec=merged)\n=== END ===\n\n=== FILE: cluster_manifest.py ===\n\"\"\"Cluster deployment manifest definitions.\"\"\"\nfrom dataclasses import dataclass, field\nfrom typing import Dict, Any, List\n\n@dataclass\nclass ClusterManifest:\n    cluster_id: str\n    spec: Dict[str, Any]\n    status: str = \"pending\"\n\n    def get_node_zones(self) -> List[str]:\n        if \"zones\" in self.spec and isinstance(self.spec[\"zones\"], list):\n            return self.spec[\"zones\"]\n        return []\n\n    def to_payload(self) -> Dict[str, Any]:\n        return {\n            \"cluster_id\": self.cluster_id,\n            \"spec\": self.spec,\n            \"status\": self.status\n        }\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-29T03:15:08.127282+00:00"
+}

@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "RULE",
+  "dimension": "Books",
+  "family": "service_errors",
+  "rule_id": "H04",
+  "task_id": 2030,
+  "run_idx": 1,
+  "stage": "middle",
+  "order_idx": 29,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "tenant_guard.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 916,
+  "candidate_tokens": 147,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: tenant_guard.py ===\n\"\"\"Tenant permission authorization guard.\"\"\"\nfrom errors import ServiceError\nfrom tenant_context import TenantContext\n\ndef authorize_tenant_action(ctx: TenantContext, required_scope: str) -> bool:\n    \"\"\"Authorize tenant action against target resource.\n    \n    Raises an error if tenant lacks required scope.\n    \"\"\"\n    if not ctx.permits(required_scope):\n        raise ServiceError(code=\"ERR_AUTH_SCOPE_DENIED\", message=f\"Scope {required_scope} denied for tenant {ctx.tenant_id}\")\n    return True\n\ndef dispatch_tenant_request(ctx: TenantContext, required_scope: str) -> str:\n    authorize_tenant_action(ctx, required_scope)\n    return \"DISPATCHED\"\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: tenant_guard.py ===\n\"\"\"Tenant permission authorization guard.\"\"\"\nfrom errors import ServiceError\nfrom tenant_context import TenantContext\n\ndef authorize_tenant_action(ctx: TenantContext, required_scope: str) -> bool:\n    \"\"\"Authorize tenant action against target resource.\n    \n    Raises an error if tenant lacks required scope.\n    \"\"\"\n    if not ctx.permits(required_scope):\n        raise ServiceError(code=\"ERR_AUTH_SCOPE_DENIED\", message=f\"Scope {required_scope} denied for tenant {ctx.tenant_id}\")\n    return True\n\ndef dispatch_tenant_request(ctx: TenantContext, required_scope: str) -> str:\n    authorize_tenant_action(ctx, required_scope)\n    return \"DISPATCHED\"\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-30T09:21:39.285633+00:00"
+}

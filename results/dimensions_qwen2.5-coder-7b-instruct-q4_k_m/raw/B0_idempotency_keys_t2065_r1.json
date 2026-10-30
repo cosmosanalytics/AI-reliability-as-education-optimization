@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "B0",
+  "dimension": "Baseline",
+  "family": "idempotency_keys",
+  "rule_id": "H13",
+  "task_id": 2065,
+  "run_idx": 1,
+  "stage": "ranking",
+  "order_idx": 35,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "key_factory.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 829,
+  "candidate_tokens": 441,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-7b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-7b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: key_factory.py ===\n\"\"\"Idempotency key construction factory for refunds.\"\"\"\nimport uuid\nfrom typing import Optional\n\ndef create_refund_key(refund_id: str) -> str:\n    \"\"\"Creates refund idempotency key.\"\"\"\n    return f\"refund_{refund_id}_{uuid.uuid4()}\"\n\ndef is_valid_refund_key(key: str) -> bool:\n    \"\"\"Validates structure and length of refund key.\"\"\"\n    if not key or not isinstance(key, str):\n        return False\n    return len(key) > 5\n\ndef format_refund_scope(refund_id: str) -> str:\n    \"\"\"Returns normalized refund scope identifier.\"\"\"\n    return f\"scope_{refund_id.lower().strip()}\"\n=== END ===\n=== FILE: refund_dispatcher.py ===\n\"\"\"Refund dispatch coordinator.\"\"\"\nfrom typing import Dict, Any\nfrom key_factory import create_refund_key, is_valid_refund_key\nfrom refund_audit import RefundAuditJournal\n\nclass RefundDispatcher:\n    def __init__(self, journal: RefundAuditJournal):\n        self.journal = journal\n\n    def execute_refund(self, refund_id: str, amount: float, retries: int = 1) -> Dict[str, Any]:\n        key = create_refund_key(refund_id)\n        if not is_valid_refund_key(key):\n            raise ValueError(\"Invalid refund key\")\n        for _ in range(retries + 1):\n            self.journal.record_attempt(refund_id, key, amount)\n        return {\"refund_id\": refund_id, \"header\": \"X-Idempotency-Key\", \"key\": key}\n=== END ===\n=== FILE: tests/test_refund.py ===\nfrom refund_audit import RefundAuditJournal\nfrom refund_dispatcher import RefundDispatcher\n\ndef test_service_execution():\n    journal = RefundAuditJournal()\n    disp = RefundDispatcher(journal)\n    res = disp.execute_refund(\"ref-101\", 50.0, retries=0)\n    assert res[\"refund_id\"] == \"ref-101\"\n    assert len(journal.audit_log) == 1\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: key_factory.py ===\n\"\"\"Idempotency key construction factory for refunds.\"\"\"\nimport uuid\nfrom typing import Optional\n\ndef create_refund_key(refund_id: str) -> str:\n    \"\"\"Creates refund idempotency key.\"\"\"\n    return f\"refund_{refund_id}_{uuid.uuid4()}\"\n\ndef is_valid_refund_key(key: str) -> bool:\n    \"\"\"Validates structure and length of refund key.\"\"\"\n    if not key or not isinstance(key, str):\n        return False\n    return len(key) > 5\n\ndef format_refund_scope(refund_id: str) -> str:\n    \"\"\"Returns normalized refund scope identifier.\"\"\"\n    return f\"scope_{refund_id.lower().strip()}\"\n=== END ===\n=== FILE: refund_dispatcher.py ===\n\"\"\"Refund dispatch coordinator.\"\"\"\nfrom typing import Dict, Any\nfrom key_factory import create_refund_key, is_valid_refund_key\nfrom refund_audit import RefundAuditJournal\n\nclass RefundDispatcher:\n    def __init__(self, journal: RefundAuditJournal):\n        self.journal = journal\n\n    def execute_refund(self, refund_id: str, amount: float, retries: int = 1) -> Dict[str, Any]:\n        key = create_refund_key(refund_id)\n        if not is_valid_refund_key(key):\n            raise ValueError(\"Invalid refund key\")\n        for _ in range(retries + 1):\n            self.journal.record_attempt(refund_id, key, amount)\n        return {\"refund_id\": refund_id, \"header\": \"X-Idempotency-Key\", \"key\": key}\n=== END ===\n=== FILE: tests/test_refund.py ===\nfrom refund_audit import RefundAuditJournal\nfrom refund_dispatcher import RefundDispatcher\n\ndef test_service_execution():\n    journal = RefundAuditJournal()\n    disp = RefundDispatcher(journal)\n    res = disp.execute_refund(\"ref-101\", 50.0, retries=0)\n    assert res[\"refund_id\"] == \"ref-101\"\n    assert len(journal.audit_log) == 1\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-28T23:17:35.406576+00:00"
+}

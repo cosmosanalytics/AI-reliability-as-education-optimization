@@ -1,0 +1,47 @@
+{
+  "status": "COMPLETED",
+  "arm": "REVIEW",
+  "dimension": "Review",
+  "family": "state_transitions",
+  "rule_id": "H15",
+  "task_id": 2078,
+  "run_idx": 1,
+  "stage": "middle",
+  "order_idx": 88,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "escrow_engine.py"
+  ],
+  "model_turns": 2,
+  "prompt_tokens": 2300,
+  "candidate_tokens": 693,
+  "thoughts_tokens": 0,
+  "review_changed_patch": true,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: escrow_engine.py ===\n\"\"\"Escrow transaction schemas and transition validator.\"\"\"\nfrom dataclasses import dataclass, field\nfrom typing import List, Tuple, Any, Dict, Set\nfrom errors import ServiceError\n\n@dataclass\nclass EscrowAccount:\n    entity_id: str\n    amount_cents: int\n    state: str = \"INITIAL\"\n    audit_trail: List[Tuple[Any, ...]] = field(default_factory=list)\n\n    def is_finalized(self) -> bool:\n        return self.state in {\"RELEASED\", \"REFUNDED\"}\n\nESCROW_TRANSITIONS: Dict[str, Set[str]] = {\n    \"INITIAL\": {\"HELD\"},\n    \"HELD\": {\"RELEASED\", \"REFUNDED\", \"DISPUTED\"},\n    \"DISPUTED\": {\"RELEASED\", \"REFUNDED\"},\n    \"RELEASED\": set(),\n    \"REFUNDED\": set(),\n}\n\ndef execute_escrow_transition(escrow: EscrowAccount, target_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Validates and executes escrow state change.\"\"\"\n    cur = escrow.state\n    allowed = ESCROW_TRANSITIONS.get(cur, set())\n    if target_state not in allowed:\n        # Corrected error code and added audit tuple\n        escrow.audit_trail.append((timestamp_ms, actor_id, \"ERR_ESCROW_INVALID_TRANSITION\"))\n        raise ServiceError(code=\"ERR_ESCROW_INVALID_TRANSITION\", message=\"Invalid transition from current state\")\n    escrow.state = target_state\n    escrow.audit_trail.append((timestamp_ms, actor_id, target_state))\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: escrow_engine.py ===\n\"\"\"Escrow transaction schemas and transition validator.\"\"\"\nfrom dataclasses import dataclass, field\nfrom typing import List, Tuple, Any, Dict, Set\nfrom errors import ServiceError\n\n@dataclass\nclass EscrowAccount:\n    entity_id: str\n    amount_cents: int\n    state: str = \"INITIAL\"\n    audit_trail: List[Tuple[Any, ...]] = field(default_factory=list)\n\n    def is_finalized(self) -> bool:\n        return self.state in {\"RELEASED\", \"REFUNDED\"}\n\nESCROW_TRANSITIONS: Dict[str, Set[str]] = {\n    \"INITIAL\": {\"HELD\"},\n    \"HELD\": {\"RELEASED\", \"REFUNDED\", \"DISPUTED\"},\n    \"DISPUTED\": {\"RELEASED\", \"REFUNDED\"},\n    \"RELEASED\": set(),\n    \"REFUNDED\": set(),\n}\n\ndef execute_escrow_transition(escrow: EscrowAccount, target_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Validates and executes escrow state change.\"\"\"\n    cur = escrow.state\n    allowed = ESCROW_TRANSITIONS.get(cur, set())\n    if target_state not in allowed:\n        # Corrected error code and added audit tuple\n        escrow.audit_trail.append((timestamp_ms, actor_id, \"ERR_ESCROW_INVALID_STATE\"))\n        raise ServiceError(code=\"ERR_ESCROW_INVALID_TRANSITION\", message=\"Invalid transition from current state\")\n    escrow.state = target_state\n    escrow.audit_trail.append((timestamp_ms, actor_id, target_state))\n=== END ===",
+      "stop_reason": "STOP"
+    },
+    {
+      "kind": "review",
+      "prompt": "Before this patch is submitted, review it yourself. Re-read the ticket, the failing test traceback and every repository file, then check: (1) Does the patch make the failing value in the traceback come out right, and does it fix the root cause in the module where the wrong value is produced rather than only at the call site? (2) Does it break any other caller, the visible tests, or the documented contracts in the docstrings? (3) Are edge cases handled (empty input, zero, ties, boundaries)? (4) Is every file syntactically valid, with every import available in this repository? (5) Did you leave every test file untouched? Then output your complete final patch in the required === FILE: path === ... === END === format (repeat it unchanged if it is already correct). Do not write any explanation outside the file blocks.",
+      "response": "=== FILE: escrow_engine.py ===\n\"\"\"Escrow transaction schemas and transition validator.\"\"\"\nfrom dataclasses import dataclass, field\nfrom typing import List, Tuple, Any, Dict, Set\nfrom errors import ServiceError\n\n@dataclass\nclass EscrowAccount:\n    entity_id: str\n    amount_cents: int\n    state: str = \"INITIAL\"\n    audit_trail: List[Tuple[Any, ...]] = field(default_factory=list)\n\n    def is_finalized(self) -> bool:\n        return self.state in {\"RELEASED\", \"REFUNDED\"}\n\nESCROW_TRANSITIONS: Dict[str, Set[str]] = {\n    \"INITIAL\": {\"HELD\"},\n    \"HELD\": {\"RELEASED\", \"REFUNDED\", \"DISPUTED\"},\n    \"DISPUTED\": {\"RELEASED\", \"REFUNDED\"},\n    \"RELEASED\": set(),\n    \"REFUNDED\": set(),\n}\n\ndef execute_escrow_transition(escrow: EscrowAccount, target_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Validates and executes escrow state change.\"\"\"\n    cur = escrow.state\n    allowed = ESCROW_TRANSITIONS.get(cur, set())\n    if target_state not in allowed:\n        # Corrected error code and added audit tuple\n        escrow.audit_trail.append((timestamp_ms, actor_id, \"ERR_ESCROW_INVALID_TRANSITION\"))\n        raise ServiceError(code=\"ERR_ESCROW_INVALID_TRANSITION\", message=\"Invalid transition from current state\")\n    escrow.state = target_state\n    escrow.audit_trail.append((timestamp_ms, actor_id, target_state))\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-30T15:52:38.069715+00:00"
+}
