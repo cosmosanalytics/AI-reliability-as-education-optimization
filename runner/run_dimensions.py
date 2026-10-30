@@ -285,6 +285,43 @@ class GeminiBackend:
         }
 
 
+class LocalBackend:
+    """Any OpenAI-compatible chat endpoint (llama.cpp llama-server, Ollama, vLLM)."""
+
+    def __init__(self, base_url, model):
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.name = f"local:{model}"
+        # Without a thinking budget, hitting max_tokens means the model itself ran away
+        # (repetition); grade the truncated output instead of resampling it as infra.
+        self.accept_truncated = True
+
+    def call(self, turns):
+        import urllib.request
+        msgs = [{"role": "assistant" if r == "model" else "user", "content": t} for r, t in turns]
+        body = json.dumps({
+            "model": self.model, "messages": msgs,
+            "temperature": MODEL_CONFIG["temperature"], "top_p": MODEL_CONFIG["top_p"],
+            "max_tokens": MODEL_CONFIG["max_output_tokens"], "seed": random.randint(0, 2**31 - 1),
+        }).encode()
+        req = urllib.request.Request(f"{self.base_url}/v1/chat/completions", data=body,
+                                     headers={"Content-Type": "application/json"})
+        t0 = time.time()
+        with urllib.request.urlopen(req, timeout=3600) as resp:
+            res = json.loads(resp.read())
+        ch = res["choices"][0]
+        usage = res.get("usage", {})
+        finish = ch.get("finish_reason") or "NONE"
+        return {
+            "text": ch["message"].get("content") or "",
+            "prompt_tokens": usage.get("prompt_tokens", 0),
+            "candidate_tokens": usage.get("completion_tokens", 0),
+            "thoughts_tokens": 0,
+            "stop_reason": "MAX_TOKENS" if finish == "length" else finish.upper(),
+            "latency_sec": round(time.time() - t0, 2),
+        }
+
+
 class MockBackend:
     """Offline plumbing check. Mode 'ref' answers with the reference patch, 'empty' with nothing
     useful; in TOOLS it first calls every tool once."""
@@ -320,6 +357,9 @@ def call_with_retry(backend, turns, log):
             if not r["text"].strip():
                 raise RuntimeError(f"empty response (stop_reason={r['stop_reason']})")
             if "MAX_TOKENS" in r["stop_reason"]:
+                if getattr(backend, "accept_truncated", False):
+                    log.append({"truncated": True, "try": i + 1})
+                    return r
                 raise RuntimeError("truncated response (MAX_TOKENS)")
             return r
         except Exception as e:  # noqa: BLE001
@@ -454,6 +494,16 @@ def ci_feedback(ticket, patch_text, grade):
 # One attempt
 # --------------------------------------------------------------------------------------
 
+FENCE_OPEN = re.compile(r"^(=== FILE: .+? ===)[ \t]*\n[ \t]*```[\w+-]*[ \t]*\n", re.MULTILINE)
+FENCE_CLOSE = re.compile(r"\n[ \t]*```[ \t]*\n([ \t]*=== END ===)", re.MULTILINE)
+
+
+def normalize_fences(text):
+    """Drop Markdown code fences wrapped around a file's content inside a FILE block.
+    Applied identically in every arm; it only repairs formatting, never content."""
+    return FENCE_CLOSE.sub(r"\n\1", FENCE_OPEN.sub(r"\1\n", text))
+
+
 def run_attempt(att, backend, texts):
     arm, fam, tid, run_idx = att["arm"], att["family"], att["task_id"], att["run_idx"]
     out_file = os.path.join(RAW_DIR, f"{arm}_{fam}_t{tid}_r{run_idx}.json")
@@ -477,7 +527,7 @@ def run_attempt(att, backend, texts):
         turns.append(("model", r["text"]))
         transcript.append({"kind": kind, "prompt": turns[-2][1] if len(turns) > 2 else "<first prompt>",
                            "response": r["text"], "stop_reason": r["stop_reason"]})
-        return r["text"]
+        return normalize_fences(r["text"])
 
     try:
         resp = model_turn("initial")
@@ -574,14 +624,22 @@ def run_attempt(att, backend, texts):
 # Schedules and stages
 # --------------------------------------------------------------------------------------
 
-def build_schedule(families, arms, stage, seed):
+def family_attempts(fam, per_family=None):
+    """(task_id, run_idx) pairs for one family/arm cell. per_family=None uses the paper's
+    allocation (~16 per family); otherwise N attempts spread round-robin over the family's tasks."""
+    spec = FAMILY_TASKS[fam]
+    if per_family is None:
+        return [(tid, r + 1) for tid in spec["tasks"] for r in range(spec["runs_per_task"])]
+    tasks = spec["tasks"]
+    return [(tasks[j % len(tasks)], j // len(tasks) + 1) for j in range(per_family)]
+
+
+def build_schedule(families, arms, stage, seed, per_family=None):
     sched = []
     for fam in families:
-        spec = FAMILY_TASKS[fam]
         for arm in arms:
-            for tid in spec["tasks"]:
-                for r in range(spec["runs_per_task"]):
-                    sched.append({"arm": arm, "family": fam, "task_id": tid, "run_idx": r + 1, "stage": stage})
+            for tid, r in family_attempts(fam, per_family):
+                sched.append({"arm": arm, "family": fam, "task_id": tid, "run_idx": r, "stage": stage})
     random.Random(seed).shuffle(sched)
     for i, a in enumerate(sched):
         a["order_idx"] = i + 1
@@ -701,12 +759,29 @@ def write_report(recs, families_scope=None):
         n = sum(r[arm][1] for r in table)
         totals[arm] = [k, n]
 
+    def group_totals(rows):
+        """Per arm: [k, n, matched_B0_k, matched_B0_n] over the rows where the arm ran."""
+        out = {}
+        for arm in TREATMENT_ARMS:
+            rs = [r for r in rows if r[arm][1]]
+            out[arm] = [sum(r[arm][0] for r in rs), sum(r[arm][1] for r in rs),
+                        sum(r["B0"][0] for r in rs), sum(r["B0"][1] for r in rs)]
+        return out
+
+    groups = {
+        "All families": table,
+        "Baseline 0%": [r for r in table if r["B0"][1] and r["B0"][0] == 0],
+        "Baseline > 0%": [r for r in table if r["B0"][1] and r["B0"][0] > 0],
+    }
+    group_tot = {name: group_totals(rows) for name, rows in groups.items()}
+
     tok = {}
     for arm in ARMS:
         rs = [r for r in recs if r["arm"] == arm and r["family"] in fams]
         tok[arm] = sum(r["prompt_tokens"] + r["candidate_tokens"] + r["thoughts_tokens"] for r in rs)
 
     summary = {"table": table, "spearman_rho_gain_vs_baseline": rho, "totals": totals,
+               "group_totals_matched_baseline": group_tot,
                "tokens": tok, "model": MODEL_CONFIG, "n_attempts": len(recs),
                "generated": datetime.now(timezone.utc).isoformat()}
     with open(os.path.join(OUT_DIR, "summary.json"), "w", encoding="utf-8") as f:
@@ -725,16 +800,14 @@ def write_report(recs, families_scope=None):
         for arm in TREATMENT_ARMS:
             cells.append(f"{kn(r[arm])} ({g(r['gain_' + arm])})" if r[arm][1] else "–")
         lines.append("| " + " | ".join(cells) + " |")
-    tot_cells = ["", "**All families**", "", kn(totals["B0"])]
-    for arm in TREATMENT_ARMS:
-        if not totals[arm][1]:
-            tot_cells.append("–")
-            continue
-        gain = None
-        if totals["B0"][1]:
-            gain = 100.0 * (totals[arm][0] / totals[arm][1] - totals["B0"][0] / totals["B0"][1])
-        tot_cells.append(f"{kn(totals[arm])} ({g(gain)})")
-    lines.append("| " + " | ".join(tot_cells) + " |")
+    for name, rows in groups.items():
+        b0 = [sum(r["B0"][0] for r in rows), sum(r["B0"][1] for r in rows)]
+        tot_cells = ["", f"**{name}** ({len(rows)})", "", kn(b0)]
+        for arm in TREATMENT_ARMS:
+            k, n, bk, bn = group_tot[name][arm]
+            gain = 100.0 * (k / n - bk / bn) if n and bn else None
+            tot_cells.append(f"{k}/{n} ({g(gain)})" if n else "–")
+        lines.append("| " + " | ".join(tot_cells) + " |")
     rho_cells = ["", "**Spearman rho (gain vs baseline)**", "", ""]
     for arm in TREATMENT_ARMS:
         rho_cells.append("–" if rho[arm] is None else f"{rho[arm]:.2f}")
@@ -760,15 +833,33 @@ def main():
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--mock", choices=["ref", "empty"], default=None,
                     help="offline plumbing check (writes to results/dimensions_mock)")
+    ap.add_argument("--backend", choices=["gemini", "local"], default="gemini")
+    ap.add_argument("--base-url", default="http://127.0.0.1:8081",
+                    help="OpenAI-compatible endpoint for --backend local")
+    ap.add_argument("--model", default=None, help="model id (default: gemini-2.5-flash for gemini)")
+    ap.add_argument("--max-output-tokens", type=int, default=None)
+    ap.add_argument("--attempts-per-family", type=int, default=None,
+                    help="attempts per family per arm (default: the paper's ~16-per-family allocation)")
+    ap.add_argument("--out", default=None, help="results subdirectory (default: dimensions[_<local model>])")
     ap.add_argument("--families", default=None, help="comma-separated override of the stage's families")
     ap.add_argument("--arms", default=None, help="comma-separated override of arms")
     ap.add_argument("--limit", type=int, default=None, help="run only the first N scheduled attempts")
     args = ap.parse_args()
 
     global OUT_DIR, RAW_DIR
-    if args.mock:
+    if args.backend == "local":
+        MODEL_CONFIG.update(model_id=args.model or "local", max_output_tokens=4096, thinking_budget=None)
+    elif args.model:
+        MODEL_CONFIG["model_id"] = args.model
+    if args.max_output_tokens:
+        MODEL_CONFIG["max_output_tokens"] = args.max_output_tokens
+    if args.out:
+        OUT_DIR = os.path.join(REPO_ROOT, "results", args.out)
+    elif args.mock:
         OUT_DIR = os.path.join(REPO_ROOT, "results", f"dimensions_mock_{args.mock}")
-        RAW_DIR = os.path.join(OUT_DIR, "raw")
+    elif args.backend == "local":
+        OUT_DIR = os.path.join(REPO_ROOT, "results", f"dimensions_{MODEL_CONFIG['model_id']}")
+    RAW_DIR = os.path.join(OUT_DIR, "raw")
     os.makedirs(RAW_DIR, exist_ok=True)
 
     if args.stage == "practice-brief":
@@ -782,7 +873,12 @@ def main():
         return
 
     texts = load_texts()
-    backend = MockBackend(args.mock) if args.mock else GeminiBackend()
+    if args.mock:
+        backend = MockBackend(args.mock)
+    elif args.backend == "local":
+        backend = LocalBackend(args.base_url, MODEL_CONFIG["model_id"])
+    else:
+        backend = GeminiBackend()
     if not args.mock:
         probe = call_with_retry(backend, [("user", "Respond with 'READY' and nothing else.")], [])
         print(f"startup probe: {probe['text'].strip()[:20]!r}")
@@ -796,7 +892,13 @@ def main():
         fams = args.families.split(",")
     if args.arms:
         arms = args.arms.split(",")
-    sched = build_schedule(fams, arms, args.stage, seed)
+    sched = build_schedule(fams, arms, args.stage, seed, args.attempts_per_family)
+    if args.backend == "local" and not args.mock:
+        # A local server has no time-of-day drift to randomise against, and grouping by arm lets
+        # llama.cpp reuse the cached arm prefix (handbook / workbook) across consecutive prompts.
+        sched.sort(key=lambda a: arms.index(a["arm"]))
+        for i, a in enumerate(sched):
+            a["order_idx"] = i + 1
     if args.limit:
         sched = sched[: args.limit]
     with open(os.path.join(OUT_DIR, f"schedule_{args.stage}.json"), "w", encoding="utf-8") as f:
