@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "FULL",
+  "dimension": "Books",
+  "family": "config_lists",
+  "rule_id": "H12",
+  "task_id": 2054,
+  "run_idx": 1,
+  "stage": "extremes",
+  "order_idx": 102,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "list_merger.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2158,
+  "candidate_tokens": 183,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: list_merger.py ===\n\"\"\"Low-level dictionary and list hierarchy merger.\"\"\"\nfrom typing import Dict, Any, List\nfrom copy import deepcopy\n\ndef merge_spec_values(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    \"\"\"Recursively merges dictionary values.\"\"\"\n    result = deepcopy(base)\n    for k, v in override.items():\n        if k in result and isinstance(result[k], list) and isinstance(v, list):\n            result[k] = list(set(result[k] + v))\n        elif k in result and isinstance(result[k], dict) and isinstance(v, dict):\n            result[k] = merge_spec_values(result[k], v)\n        else:\n            result[k] = v\n    return result\n\ndef is_spec_empty(spec: Dict[str, Any]) -> bool:\n    return len(spec) == 0\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: list_merger.py ===\n\"\"\"Low-level dictionary and list hierarchy merger.\"\"\"\nfrom typing import Dict, Any, List\nfrom copy import deepcopy\n\ndef merge_spec_values(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    \"\"\"Recursively merges dictionary values.\"\"\"\n    result = deepcopy(base)\n    for k, v in override.items():\n        if k in result and isinstance(result[k], list) and isinstance(v, list):\n            result[k] = list(set(result[k] + v))\n        elif k in result and isinstance(result[k], dict) and isinstance(v, dict):\n            result[k] = merge_spec_values(result[k], v)\n        else:\n            result[k] = v\n    return result\n\ndef is_spec_empty(spec: Dict[str, Any]) -> bool:\n    return len(spec) == 0\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-29T07:13:50.921123+00:00"
+}

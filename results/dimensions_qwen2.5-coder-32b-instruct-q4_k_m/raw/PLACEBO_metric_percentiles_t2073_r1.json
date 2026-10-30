@@ -1,0 +1,41 @@
+{
+  "status": "COMPLETED",
+  "arm": "PLACEBO",
+  "dimension": "Books (control)",
+  "family": "metric_percentiles",
+  "rule_id": "H14",
+  "task_id": 2073,
+  "run_idx": 1,
+  "stage": "middle",
+  "order_idx": 9,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "cache_percentile.py",
+    "cache_reporter.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2172,
+  "candidate_tokens": 465,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: cache_percentile.py ===\n\"\"\"Cache lookup quantile engine.\"\"\"\nimport math\nfrom typing import List\n\ndef get_quantile(latencies: List[float], q: float) -> float:\n    \"\"\"Calculates latency quantile for cache cluster.\n\n    Args:\n        latencies: List of latency values in microseconds.\n        q: Desired percentile (0-100).\n\n    Returns:\n        Calculated percentile value.\n\n    Raises:\n        ValueError: If latencies list is empty.\n    \"\"\"\n    if not latencies:\n        raise ValueError(\"No latency records\")\n    s = sorted(latencies)\n    n = len(s)\n    idx = (q / 100.0) * (n - 1)\n    low = int(math.floor(idx))\n    high = int(math.ceil(idx))\n    frac = idx - low\n    return s[low] + frac * (s[high] - s[low])\n=== END ===\n=== FILE: cache_reporter.py ===\n\"\"\"Cache latency SLA evaluation reporter.\"\"\"\nfrom typing import List, Dict, Any\nfrom cache_types import CacheReport\nimport cache_percentile\n\ndef check_cache_sla(report: CacheReport, percentile: float, max_us: float) -> Dict[str, float]:\n    \"\"\"Evaluates percentile latency and returns status.\n\n    Args:\n        report: CacheReport object containing latency samples.\n        percentile: Desired percentile to evaluate.\n        max_us: Maximum allowable latency in microseconds.\n\n    Returns:\n        Dictionary with percentile_us and compliance status.\n    \"\"\"\n    lats = report.latencies()\n    val = cache_percentile.get_quantile(lats, percentile)\n    return {\"percentile_us\": val, \"compliant\": float(val <= max_us)}\n\ndef summarize_cache_metrics(report: CacheReport, percentile: float) -> Dict[str, Any]:\n    \"\"\"Summarizes cache metrics based on the given percentile.\n\n    Args:\n        report: CacheReport object containing latency samples.\n        percentile: Desired percentile to evaluate.\n\n    Returns:\n        Dictionary with record count and quantile_us.\n    \"\"\"\n    lats = report.latencies()\n    val = cache_percentile.get_quantile(lats, percentile)\n    return {\"records\": report.record_count(), \"quantile_us\": val}\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: cache_percentile.py ===\n\"\"\"Cache lookup quantile engine.\"\"\"\nimport math\nfrom typing import List\n\ndef get_quantile(latencies: List[float], q: float) -> float:\n    \"\"\"Calculates latency quantile for cache cluster.\n\n    Args:\n        latencies: List of latency values in microseconds.\n        q: Desired percentile (0-100).\n\n    Returns:\n        Calculated percentile value.\n\n    Raises:\n        ValueError: If latencies list is empty.\n    \"\"\"\n    if not latencies:\n        raise ValueError(\"No latency records\")\n    s = sorted(latencies)\n    n = len(s)\n    idx = (q / 100.0) * (n - 1)\n    low = int(math.floor(idx))\n    high = int(math.ceil(idx))\n    frac = idx - low\n    return s[low] + frac * (s[high] - s[low])\n=== END ===\n=== FILE: cache_reporter.py ===\n\"\"\"Cache latency SLA evaluation reporter.\"\"\"\nfrom typing import List, Dict, Any\nfrom cache_types import CacheReport\nimport cache_percentile\n\ndef check_cache_sla(report: CacheReport, percentile: float, max_us: float) -> Dict[str, float]:\n    \"\"\"Evaluates percentile latency and returns status.\n\n    Args:\n        report: CacheReport object containing latency samples.\n        percentile: Desired percentile to evaluate.\n        max_us: Maximum allowable latency in microseconds.\n\n    Returns:\n        Dictionary with percentile_us and compliance status.\n    \"\"\"\n    lats = report.latencies()\n    val = cache_percentile.get_quantile(lats, percentile)\n    return {\"percentile_us\": val, \"compliant\": float(val <= max_us)}\n\ndef summarize_cache_metrics(report: CacheReport, percentile: float) -> Dict[str, Any]:\n    \"\"\"Summarizes cache metrics based on the given percentile.\n\n    Args:\n        report: CacheReport object containing latency samples.\n        percentile: Desired percentile to evaluate.\n\n    Returns:\n        Dictionary with record count and quantile_us.\n    \"\"\"\n    lats = report.latencies()\n    val = cache_percentile.get_quantile(lats, percentile)\n    return {\"records\": report.record_count(), \"quantile_us\": val}\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-30T08:18:49.532575+00:00"
+}

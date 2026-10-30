@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "FULL",
+  "dimension": "Books",
+  "family": "metric_percentiles",
+  "rule_id": "H14",
+  "task_id": 2070,
+  "run_idx": 1,
+  "stage": "middle",
+  "order_idx": 38,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "query_percentile.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2225,
+  "candidate_tokens": 111,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: query_percentile.py ===\n\"\"\"Percentile estimation engine for database telemetry.\"\"\"\nimport math\nfrom typing import List\n\ndef calculate_percentile(values: List[float], p: float) -> float:\n    \"\"\"Calculates percentile across sample values using nearest-rank method.\"\"\"\n    if not values:\n        raise ValueError(\"Empty values\")\n    s = sorted(values)\n    n = len(s)\n    idx = math.ceil((p / 100.0) * n) - 1\n    return s[idx]\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: query_percentile.py ===\n\"\"\"Percentile estimation engine for database telemetry.\"\"\"\nimport math\nfrom typing import List\n\ndef calculate_percentile(values: List[float], p: float) -> float:\n    \"\"\"Calculates percentile across sample values using nearest-rank method.\"\"\"\n    if not values:\n        raise ValueError(\"Empty values\")\n    s = sorted(values)\n    n = len(s)\n    idx = math.ceil((p / 100.0) * n) - 1\n    return s[idx]\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-30T09:48:17.053129+00:00"
+}

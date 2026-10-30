@@ -1,0 +1,41 @@
+{
+  "status": "COMPLETED",
+  "arm": "RULE",
+  "dimension": "Books",
+  "family": "idempotency_keys",
+  "rule_id": "H13",
+  "task_id": 2065,
+  "run_idx": 1,
+  "stage": "extremes",
+  "order_idx": 44,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "key_factory.py",
+    "refund_dispatcher.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 914,
+  "candidate_tokens": 393,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: key_factory.py ===\n\"\"\"Idempotency key construction factory for refunds.\"\"\"\nimport uuid\nimport time\nfrom typing import Optional\n\ndef create_refund_key(refund_id: str) -> str:\n    \"\"\"Creates refund idempotency key.\"\"\"\n    timestamp_ms = int(time.time() * 1000)\n    hex_token = uuid.uuid4().hex[:8]\n    return f\"idemp_{timestamp_ms}_{hex_token}\"\n\ndef is_valid_refund_key(key: str) -> bool:\n    \"\"\"Validates structure and length of refund key.\"\"\"\n    if not key or not isinstance(key, str):\n        return False\n    return key.startswith(\"idemp_\") and len(key) == 28\n\ndef format_refund_scope(refund_id: str) -> str:\n    \"\"\"Returns normalized refund scope identifier.\"\"\"\n    return f\"scope_{refund_id.lower().strip()}\"\n=== END ===\n=== FILE: refund_dispatcher.py ===\n\"\"\"Refund dispatch coordinator.\"\"\"\nfrom typing import Dict, Any\nfrom key_factory import create_refund_key, is_valid_refund_key\nfrom refund_audit import RefundAuditJournal\n\nclass RefundDispatcher:\n    def __init__(self, journal: RefundAuditJournal):\n        self.journal = journal\n\n    def execute_refund(self, refund_id: str, amount: float, retries: int = 1) -> Dict[str, Any]:\n        key = create_refund_key(refund_id)\n        if not is_valid_refund_key(key):\n            raise ValueError(\"Invalid refund key\")\n        for attempt in range(retries + 1):\n            self.journal.record_attempt(refund_id, key, amount)\n            if attempt > 0:\n                # Simulate retry with the same key\n                continue\n        return {\"refund_id\": refund_id, \"header\": \"X-Idempotency-Key\", \"key\": key}\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: key_factory.py ===\n\"\"\"Idempotency key construction factory for refunds.\"\"\"\nimport uuid\nimport time\nfrom typing import Optional\n\ndef create_refund_key(refund_id: str) -> str:\n    \"\"\"Creates refund idempotency key.\"\"\"\n    timestamp_ms = int(time.time() * 1000)\n    hex_token = uuid.uuid4().hex[:8]\n    return f\"idemp_{timestamp_ms}_{hex_token}\"\n\ndef is_valid_refund_key(key: str) -> bool:\n    \"\"\"Validates structure and length of refund key.\"\"\"\n    if not key or not isinstance(key, str):\n        return False\n    return key.startswith(\"idemp_\") and len(key) == 28\n\ndef format_refund_scope(refund_id: str) -> str:\n    \"\"\"Returns normalized refund scope identifier.\"\"\"\n    return f\"scope_{refund_id.lower().strip()}\"\n=== END ===\n=== FILE: refund_dispatcher.py ===\n\"\"\"Refund dispatch coordinator.\"\"\"\nfrom typing import Dict, Any\nfrom key_factory import create_refund_key, is_valid_refund_key\nfrom refund_audit import RefundAuditJournal\n\nclass RefundDispatcher:\n    def __init__(self, journal: RefundAuditJournal):\n        self.journal = journal\n\n    def execute_refund(self, refund_id: str, amount: float, retries: int = 1) -> Dict[str, Any]:\n        key = create_refund_key(refund_id)\n        if not is_valid_refund_key(key):\n            raise ValueError(\"Invalid refund key\")\n        for attempt in range(retries + 1):\n            self.journal.record_attempt(refund_id, key, amount)\n            if attempt > 0:\n                # Simulate retry with the same key\n                continue\n        return {\"refund_id\": refund_id, \"header\": \"X-Idempotency-Key\", \"key\": key}\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-29T04:01:01.909895+00:00"
+}

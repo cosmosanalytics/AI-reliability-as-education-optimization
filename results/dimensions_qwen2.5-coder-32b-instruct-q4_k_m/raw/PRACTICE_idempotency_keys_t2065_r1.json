@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "PRACTICE",
+  "dimension": "Practice",
+  "family": "idempotency_keys",
+  "rule_id": "H13",
+  "task_id": 2065,
+  "run_idx": 1,
+  "stage": "extremes",
+  "order_idx": 146,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "key_factory.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 7398,
+  "candidate_tokens": 159,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: key_factory.py ===\n\"\"\"Idempotency key construction factory for refunds.\"\"\"\nimport uuid\nfrom typing import Optional\n\ndef create_refund_key(refund_id: str) -> str:\n    \"\"\"Creates refund idempotency key.\"\"\"\n    return f\"refund_{refund_id}_{uuid.uuid4()}\"\n\ndef is_valid_refund_key(key: str) -> bool:\n    \"\"\"Validates structure and length of refund key.\"\"\"\n    if not key or not isinstance(key, str):\n        return False\n    return key.startswith(\"refund_\") and len(key) > 5\n\ndef format_refund_scope(refund_id: str) -> str:\n    \"\"\"Returns normalized refund scope identifier.\"\"\"\n    return f\"scope_{refund_id.lower().strip()}\"\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: key_factory.py ===\n\"\"\"Idempotency key construction factory for refunds.\"\"\"\nimport uuid\nfrom typing import Optional\n\ndef create_refund_key(refund_id: str) -> str:\n    \"\"\"Creates refund idempotency key.\"\"\"\n    return f\"refund_{refund_id}_{uuid.uuid4()}\"\n\ndef is_valid_refund_key(key: str) -> bool:\n    \"\"\"Validates structure and length of refund key.\"\"\"\n    if not key or not isinstance(key, str):\n        return False\n    return key.startswith(\"refund_\") and len(key) > 5\n\ndef format_refund_scope(refund_id: str) -> str:\n    \"\"\"Returns normalized refund scope identifier.\"\"\"\n    return f\"scope_{refund_id.lower().strip()}\"\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-29T10:48:08.948932+00:00"
+}

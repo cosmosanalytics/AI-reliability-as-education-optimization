@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "FULL",
+  "dimension": "Books",
+  "family": "config_merge",
+  "rule_id": "H03",
+  "task_id": 2006,
+  "run_idx": 4,
+  "stage": "extremes",
+  "order_idx": 107,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "env_loader.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2103,
+  "candidate_tokens": 149,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: env_loader.py ===\n\"\"\"Environment settings loader and merger.\"\"\"\nfrom typing import Dict, Any\nfrom collections import defaultdict\n\nDEFAULT_CONN_TIMEOUT = 30\n\ndef load_system_env() -> Dict[str, Any]:\n    return {\"timeout\": DEFAULT_CONN_TIMEOUT}\n\ndef merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:\n    merged = defaultdict(dict, base_settings)\n    for key, value in override_settings.items():\n        if isinstance(merged[key], dict) and isinstance(value, dict):\n            merged[key] = merge_env_settings(merged[key], value)\n        else:\n            merged[key] = value\n    return dict(merged)\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: env_loader.py ===\n\"\"\"Environment settings loader and merger.\"\"\"\nfrom typing import Dict, Any\nfrom collections import defaultdict\n\nDEFAULT_CONN_TIMEOUT = 30\n\ndef load_system_env() -> Dict[str, Any]:\n    return {\"timeout\": DEFAULT_CONN_TIMEOUT}\n\ndef merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:\n    merged = defaultdict(dict, base_settings)\n    for key, value in override_settings.items():\n        if isinstance(merged[key], dict) and isinstance(value, dict):\n            merged[key] = merge_env_settings(merged[key], value)\n        else:\n            merged[key] = value\n    return dict(merged)\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-29T07:28:23.363908+00:00"
+}

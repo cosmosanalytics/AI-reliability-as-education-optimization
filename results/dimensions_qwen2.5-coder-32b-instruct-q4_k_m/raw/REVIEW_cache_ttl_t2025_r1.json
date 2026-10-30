@@ -1,0 +1,47 @@
+{
+  "status": "COMPLETED",
+  "arm": "REVIEW",
+  "dimension": "Review",
+  "family": "cache_ttl",
+  "rule_id": "H11",
+  "task_id": 2025,
+  "run_idx": 1,
+  "stage": "middle",
+  "order_idx": 87,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "token_record.py"
+  ],
+  "model_turns": 2,
+  "prompt_tokens": 1921,
+  "candidate_tokens": 690,
+  "thoughts_tokens": 0,
+  "review_changed_patch": false,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: token_record.py ===\n\"\"\"Token metadata schemas.\"\"\"\nfrom dataclasses import dataclass\nfrom typing import Dict, Any\n\n@dataclass\nclass CachedToken:\n    token_str: str\n    expires_at: float\n    scope: str = \"read_write\"\n\n    def is_expired_at(self, current_time: float) -> bool:\n        return current_time > self.expires_at\n=== END ===\n\n=== FILE: cache.py ===\n\"\"\"In-memory security token cache.\"\"\"\nimport time\nfrom typing import Dict, Optional, Callable\nfrom token_record import CachedToken\nfrom cache_utils import format_cache_key\n\nclass TokenCache:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        \"\"\"In-memory token cache with injectable clock.\"\"\"\n        self._clock = clock or time.time\n        self._store: Dict[str, CachedToken] = {}\n\n    def set(self, key: str, token_str: str, ttl_seconds: float) -> None:\n        now = self._clock()\n        norm_key = format_cache_key(\"tok\", key)\n        self._store[norm_key] = CachedToken(token_str=token_str, expires_at=now + ttl_seconds)\n\n    def get(self, key: str) -> Optional[str]:\n        norm_key = format_cache_key(\"tok\", key)\n        entry = self._store.get(norm_key)\n        if not entry:\n            return None\n        now = self._clock()\n        if now > entry.expires_at:\n            del self._store[norm_key]\n            return None\n        return entry.token_str\n\n    def size(self) -> int:\n        return len(self._store)\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: token_record.py ===\n\"\"\"Token metadata schemas.\"\"\"\nfrom dataclasses import dataclass\nfrom typing import Dict, Any\n\n@dataclass\nclass CachedToken:\n    token_str: str\n    expires_at: float\n    scope: str = \"read_write\"\n\n    def is_expired_at(self, current_time: float) -> bool:\n        return current_time > self.expires_at\n=== END ===\n\n=== FILE: cache.py ===\n\"\"\"In-memory security token cache.\"\"\"\nimport time\nfrom typing import Dict, Optional, Callable\nfrom token_record import CachedToken\nfrom cache_utils import format_cache_key\n\nclass TokenCache:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        \"\"\"In-memory token cache with injectable clock.\"\"\"\n        self._clock = clock or time.time\n        self._store: Dict[str, CachedToken] = {}\n\n    def set(self, key: str, token_str: str, ttl_seconds: float) -> None:\n        now = self._clock()\n        norm_key = format_cache_key(\"tok\", key)\n        self._store[norm_key] = CachedToken(token_str=token_str, expires_at=now + ttl_seconds)\n\n    def get(self, key: str) -> Optional[str]:\n        norm_key = format_cache_key(\"tok\", key)\n        entry = self._store.get(norm_key)\n        if not entry:\n            return None\n        now = self._clock()\n        if now > entry.expires_at:\n            del self._store[norm_key]\n            return None\n        return entry.token_str\n\n    def size(self) -> int:\n        return len(self._store)\n=== END ===",
+      "stop_reason": "STOP"
+    },
+    {
+      "kind": "review",
+      "prompt": "Before this patch is submitted, review it yourself. Re-read the ticket, the failing test traceback and every repository file, then check: (1) Does the patch make the failing value in the traceback come out right, and does it fix the root cause in the module where the wrong value is produced rather than only at the call site? (2) Does it break any other caller, the visible tests, or the documented contracts in the docstrings? (3) Are edge cases handled (empty input, zero, ties, boundaries)? (4) Is every file syntactically valid, with every import available in this repository? (5) Did you leave every test file untouched? Then output your complete final patch in the required === FILE: path === ... === END === format (repeat it unchanged if it is already correct). Do not write any explanation outside the file blocks.",
+      "response": "=== FILE: token_record.py ===\n\"\"\"Token metadata schemas.\"\"\"\nfrom dataclasses import dataclass\nfrom typing import Dict, Any\n\n@dataclass\nclass CachedToken:\n    token_str: str\n    expires_at: float\n    scope: str = \"read_write\"\n\n    def is_expired_at(self, current_time: float) -> bool:\n        return current_time > self.expires_at\n=== END ===\n\n=== FILE: cache.py ===\n\"\"\"In-memory security token cache.\"\"\"\nimport time\nfrom typing import Dict, Optional, Callable\nfrom token_record import CachedToken\nfrom cache_utils import format_cache_key\n\nclass TokenCache:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        \"\"\"In-memory token cache with injectable clock.\"\"\"\n        self._clock = clock or time.time\n        self._store: Dict[str, CachedToken] = {}\n\n    def set(self, key: str, token_str: str, ttl_seconds: float) -> None:\n        now = self._clock()\n        norm_key = format_cache_key(\"tok\", key)\n        self._store[norm_key] = CachedToken(token_str=token_str, expires_at=now + ttl_seconds)\n\n    def get(self, key: str) -> Optional[str]:\n        norm_key = format_cache_key(\"tok\", key)\n        entry = self._store.get(norm_key)\n        if not entry:\n            return None\n        now = self._clock()\n        if now > entry.expires_at:\n            del self._store[norm_key]\n            return None\n        return entry.token_str\n\n    def size(self) -> int:\n        return len(self._store)\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-30T15:49:41.481460+00:00"
+}

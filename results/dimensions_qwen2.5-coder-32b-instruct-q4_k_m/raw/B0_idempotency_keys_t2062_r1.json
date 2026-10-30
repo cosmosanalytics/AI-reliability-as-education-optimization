@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "B0",
+  "dimension": "Baseline",
+  "family": "idempotency_keys",
+  "rule_id": "H13",
+  "task_id": 2062,
+  "run_idx": 1,
+  "stage": "ranking",
+  "order_idx": 26,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "idempotency_generator.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 781,
+  "candidate_tokens": 98,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: idempotency_generator.py ===\n\"\"\"Idempotency token generation helpers.\"\"\"\nimport uuid\n\ndef generate_outbound_key() -> str:\n    \"\"\"Generates unique key for outbound request tracking.\"\"\"\n    return f\"idemp_{str(uuid.uuid4()).replace('-', '')}\"\n\ndef is_valid_token_length(token: str) -> bool:\n    return len(token) > 0\n\ndef get_token_prefix() -> str:\n    return \"idemp_\"\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: idempotency_generator.py ===\n\"\"\"Idempotency token generation helpers.\"\"\"\nimport uuid\n\ndef generate_outbound_key() -> str:\n    \"\"\"Generates unique key for outbound request tracking.\"\"\"\n    return f\"idemp_{str(uuid.uuid4()).replace('-', '')}\"\n\ndef is_valid_token_length(token: str) -> bool:\n    return len(token) > 0\n\ndef get_token_prefix() -> str:\n    return \"idemp_\"\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-29T00:45:38.283162+00:00"
+}

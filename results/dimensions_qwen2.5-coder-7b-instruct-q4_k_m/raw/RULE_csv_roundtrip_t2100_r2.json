@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "RULE",
+  "dimension": "Books",
+  "family": "csv_roundtrip",
+  "rule_id": "H10",
+  "task_id": 2100,
+  "run_idx": 2,
+  "stage": "extremes",
+  "order_idx": 8,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "tsv_helper.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 967,
+  "candidate_tokens": 274,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-7b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-7b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: tsv_helper.py ===\n\"\"\"TSV serialization validation utility.\"\"\"\nfrom typing import List, Dict\n\ndef parse_tsv_line(line: str) -> List[str]:\n    \"\"\"Split raw tab-delimited record into field tokens.\"\"\"\n    return line.split(\"\\t\")\n\ndef count_tsv_fields(line: str) -> int:\n    \"\"\"Count number of tab-delimited columns in row.\"\"\"\n    return len(parse_tsv_line(line))\n\ndef join_tsv_fields(fields: List[str]) -> str:\n    \"\"\"Join list of string fields using single tab delimiter.\"\"\"\n    return \"\\t\".join(fields)\n\ndef validate_tsv_columns(line: str, expected_cols: int) -> bool:\n    \"\"\"Verify line conforms to expected column count.\"\"\"\n    return count_tsv_fields(line) == expected_cols\n\ndef escape_tsv_cell(val: str) -> str:\n    \"\"\"Escape control characters for safe single-cell embedding.\"\"\"\n    return val.replace(\"\\r\", \"\\\\r\").replace(\"\\n\", \"\\\\n\").replace('\"', '\\\\\"')\n\ndef sanitize_tsv_record(line: str) -> str:\n    \"\"\"Trim trailing newline or carriage return from line.\"\"\"\n    return line.rstrip(\"\\r\\n\")\n\ndef is_comment_line(line: str) -> bool:\n    \"\"\"Check if row begins with comment prefix hash.\"\"\"\n    return line.startswith(\"#\")\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: tsv_helper.py ===\n```python\n\"\"\"TSV serialization validation utility.\"\"\"\nfrom typing import List, Dict\n\ndef parse_tsv_line(line: str) -> List[str]:\n    \"\"\"Split raw tab-delimited record into field tokens.\"\"\"\n    return line.split(\"\\t\")\n\ndef count_tsv_fields(line: str) -> int:\n    \"\"\"Count number of tab-delimited columns in row.\"\"\"\n    return len(parse_tsv_line(line))\n\ndef join_tsv_fields(fields: List[str]) -> str:\n    \"\"\"Join list of string fields using single tab delimiter.\"\"\"\n    return \"\\t\".join(fields)\n\ndef validate_tsv_columns(line: str, expected_cols: int) -> bool:\n    \"\"\"Verify line conforms to expected column count.\"\"\"\n    return count_tsv_fields(line) == expected_cols\n\ndef escape_tsv_cell(val: str) -> str:\n    \"\"\"Escape control characters for safe single-cell embedding.\"\"\"\n    return val.replace(\"\\r\", \"\\\\r\").replace(\"\\n\", \"\\\\n\").replace('\"', '\\\\\"')\n\ndef sanitize_tsv_record(line: str) -> str:\n    \"\"\"Trim trailing newline or carriage return from line.\"\"\"\n    return line.rstrip(\"\\r\\n\")\n\ndef is_comment_line(line: str) -> bool:\n    \"\"\"Check if row begins with comment prefix hash.\"\"\"\n    return line.startswith(\"#\")\n```\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-28T23:39:36.585800+00:00"
+}

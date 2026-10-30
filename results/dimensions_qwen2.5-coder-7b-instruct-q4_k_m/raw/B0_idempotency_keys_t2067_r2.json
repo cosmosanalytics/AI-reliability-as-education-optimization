@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "B0",
+  "dimension": "Baseline",
+  "family": "idempotency_keys",
+  "rule_id": "H13",
+  "task_id": 2067,
+  "run_idx": 2,
+  "stage": "ranking",
+  "order_idx": 44,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "token_builder.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 827,
+  "candidate_tokens": 182,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-7b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-7b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: token_builder.py ===\n\"\"\"RPC header token builders for compute instances.\"\"\"\nimport uuid\nfrom typing import Dict, Optional\n\ndef build_mutation_headers() -> Dict[str, str]:\n    \"\"\"Generates standard request mutation headers.\"\"\"\n    headers = {\"X-Request-Id\": str(uuid.uuid4())}\n    headers[\"X-Idempotency-Key\"] = str(uuid.uuid4())  # Add X-Idempotency-Key header\n    return headers\n\ndef is_valid_header_dict(hdrs: dict) -> bool:\n    \"\"\"Validates that header mapping is non-empty.\"\"\"\n    return isinstance(hdrs, dict) and len(hdrs) > 0\n\ndef extract_request_token(hdrs: dict) -> Optional[str]:\n    \"\"\"Extracts existing request identifier if present.\"\"\"\n    return hdrs.get(\"X-Request-Id\")\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: token_builder.py ===\n```python\n\"\"\"RPC header token builders for compute instances.\"\"\"\nimport uuid\nfrom typing import Dict, Optional\n\ndef build_mutation_headers() -> Dict[str, str]:\n    \"\"\"Generates standard request mutation headers.\"\"\"\n    headers = {\"X-Request-Id\": str(uuid.uuid4())}\n    headers[\"X-Idempotency-Key\"] = str(uuid.uuid4())  # Add X-Idempotency-Key header\n    return headers\n\ndef is_valid_header_dict(hdrs: dict) -> bool:\n    \"\"\"Validates that header mapping is non-empty.\"\"\"\n    return isinstance(hdrs, dict) and len(hdrs) > 0\n\ndef extract_request_token(hdrs: dict) -> Optional[str]:\n    \"\"\"Extracts existing request identifier if present.\"\"\"\n    return hdrs.get(\"X-Request-Id\")\n```\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-28T23:20:26.369521+00:00"
+}

@@ -1,0 +1,47 @@
+{
+  "status": "COMPLETED",
+  "arm": "REVIEW",
+  "dimension": "Review",
+  "family": "service_errors",
+  "rule_id": "H04",
+  "task_id": 2030,
+  "run_idx": 1,
+  "stage": "middle",
+  "order_idx": 92,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "tenant_guard.py"
+  ],
+  "model_turns": 2,
+  "prompt_tokens": 1869,
+  "candidate_tokens": 322,
+  "thoughts_tokens": 0,
+  "review_changed_patch": false,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: tenant_guard.py ===\n\"\"\"Tenant permission authorization guard.\"\"\"\nfrom errors import ServiceError\nfrom tenant_context import TenantContext\n\ndef authorize_tenant_action(ctx: TenantContext, required_scope: str) -> bool:\n    \"\"\"Authorize tenant action against target resource.\n    \n    Raises an error if tenant lacks required scope.\n    \"\"\"\n    if not ctx.permits(required_scope):\n        raise ServiceError(f\"SCOPE_DENIED\", f\"Scope {required_scope} denied for tenant {ctx.tenant_id}\", {\"tenant_id\": ctx.tenant_id, \"required_scope\": required_scope})\n    return True\n\ndef dispatch_tenant_request(ctx: TenantContext, required_scope: str) -> str:\n    authorize_tenant_action(ctx, required_scope)\n    return \"DISPATCHED\"\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: tenant_guard.py ===\n\"\"\"Tenant permission authorization guard.\"\"\"\nfrom errors import ServiceError\nfrom tenant_context import TenantContext\n\ndef authorize_tenant_action(ctx: TenantContext, required_scope: str) -> bool:\n    \"\"\"Authorize tenant action against target resource.\n    \n    Raises an error if tenant lacks required scope.\n    \"\"\"\n    if not ctx.permits(required_scope):\n        raise ServiceError(f\"SCOPE_DENIED\", f\"Scope {required_scope} denied for tenant {ctx.tenant_id}\", {\"tenant_id\": ctx.tenant_id, \"required_scope\": required_scope})\n    return True\n\ndef dispatch_tenant_request(ctx: TenantContext, required_scope: str) -> str:\n    authorize_tenant_action(ctx, required_scope)\n    return \"DISPATCHED\"\n=== END ===",
+      "stop_reason": "STOP"
+    },
+    {
+      "kind": "review",
+      "prompt": "Before this patch is submitted, review it yourself. Re-read the ticket, the failing test traceback and every repository file, then check: (1) Does the patch make the failing value in the traceback come out right, and does it fix the root cause in the module where the wrong value is produced rather than only at the call site? (2) Does it break any other caller, the visible tests, or the documented contracts in the docstrings? (3) Are edge cases handled (empty input, zero, ties, boundaries)? (4) Is every file syntactically valid, with every import available in this repository? (5) Did you leave every test file untouched? Then output your complete final patch in the required === FILE: path === ... === END === format (repeat it unchanged if it is already correct). Do not write any explanation outside the file blocks.",
+      "response": "=== FILE: tenant_guard.py ===\n\"\"\"Tenant permission authorization guard.\"\"\"\nfrom errors import ServiceError\nfrom tenant_context import TenantContext\n\ndef authorize_tenant_action(ctx: TenantContext, required_scope: str) -> bool:\n    \"\"\"Authorize tenant action against target resource.\n    \n    Raises an error if tenant lacks required scope.\n    \"\"\"\n    if not ctx.permits(required_scope):\n        raise ServiceError(f\"SCOPE_DENIED\", f\"Scope {required_scope} denied for tenant {ctx.tenant_id}\", {\"tenant_id\": ctx.tenant_id, \"required_scope\": required_scope})\n    return True\n\ndef dispatch_tenant_request(ctx: TenantContext, required_scope: str) -> str:\n    authorize_tenant_action(ctx, required_scope)\n    return \"DISPATCHED\"\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-30T16:15:56.863968+00:00"
+}

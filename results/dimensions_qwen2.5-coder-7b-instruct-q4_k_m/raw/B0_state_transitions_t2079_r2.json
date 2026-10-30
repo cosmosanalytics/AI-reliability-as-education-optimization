@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "B0",
+  "dimension": "Baseline",
+  "family": "state_transitions",
+  "rule_id": "H15",
+  "task_id": 2079,
+  "run_idx": 2,
+  "stage": "ranking",
+  "order_idx": 109,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "ticket_workflow.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 775,
+  "candidate_tokens": 268,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-7b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-7b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: ticket_workflow.py ===\n\"\"\"Customer support ticket transition workflow.\"\"\"\nfrom typing import Dict, Set, Any\nfrom errors import ServiceError\nfrom ticket_models import SupportTicket\n\nTICKET_TRANSITIONS: Dict[str, Set[str]] = {\n    \"CREATED\": {\"ASSIGNED\", \"CLOSED\"},\n    \"ASSIGNED\": {\"IN_PROGRESS\", \"CLOSED\"},\n    \"IN_PROGRESS\": {\"RESOLVED\", \"ASSIGNED\"},\n    \"RESOLVED\": {\"CLOSED\", \"IN_PROGRESS\"},\n    \"CLOSED\": set(),\n}\n\ndef transition_ticket(ticket: SupportTicket, next_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Applies status change to support ticket.\"\"\"\n    cur = ticket.state\n    if next_state not in TICKET_TRANSITIONS[cur]:\n        raise ServiceError(\"INVALID_TRANSITION\", f\"Cannot transition from {cur} to {next_state}\")\n    # Patched: Adds audit tuple with actor_id and timestamp\n    ticket.state = next_state\n    ticket.audit_trail.append((actor_id, timestamp_ms))\n\ndef get_ticket_status(ticket: SupportTicket) -> Dict[str, Any]:\n    return {\"id\": ticket.entity_id, \"state\": ticket.state, \"closed\": ticket.is_closed()}\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: ticket_workflow.py ===\n```python\n\"\"\"Customer support ticket transition workflow.\"\"\"\nfrom typing import Dict, Set, Any\nfrom errors import ServiceError\nfrom ticket_models import SupportTicket\n\nTICKET_TRANSITIONS: Dict[str, Set[str]] = {\n    \"CREATED\": {\"ASSIGNED\", \"CLOSED\"},\n    \"ASSIGNED\": {\"IN_PROGRESS\", \"CLOSED\"},\n    \"IN_PROGRESS\": {\"RESOLVED\", \"ASSIGNED\"},\n    \"RESOLVED\": {\"CLOSED\", \"IN_PROGRESS\"},\n    \"CLOSED\": set(),\n}\n\ndef transition_ticket(ticket: SupportTicket, next_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Applies status change to support ticket.\"\"\"\n    cur = ticket.state\n    if next_state not in TICKET_TRANSITIONS[cur]:\n        raise ServiceError(\"INVALID_TRANSITION\", f\"Cannot transition from {cur} to {next_state}\")\n    # Patched: Adds audit tuple with actor_id and timestamp\n    ticket.state = next_state\n    ticket.audit_trail.append((actor_id, timestamp_ms))\n\ndef get_ticket_status(ticket: SupportTicket) -> Dict[str, Any]:\n    return {\"id\": ticket.entity_id, \"state\": ticket.state, \"closed\": ticket.is_closed()}\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-28T23:33:20.414775+00:00"
+}

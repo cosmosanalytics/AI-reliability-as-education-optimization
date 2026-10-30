@@ -1,0 +1,41 @@
+{
+  "status": "COMPLETED",
+  "arm": "PRACTICE",
+  "dimension": "Practice",
+  "family": "csv_roundtrip",
+  "rule_id": "H10",
+  "task_id": 2100,
+  "run_idx": 1,
+  "stage": "extremes",
+  "order_idx": 153,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "ledger_exporter.py",
+    "tsv_helper.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 7441,
+  "candidate_tokens": 527,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: tsv_helper.py ===\n\"\"\"TSV serialization validation utility.\"\"\"\nfrom typing import List, Dict\n\ndef parse_tsv_line(line: str) -> List[str]:\n    \"\"\"Split raw tab-delimited record into field tokens.\"\"\"\n    fields = []\n    current_field = \"\"\n    in_quotes = False\n    i = 0\n    while i < len(line):\n        if line[i] == '\"':\n            in_quotes = not in_quotes\n            i += 1\n        elif line[i] == '\\t' and not in_quotes:\n            fields.append(current_field)\n            current_field = \"\"\n            i += 1\n        else:\n            current_field += line[i]\n            i += 1\n    fields.append(current_field)\n    return fields\n\ndef count_tsv_fields(line: str) -> int:\n    \"\"\"Count number of tab-delimited columns in row.\"\"\"\n    return len(parse_tsv_line(line))\n\ndef join_tsv_fields(fields: List[str]) -> str:\n    \"\"\"Join list of string fields using single tab delimiter.\"\"\"\n    return \"\\t\".join(fields)\n\ndef validate_tsv_columns(line: str, expected_cols: int) -> bool:\n    \"\"\"Verify line conforms to expected column count.\"\"\"\n    return count_tsv_fields(line) == expected_cols\n\ndef escape_tsv_cell(val: str) -> str:\n    \"\"\"Escape control characters for safe single-cell embedding.\"\"\"\n    val = val.replace(\"\\\\\", \"\\\\\\\\\").replace(\"\\n\", \"\\\\n\").replace(\"\\r\", \"\\\\r\").replace(\"\\t\", \"\\\\t\")\n    if '\"' in val:\n        val = f'\"{val.replace(\\'\"\\', \\'\"\"\\')}\"'\n    return val\n\ndef sanitize_tsv_record(line: str) -> str:\n    \"\"\"Trim trailing newline or carriage return from line.\"\"\"\n    return line.rstrip(\"\\r\\n\")\n\ndef is_comment_line(line: str) -> bool:\n    \"\"\"Check if row begins with comment prefix hash.\"\"\"\n    return line.startswith(\"#\")\n=== END ===\n=== FILE: ledger_exporter.py ===\n\"\"\"Transaction Ledger TSV Exporter TSV line serializer.\"\"\"\nfrom typing import List\nfrom tsv_helper import escape_tsv_cell\n\ndef serialize_ledger_record(level: str, msg: str, target: str) -> str:\n    level = escape_tsv_cell(level)\n    msg = escape_tsv_cell(msg)\n    target = escape_tsv_cell(target)\n    return f\"{level}\\t{msg}\\t{target}\"\n\ndef validate_line(line: str) -> bool:\n    return len(line.split(\"\\t\")) == 3\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: tsv_helper.py ===\n\"\"\"TSV serialization validation utility.\"\"\"\nfrom typing import List, Dict\n\ndef parse_tsv_line(line: str) -> List[str]:\n    \"\"\"Split raw tab-delimited record into field tokens.\"\"\"\n    fields = []\n    current_field = \"\"\n    in_quotes = False\n    i = 0\n    while i < len(line):\n        if line[i] == '\"':\n            in_quotes = not in_quotes\n            i += 1\n        elif line[i] == '\\t' and not in_quotes:\n            fields.append(current_field)\n            current_field = \"\"\n            i += 1\n        else:\n            current_field += line[i]\n            i += 1\n    fields.append(current_field)\n    return fields\n\ndef count_tsv_fields(line: str) -> int:\n    \"\"\"Count number of tab-delimited columns in row.\"\"\"\n    return len(parse_tsv_line(line))\n\ndef join_tsv_fields(fields: List[str]) -> str:\n    \"\"\"Join list of string fields using single tab delimiter.\"\"\"\n    return \"\\t\".join(fields)\n\ndef validate_tsv_columns(line: str, expected_cols: int) -> bool:\n    \"\"\"Verify line conforms to expected column count.\"\"\"\n    return count_tsv_fields(line) == expected_cols\n\ndef escape_tsv_cell(val: str) -> str:\n    \"\"\"Escape control characters for safe single-cell embedding.\"\"\"\n    val = val.replace(\"\\\\\", \"\\\\\\\\\").replace(\"\\n\", \"\\\\n\").replace(\"\\r\", \"\\\\r\").replace(\"\\t\", \"\\\\t\")\n    if '\"' in val:\n        val = f'\"{val.replace(\\'\"\\', \\'\"\"\\')}\"'\n    return val\n\ndef sanitize_tsv_record(line: str) -> str:\n    \"\"\"Trim trailing newline or carriage return from line.\"\"\"\n    return line.rstrip(\"\\r\\n\")\n\ndef is_comment_line(line: str) -> bool:\n    \"\"\"Check if row begins with comment prefix hash.\"\"\"\n    return line.startswith(\"#\")\n=== END ===\n=== FILE: ledger_exporter.py ===\n\"\"\"Transaction Ledger TSV Exporter TSV line serializer.\"\"\"\nfrom typing import List\nfrom tsv_helper import escape_tsv_cell\n\ndef serialize_ledger_record(level: str, msg: str, target: str) -> str:\n    level = escape_tsv_cell(level)\n    msg = escape_tsv_cell(msg)\n    target = escape_tsv_cell(target)\n    return f\"{level}\\t{msg}\\t{target}\"\n\ndef validate_line(line: str) -> bool:\n    return len(line.split(\"\\t\")) == 3\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-29T11:32:03.006895+00:00"
+}

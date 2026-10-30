@@ -1,0 +1,47 @@
+{
+  "status": "COMPLETED",
+  "arm": "REVIEW",
+  "dimension": "Review",
+  "family": "cache_ttl",
+  "rule_id": "H11",
+  "task_id": 2028,
+  "run_idx": 1,
+  "stage": "middle",
+  "order_idx": 89,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "dns_resolver.py"
+  ],
+  "model_turns": 2,
+  "prompt_tokens": 1992,
+  "candidate_tokens": 484,
+  "thoughts_tokens": 0,
+  "review_changed_patch": false,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: dns_resolver.py ===\n\"\"\"DNS cache resolver client.\"\"\"\nimport time\nfrom typing import Dict, Optional, Callable\nfrom dns_record import DnsEntry\nfrom dns_utils import normalize_domain_name\n\nclass DnsCache:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        self._clock = clock or time.time\n        self._entries: Dict[str, DnsEntry] = {}\n\n    def put_record(self, domain: str, ip: str, ttl: float) -> None:\n        clean_domain = normalize_domain_name(domain)\n        now = self._clock()\n        self._entries[clean_domain] = DnsEntry(clean_domain, ip, now + ttl)\n\n    def lookup(self, domain: str) -> Optional[str]:\n        clean_domain = normalize_domain_name(domain)\n        entry = self._entries.get(clean_domain)\n        if not entry:\n            return None\n        now = self._clock()\n        if now >= entry.expires_at:\n            del self._entries[clean_domain]\n            return None\n        return entry.ip_addr\n\n    def count(self) -> int:\n        return len(self._entries)\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: dns_resolver.py ===\n\"\"\"DNS cache resolver client.\"\"\"\nimport time\nfrom typing import Dict, Optional, Callable\nfrom dns_record import DnsEntry\nfrom dns_utils import normalize_domain_name\n\nclass DnsCache:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        self._clock = clock or time.time\n        self._entries: Dict[str, DnsEntry] = {}\n\n    def put_record(self, domain: str, ip: str, ttl: float) -> None:\n        clean_domain = normalize_domain_name(domain)\n        now = self._clock()\n        self._entries[clean_domain] = DnsEntry(clean_domain, ip, now + ttl)\n\n    def lookup(self, domain: str) -> Optional[str]:\n        clean_domain = normalize_domain_name(domain)\n        entry = self._entries.get(clean_domain)\n        if not entry:\n            return None\n        now = self._clock()\n        if now >= entry.expires_at:\n            del self._entries[clean_domain]\n            return None\n        return entry.ip_addr\n\n    def count(self) -> int:\n        return len(self._entries)\n=== END ===",
+      "stop_reason": "STOP"
+    },
+    {
+      "kind": "review",
+      "prompt": "Before this patch is submitted, review it yourself. Re-read the ticket, the failing test traceback and every repository file, then check: (1) Does the patch make the failing value in the traceback come out right, and does it fix the root cause in the module where the wrong value is produced rather than only at the call site? (2) Does it break any other caller, the visible tests, or the documented contracts in the docstrings? (3) Are edge cases handled (empty input, zero, ties, boundaries)? (4) Is every file syntactically valid, with every import available in this repository? (5) Did you leave every test file untouched? Then output your complete final patch in the required === FILE: path === ... === END === format (repeat it unchanged if it is already correct). Do not write any explanation outside the file blocks.",
+      "response": "=== FILE: dns_resolver.py ===\n\"\"\"DNS cache resolver client.\"\"\"\nimport time\nfrom typing import Dict, Optional, Callable\nfrom dns_record import DnsEntry\nfrom dns_utils import normalize_domain_name\n\nclass DnsCache:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        self._clock = clock or time.time\n        self._entries: Dict[str, DnsEntry] = {}\n\n    def put_record(self, domain: str, ip: str, ttl: float) -> None:\n        clean_domain = normalize_domain_name(domain)\n        now = self._clock()\n        self._entries[clean_domain] = DnsEntry(clean_domain, ip, now + ttl)\n\n    def lookup(self, domain: str) -> Optional[str]:\n        clean_domain = normalize_domain_name(domain)\n        entry = self._entries.get(clean_domain)\n        if not entry:\n            return None\n        now = self._clock()\n        if now >= entry.expires_at:\n            del self._entries[clean_domain]\n            return None\n        return entry.ip_addr\n\n    def count(self) -> int:\n        return len(self._entries)\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-30T16:02:05.065406+00:00"
+}

@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "B0",
+  "dimension": "Baseline",
+  "family": "config_lists",
+  "rule_id": "H12",
+  "task_id": 2059,
+  "run_idx": 2,
+  "stage": "ranking",
+  "order_idx": 52,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "mesh_config.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 770,
+  "candidate_tokens": 326,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-7b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-7b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: mesh_config.py ===\n\"\"\"Service mesh routing configuration compiler.\"\"\"\nfrom typing import Dict, Any\nfrom matcher_utils import deep_merge_matchers, normalize_prefix\nfrom route_validator import is_valid_route_pattern, count_route_segments, extract_primary_route\n\ndef compile_route_profile(mesh_id: str, base_rules: Dict[str, Any], env_rules: Dict[str, Any]) -> Dict[str, Any]:\n    merged = deep_merge_matchers(base_rules, env_rules)\n    prefix = normalize_prefix(merged.get(\"prefix\", \"/\"))\n    primary = extract_primary_route(prefix)\n    return {\n        \"mesh_id\": mesh_id,\n        \"prefix\": prefix,\n        \"primary\": primary,\n        \"segments\": count_route_segments(prefix),\n        \"rules\": merged\n    }\n\n# Function to sort headers to ensure consistent order\ndef sort_headers(headers: List[str]) -> List[str]:\n    return sorted(headers)\n\n# Update compile_route_profile to use sort_headers\ndef compile_route_profile(mesh_id: str, base_rules: Dict[str, Any], env_rules: Dict[str, Any]) -> Dict[str, Any]:\n    merged = deep_merge_matchers(base_rules, env_rules)\n    prefix = normalize_prefix(merged.get(\"prefix\", \"/\"))\n    primary = extract_primary_route(prefix)\n    headers = sort_headers(merged.get(\"headers\", []))\n    return {\n        \"mesh_id\": mesh_id,\n        \"prefix\": prefix,\n        \"primary\": primary,\n        \"segments\": count_route_segments(prefix),\n        \"rules\": merged,\n        \"headers\": headers\n    }\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: mesh_config.py ===\n```python\n\"\"\"Service mesh routing configuration compiler.\"\"\"\nfrom typing import Dict, Any\nfrom matcher_utils import deep_merge_matchers, normalize_prefix\nfrom route_validator import is_valid_route_pattern, count_route_segments, extract_primary_route\n\ndef compile_route_profile(mesh_id: str, base_rules: Dict[str, Any], env_rules: Dict[str, Any]) -> Dict[str, Any]:\n    merged = deep_merge_matchers(base_rules, env_rules)\n    prefix = normalize_prefix(merged.get(\"prefix\", \"/\"))\n    primary = extract_primary_route(prefix)\n    return {\n        \"mesh_id\": mesh_id,\n        \"prefix\": prefix,\n        \"primary\": primary,\n        \"segments\": count_route_segments(prefix),\n        \"rules\": merged\n    }\n\n# Function to sort headers to ensure consistent order\ndef sort_headers(headers: List[str]) -> List[str]:\n    return sorted(headers)\n\n# Update compile_route_profile to use sort_headers\ndef compile_route_profile(mesh_id: str, base_rules: Dict[str, Any], env_rules: Dict[str, Any]) -> Dict[str, Any]:\n    merged = deep_merge_matchers(base_rules, env_rules)\n    prefix = normalize_prefix(merged.get(\"prefix\", \"/\"))\n    primary = extract_primary_route(prefix)\n    headers = sort_headers(merged.get(\"headers\", []))\n    return {\n        \"mesh_id\": mesh_id,\n        \"prefix\": prefix,\n        \"primary\": primary,\n        \"segments\": count_route_segments(prefix),\n        \"rules\": merged,\n        \"headers\": headers\n    }\n```\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-28T23:23:22.702334+00:00"
+}

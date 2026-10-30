@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "PLACEBO",
+  "dimension": "Books (control)",
+  "family": "idempotency_keys",
+  "rule_id": "H13",
+  "task_id": 2067,
+  "run_idx": 1,
+  "stage": "extremes",
+  "order_idx": 8,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "token_builder.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2200,
+  "candidate_tokens": 423,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: token_builder.py ===\n\"\"\"RPC header token builders for compute instances.\"\"\"\nimport uuid\nfrom typing import Dict, Optional\n\nIDEMPOTENCY_KEY_HEADER = \"X-Idempotency-Key\"\nREQUEST_ID_HEADER = \"X-Request-Id\"\n\ndef build_mutation_headers() -> Dict[str, str]:\n    \"\"\"Generates standard request mutation headers.\"\"\"\n    return {\n        REQUEST_ID_HEADER: str(uuid.uuid4()),\n        IDEMPOTENCY_KEY_HEADER: str(uuid.uuid4())\n    }\n\ndef is_valid_header_dict(hdrs: dict) -> bool:\n    \"\"\"Validates that header mapping is non-empty and contains required headers.\"\"\"\n    required_headers = {REQUEST_ID_HEADER, IDEMPOTENCY_KEY_HEADER}\n    return isinstance(hdrs, dict) and len(hdrs) > 0 and required_headers.issubset(hdrs)\n\ndef extract_request_token(hdrs: dict) -> Optional[str]:\n    \"\"\"Extracts existing request identifier if present.\"\"\"\n    return hdrs.get(REQUEST_ID_HEADER)\n=== END ===\n=== FILE: vm_provisioner.py ===\n\"\"\"Virtual machine provisioning client.\"\"\"\nfrom typing import Dict, Any, List\nfrom token_builder import build_mutation_headers, is_valid_header_dict\nfrom quota_tracker import check_core_quota, get_region_endpoint\n\nclass VMProvisioner:\n    def __init__(self):\n        self.dispatched_calls: List[Dict[str, str]] = []\n\n    def provision_instance(self, instance_id: str, cores: int, region: str, retries: int = 1) -> Dict[str, Any]:\n        if not check_core_quota(cores):\n            raise ValueError(\"Core quota exceeded\")\n        endpoint = get_region_endpoint(region)\n        hdrs = None\n        for _ in range(retries + 1):\n            hdrs = build_mutation_headers()\n            if not is_valid_header_dict(hdrs):\n                raise ValueError(\"Invalid headers\")\n            self.dispatched_calls.append(dict(hdrs))\n        return {\"instance_id\": instance_id, \"endpoint\": endpoint, \"headers\": hdrs}\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: token_builder.py ===\n\"\"\"RPC header token builders for compute instances.\"\"\"\nimport uuid\nfrom typing import Dict, Optional\n\nIDEMPOTENCY_KEY_HEADER = \"X-Idempotency-Key\"\nREQUEST_ID_HEADER = \"X-Request-Id\"\n\ndef build_mutation_headers() -> Dict[str, str]:\n    \"\"\"Generates standard request mutation headers.\"\"\"\n    return {\n        REQUEST_ID_HEADER: str(uuid.uuid4()),\n        IDEMPOTENCY_KEY_HEADER: str(uuid.uuid4())\n    }\n\ndef is_valid_header_dict(hdrs: dict) -> bool:\n    \"\"\"Validates that header mapping is non-empty and contains required headers.\"\"\"\n    required_headers = {REQUEST_ID_HEADER, IDEMPOTENCY_KEY_HEADER}\n    return isinstance(hdrs, dict) and len(hdrs) > 0 and required_headers.issubset(hdrs)\n\ndef extract_request_token(hdrs: dict) -> Optional[str]:\n    \"\"\"Extracts existing request identifier if present.\"\"\"\n    return hdrs.get(REQUEST_ID_HEADER)\n=== END ===\n=== FILE: vm_provisioner.py ===\n\"\"\"Virtual machine provisioning client.\"\"\"\nfrom typing import Dict, Any, List\nfrom token_builder import build_mutation_headers, is_valid_header_dict\nfrom quota_tracker import check_core_quota, get_region_endpoint\n\nclass VMProvisioner:\n    def __init__(self):\n        self.dispatched_calls: List[Dict[str, str]] = []\n\n    def provision_instance(self, instance_id: str, cores: int, region: str, retries: int = 1) -> Dict[str, Any]:\n        if not check_core_quota(cores):\n            raise ValueError(\"Core quota exceeded\")\n        endpoint = get_region_endpoint(region)\n        hdrs = None\n        for _ in range(retries + 1):\n            hdrs = build_mutation_headers()\n            if not is_valid_header_dict(hdrs):\n                raise ValueError(\"Invalid headers\")\n            self.dispatched_calls.append(dict(hdrs))\n        return {\"instance_id\": instance_id, \"endpoint\": endpoint, \"headers\": hdrs}\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-29T02:11:36.922122+00:00"
+}
