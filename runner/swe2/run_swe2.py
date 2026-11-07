@@ -446,9 +446,14 @@ def family_attempts(fam, n):
 
 
 def build_schedule(arms, n, seed):
-    sched = [{"arm": a, "family": f, "task_id": t, "run_idx": r}
-             for f in FAMILY_TASKS for a in arms for t, r in family_attempts(f, n)]
-    random.Random(seed).shuffle(sched)
+    """Rounds: round j holds attempt j of every (family, arm) cell, shuffled within the round,
+    so stopping after any round leaves a balanced design."""
+    rng, sched = random.Random(seed), []
+    for j in range(n):
+        rnd = [{"arm": a, "family": f, "task_id": family_attempts(f, n)[j][0],
+                "run_idx": family_attempts(f, n)[j][1], "round": j + 1} for f in FAMILY_TASKS for a in arms]
+        rng.shuffle(rnd)
+        sched += rnd
     for i, a in enumerate(sched, 1):
         a["order_idx"] = i
     return sched
@@ -458,7 +463,7 @@ def execute(schedule, workers, cmap):
     os.makedirs(RAW_DIR, exist_ok=True)
     lock, st = threading.Lock(), {"n": 0, "k": 0, "bad": 0}
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        futs = {ex.submit(run_attempt, a, cmap): a for a in schedule}
+        futs = {ex.submit(run_attempt, a, cmap): a for a in schedule}  # FIFO: earlier rounds first
         for fut in as_completed(futs):
             a, rec = futs[fut], fut.result()
             with lock:
