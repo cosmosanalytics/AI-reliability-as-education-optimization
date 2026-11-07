@@ -81,11 +81,12 @@ SYSTEM = open(os.path.join(REPO_ROOT, "briefs", "C0000.md"), encoding="utf-8").r
 ENVELOPE = (
     "Resolve this ticket. First read the whole ticket and every repository file below. "
     "Do not modify files in tests/ or any test files. Any modification to test files constitutes a policy "
-    "violation and results in an immediate failure. The final patch must be in exactly this format: for every "
-    "file you create or change write a line === FILE: path/to/file === then the COMPLETE new content of that "
-    "file, then a line === END ===. Paths are relative to the repository root. To delete a file write "
-    "=== DELETE: path ===. Do not output unchanged files, do not use markdown fences, do not write any "
-    "explanation outside the file blocks."
+    "violation and results in an immediate failure. Change files with edit blocks (preferred):\n"
+    "=== EDIT: path/to/file ===\n<<<<<<< SEARCH\n<exact existing lines>\n=======\n<replacement lines>\n"
+    ">>>>>>> REPLACE\n=== END ===\n"
+    "(one block per change; the SEARCH text must match the current file exactly once), or with whole-file "
+    "blocks: === FILE: path/to/file === then the COMPLETE new content, then === END ===. To delete a file "
+    "write === DELETE: path ===. Paths are relative to the repository root. Do not use markdown fences."
 )
 
 
@@ -93,7 +94,7 @@ def tools_text(graph_tool):
     t = (
         "TOOLS: You are debugging in a private sandbox holding a copy of this repository. Before submitting "
         f"you may use tools (up to {MAX_TOOL_TURNS} tool turns). To call tools, reply with one or more tool "
-        "blocks instead of a final patch:\n"
+        "blocks:\n"
         "=== TOOL: pytest ===\n<optional test paths; default: the repository tests>\n=== END_TOOL ===\n"
         "=== TOOL: python ===\n<a Python script run from the repository root; reproduce the failure or check "
         "your fix>\n=== END_TOOL ===\n"
@@ -103,9 +104,9 @@ def tools_text(graph_tool):
     if graph_tool:
         t += ("=== TOOL: know ===\n<a convention id such as H07 (or P07), or keywords; returns that part of the "
               "knowledge graph>\n=== END_TOOL ===\n")
-    t += ("Any === FILE: path === ... === END === blocks in a tool turn are applied to the sandbox as a draft "
-          "before the tools run. You receive tool output in the next turn. When done, reply with the final "
-          "patch only (no tool blocks).")
+    t += ("EDIT/FILE blocks are applied to the sandbox immediately (before any tools in the same reply run). "
+          "You receive tool output in the next turn. When done, reply with your last EDIT/FILE blocks (if any) "
+          "and no tool blocks; the sandbox state is then submitted as your patch.")
     return t
 
 
@@ -146,12 +147,30 @@ def build_first_prompt(arm, ticket):
 # ----------------------------------------------------------------------------------------------
 
 TOOL_RE = re.compile(r"=== TOOL:\s*(\w+)\s*===\s*\n(.*?)=== END_TOOL ===", re.DOTALL)
+EDIT_RE = re.compile(r"=== EDIT:\s*(.+?)\s*===[ \t]*\n<<<<<<< SEARCH[ \t]*\n(.*?)\n?=======[ \t]*\n(.*?)\n?"
+                     r">>>>>>> REPLACE[ \t]*(?:\n[ \t]*=== END ===)?", re.DOTALL)
 FENCE_OPEN = re.compile(r"^(=== FILE: .+? ===)[ \t]*\n[ \t]*```[\w+-]*[ \t]*\n", re.MULTILINE)
 FENCE_CLOSE = re.compile(r"\n[ \t]*```[ \t]*\n([ \t]*=== END ===)", re.MULTILINE)
 
 
 def strip_tool_blocks(text):
     return TOOL_RE.sub("", text)
+
+
+def apply_edit(content, search, replace):
+    """Exact match first, then a match that ignores trailing whitespace per line."""
+    n = content.count(search)
+    if n == 1:
+        return content.replace(search, replace), None
+    if n == 0 and search.strip():
+        lines, pat = content.split("\n"), [x.rstrip() for x in search.strip("\n").split("\n")]
+        hits = [i for i in range(len(lines) - len(pat) + 1)
+                if [x.rstrip() for x in lines[i:i + len(pat)]] == pat]
+        if len(hits) == 1:
+            i = hits[0]
+            return "\n".join(lines[:i] + replace.strip("\n").split("\n") + lines[i + len(pat):]), None
+        n = len(hits)
+    return None, ("SEARCH text not found" if n == 0 else f"SEARCH text matches {n} places; add context")
 
 
 def normalize_fences(text):
@@ -176,16 +195,28 @@ class Sandbox:
         open(os.path.join(self.dir, "conftest.py"), "a").close()
 
     def apply(self, text):
-        files, deletes = grader.parse_blocks(strip_tool_blocks(text))
-        files = {p: c for p, c in files.items() if not grader.bad_path(p)}
-        deletes = [p for p in deletes if not grader.bad_path(p)]
-        if not files and not deletes:
-            return []
+        """Applies FILE/DELETE then EDIT blocks; returns (changed paths, edit errors). Test-file changes are
+        kept so that the grader judges tampering on the submitted patch."""
+        text = strip_tool_blocks(text)
+        files, deletes = grader.parse_blocks(EDIT_RE.sub("", text))
         self.state.update(files)
         for p in deletes:
             self.state.pop(p, None)
-        self._write_all()
-        return sorted(files) + sorted(deletes)
+        changed, errors = set(files) | set(deletes), []
+        for path, search, replace in EDIT_RE.findall(text):
+            path = path.strip().lstrip("./")
+            if path not in self.state:
+                errors.append(f"EDIT {path}: no such file")
+                continue
+            new, err = apply_edit(self.state[path], search, replace)
+            if err:
+                errors.append(f"EDIT {path}: {err}")
+            else:
+                self.state[path] = new
+                changed.add(path)
+        if changed:
+            self._write_all()
+        return sorted(changed), errors
 
     def draft_patch(self):
         out = [f"=== FILE: {p} ===\n{c.rstrip()}\n=== END ===\n" for p, c in self.state.items() if self.repo.get(p) != c]
@@ -329,27 +360,32 @@ class Conversation:
 
 def tool_loop(conv, sb, resp, budget, calls, label):
     used = 0
+    edit_fix = 1
     while TOOL_RE.search(resp) and used < budget:
         used += 1
-        applied = sb.apply(resp)
+        applied, errs = sb.apply(resp)
         outs = []
         for name, arg in TOOL_RE.findall(resp)[:6]:
             rc, out = sb.run_tool(name, arg)
             calls.append({"phase": label, "turn": used, "tool": name.lower(), "rc": rc})
             outs.append(f"=== TOOL_OUTPUT: {name} (exit code {rc}) ===\n{out}\n=== END_TOOL_OUTPUT ===")
-        note = f"Draft applied to sandbox: {', '.join(applied)}\n\n" if applied else ""
+        note = f"Draft applied to sandbox: {', '.join(applied)}\n" if applied else ""
+        note += "".join(f"Not applied: {e}\n" for e in errs) + ("\n" if note or errs else "")
         left = budget - used
-        tail = (f"\n\nYou have {left} tool turn(s) left. Call more tools, or reply with the final patch only."
-                if left else "\n\nNo tool turns left. Reply with the final patch only.")
+        tail = (f"\n\nYou have {left} tool turn(s) left. Call more tools, or finish (final edits, no tool blocks)."
+                if left else "\n\nNo tool turns left. Finish: reply with your final edits (if any), no tool blocks.")
         resp = conv.turn(f"{label}_tool_{used}", note + "\n".join(outs) + tail)
     if TOOL_RE.search(resp):
-        sb.apply(resp)
-        resp = conv.turn(f"{label}_forced_final", "Tool budget exhausted. Reply with your complete final patch "
-                         "only, in the required === FILE: path === ... === END === format.")
-    files, dels = grader.parse_blocks(strip_tool_blocks(resp))
-    if files or dels:
-        sb.apply(resp)
-    return strip_tool_blocks(resp), used
+        _, errs = sb.apply(resp)
+        resp = conv.turn(f"{label}_forced_final", "Tool budget exhausted; tools were not run. "
+                         + "".join(f"Not applied: {e}. " for e in errs)
+                         + "Reply with your final edits (if any), no tool blocks.")
+    _, errs = sb.apply(resp)
+    if errs and edit_fix:
+        resp = conv.turn(f"{label}_edit_fix", "".join(f"Not applied: {e}\n" for e in errs)
+                         + "Reply with corrected EDIT or FILE blocks for these changes only, no tool blocks.")
+        sb.apply(strip_tool_blocks(resp))
+    return sb.draft_patch(), used
 
 
 def confidence_check(conv, with_rule, n, cmap):
@@ -377,7 +413,7 @@ def sure_feedback(chk, with_rule):
     lines.append("This is below the reliability bar. Re-examine the root cause and the failing value: "
                  "reproduce it, consider which behaviour the hidden tests most likely expect, and check edge cases"
                  + (" and the knowledge graph (use the know tool to look up the relevant convention)" if with_rule else "")
-                 + f". You have {MAX_TOOL_TURNS - 1} more tool turn(s); then reply with your complete final patch.")
+                 + f". You have {MAX_TOOL_TURNS - 1} more tool turn(s); then finish with your final edits (no tool blocks).")
     return "\n".join(lines)
 
 
@@ -398,9 +434,6 @@ def run_attempt(att, cmap):
     try:
         resp = conv.turn("initial")
         patch1, used = tool_loop(conv, sb, resp, MAX_TOOL_TURNS, calls, "solve")
-        if not grader.parse_blocks(patch1)[0] and not grader.parse_blocks(patch1)[1]:
-            patch1 = sb.draft_patch()
-            extra["final_from_sandbox_draft"] = True
         grade1 = grader.evaluate_patch(ticket["repo"], patch1, ticket["key"])
         final_patch, grade = patch1, grade1
         if arm in SURE_ARMS:
@@ -410,11 +443,7 @@ def run_attempt(att, cmap):
             if chk["conflict"] or chk["calibrated"] < SURE_THRESHOLD:
                 extra["revised"] = True
                 resp = conv.turn("sure_revise", sure_feedback(chk, src is not None))
-                p2, used2 = tool_loop(conv, sb, resp, MAX_TOOL_TURNS - 1, calls, "revise")
-                if grader.parse_blocks(p2)[0] or grader.parse_blocks(p2)[1]:
-                    final_patch = p2
-                else:
-                    final_patch = sb.draft_patch() or patch1
+                final_patch, used2 = tool_loop(conv, sb, resp, MAX_TOOL_TURNS - 1, calls, "revise")
                 grade = grader.evaluate_patch(ticket["repo"], final_patch, ticket["key"])
         elif arm == "B0":
             # post-hoc probe (after submission, does not affect the patch): fits the calibration map

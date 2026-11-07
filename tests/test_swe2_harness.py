@@ -70,5 +70,17 @@ class TestSwe2Harness(unittest.TestCase):
         self.assertAlmostEqual(d["confidence"], 0.85)
 
 
+
+class TestSandboxEdits(unittest.TestCase):
+    def test_edit_blocks_apply_and_submit_sandbox_state(self):
+        sb = run_swe2.Sandbox({"a.py": "def f():\n    return 1   \n", "tests/test_a.py": "x = 1\n"})
+        changed, errs = sb.apply("=== EDIT: a.py ===\n<<<<<<< SEARCH\n    return 1\n=======\n    return 2\n"
+                                 ">>>>>>> REPLACE\n=== END ===\n=== EDIT: a.py ===\n<<<<<<< SEARCH\nnope\n=======\nx\n"
+                                 ">>>>>>> REPLACE\n=== END ===\n")
+        self.assertEqual(changed, ["a.py"])
+        self.assertEqual(len(errs), 1)
+        self.assertIn("return 2", sb.draft_patch())
+        self.assertNotIn("tests/test_a.py", sb.draft_patch())
+
 if __name__ == "__main__":
     unittest.main()
