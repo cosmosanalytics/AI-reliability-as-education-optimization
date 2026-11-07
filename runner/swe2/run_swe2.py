@@ -90,6 +90,11 @@ ENVELOPE = (
 )
 
 
+CUTOFF_NUDGE = ("Your reply hit the length limit and was cut off. Do not repeat your reasoning. Reply now with "
+                "only your EDIT/FILE blocks and/or tool blocks.")
+BREVITY = "Keep any reasoning outside blocks brief (a few sentences); spend your output on tool calls and edits."
+
+
 def tools_text(graph_tool):
     t = (
         "TOOLS: You are debugging in a private sandbox holding a copy of this repository. Before submitting "
@@ -106,7 +111,7 @@ def tools_text(graph_tool):
               "knowledge graph>\n=== END_TOOL ===\n")
     t += ("EDIT/FILE blocks are applied to the sandbox immediately (before any tools in the same reply run). "
           "You receive tool output in the next turn. When done, reply with your last EDIT/FILE blocks (if any) "
-          "and no tool blocks; the sandbox state is then submitted as your patch.")
+          "and no tool blocks; the sandbox state is then submitted as your patch. " + BREVITY)
     return t
 
 
@@ -352,6 +357,8 @@ class Conversation:
                                 "finish": r["finish"]})
         if keep:
             self.msgs.append({"role": "assistant", "content": r["text"]})
+            if r["finish"] == "length" and not kind.endswith("_cutoff"):
+                return self.turn(kind + "_cutoff", CUTOFF_NUDGE, keep, max_tokens, temperature)
         else:
             if user is not None:
                 self.msgs.pop()
