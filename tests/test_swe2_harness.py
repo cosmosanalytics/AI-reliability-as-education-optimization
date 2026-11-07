@@ -63,6 +63,8 @@ class TestSwe2Harness(unittest.TestCase):
         self.assertEqual(d["root_cause_norm"], "tax_engine.py::calculate_vat")
         self.assertEqual(d["rule_norm"], "H02")
         self.assertAlmostEqual(d["confidence"], 0.85)
+        d = run_swe2.parse_diag("ROOT_CAUSE: `sorter.py::sort_batch` where the sort key uses msg_id\nRULE: H07")
+        self.assertEqual(d["root_cause_norm"], "sorter.py::sort_batch")
         d = run_swe2.parse_diag("ROOT_CONFIDENCE: discount::prorate_discount\nCONFIDENCE: 85")
         self.assertEqual(d["root_cause_norm"], "discount::prorate_discount")
         self.assertAlmostEqual(d["confidence"], 0.85)

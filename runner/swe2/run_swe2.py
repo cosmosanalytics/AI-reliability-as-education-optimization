@@ -254,8 +254,8 @@ def parse_diag(text):
         out[k.lower()] = m.group(1).strip() if m else None
     m = re.search(r"\d+(?:\.\d+)?", out["confidence"] or "")
     out["confidence"] = max(0.0, min(100.0, float(m.group(0)))) / 100 if m else None
-    rc = (out["root_cause"] or "").lower().replace(" ", "").strip("`'\".")
-    out["root_cause_norm"] = rc.split("(")[0]
+    rc = re.search(r"[\w./-]+(?:\.py)?::\w+", (out["root_cause"] or "").replace("`", ""))
+    out["root_cause_norm"] = rc.group(0).lower() if rc else (out["root_cause"] or "").lower().strip()[:60]
     rr = re.search(r"\b[hp]\d\d\b", (out["rule"] or "").lower())
     out["rule_norm"] = rr.group(0).upper() if rr else "none"
     return out
