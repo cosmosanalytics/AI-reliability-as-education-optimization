@@ -86,7 +86,9 @@ def main():
             r["familiarity"] = (x + y) / 2
     for r in rows:
         r.setdefault("familiarity", float("nan"))
-    rows.sort(key=lambda r: (r["familiarity"], r["quiz_acc"], r["B0"]))
+    def nan_last(v):
+        return (math.isnan(v), 0.0 if math.isnan(v) else v)
+    rows.sort(key=lambda r: (nan_last(r["familiarity"]), nan_last(r["quiz_acc"]), nan_last(r["B0"])))
 
     L = ["# SWE-2 results: ontology + knowledge harness + confidence harness", ""]
     L += ["Model: Qwen3.6-35B-A3B (UD-Q4_K_M, llama.cpp, CPU). Strict pass on hidden tests.", ""]
@@ -111,6 +113,9 @@ def main():
     L += ["", "## Familiarity vs gain (Spearman rho across families, permutation p)", "",
           "| Gain of arm over B0 | vs quiz accuracy | vs B0 pass rate | vs composite familiarity | vs quiz consistency |",
           "|---|---|---|---|---|"]
+    L.insert(len(L) - 2, "Quiz accuracy is the primary predictor: it is measured independently of debugging. B0 pass rate "
+             "(and the composite) shares B0 sampling noise with the gain (arm - B0), which biases rho negative "
+             "(regression to the mean).\n")
     corr = {}
     for a in ARMS[1:]:
         sub = [r for r in rows if r[a + "_n"] and r["B0_n"] and not math.isnan(r["familiarity"])]
