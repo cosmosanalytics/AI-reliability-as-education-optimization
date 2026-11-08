@@ -1,0 +1,46 @@
+{
+  "status": "COMPLETED",
+  "arm": "KNOW",
+  "family": "config_lists",
+  "rule_id": "H12",
+  "task_id": 2055,
+  "run_idx": 1,
+  "order_idx": 99,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "pipeline_composer.py"
+  ],
+  "tool_calls": [],
+  "tools_used": [],
+  "model_turns": 1,
+  "prompt_tokens": 1898,
+  "completion_tokens": 1516,
+  "latency_sec": 2298.5,
+  "retrieved": [
+    "H12",
+    "H03",
+    "H04"
+  ],
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: pipeline_composer.py ===\n\"\"\"CI/CD pipeline step composition engine.\"\"\"\nfrom typing import Dict, Any, List\nfrom step_schema import PipelineStep\nfrom env_validator import sanitize_env_vars, is_valid_step_name\n\ndef merge_step_args(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    # Defensive copy of base keys/values (H03)\n    merged = {k: v for k, v in base.items()}\n    \n    for k, v in override.items():\n        if k in merged:\n            base_val = merged[k]\n            if isinstance(base_val, dict) and isinstance(v, dict):\n                # Recursively merge nested dictionaries (H12)\n                merged[k] = merge_step_args(base_val, v)\n            elif isinstance(base_val, list) and isinstance(v, list):\n                # Concatenate lists: base then override, remove duplicates preserving first-seen order (H12)\n                combined = base_val + v\n                merged[k] = list(dict.fromkeys(combined))\n            else:\n                # Override value replaces base value\n                merged[k] = v\n        else:\n            merged[k] = v\n            \n    return merged\n\ndef compose_pipeline_step(step_id: str, command: str, base_args: Dict[str, Any], env_args: Dict[str, Any]) -> PipelineStep:\n    if not is_valid_step_name(step_id):\n        raise ValueError(\"Invalid step ID\")\n    merged_args = merge_step_args(base_args, env_args)\n    env = sanitize_env_vars(merged_args.get(\"env\", {}))\n    return PipelineStep(step_id=step_id, command=command, args=merged_args, env_vars=env)\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the issue.\n\n1.  **Incident**: CI build step omitted mandatory base compilation flags when target overrides were merged.\n2.  **Test Failure**: `assert ['-O2', '-g'] == ['-Wall', '-O2', '-g']`. The test expects `['-Wall', '-O2', '-g']` but got `['-O2', '-g']`. This implies the base flags `['-Wall']` were lost during the merge.\n3.  **Convention H12**: Configuration merge with list concatenation. List values must be concatenated (`base + override`) with duplicates removed, preserving first-seen order. The current `merge_step_args` function replaces list values entirely (`merged[k] = v`).\n4.  **Convention H03**: Container immutability / defensive allocation. We should not mutate caller-supplied arguments.\n\nI need to modify `pipeline_composer.py`:\n1.  Update `merge_step_args` to handle lists by concatenating them (H12).\n2.  Ensure defensive copies are made (H03), although `dict(base)` is a shallow copy, if the values are mutable (like lists or nested dicts), we need deeper protection. H12 says \"nested dictionaries merged recursively\", so recursive merge is needed for dicts. For lists, concatenation creates a new list, which is safe.\n\nLet's look at `merge_step_args`:\n```python\ndef merge_step_args(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    merged = dict(base) # Shallow copy of base keys/values\n    for k, v in override.items():\n        if k in merged and isinstance(merged[k], dict) and isinstance(v, dict):\n            merged[k] = merge_step_args(merged[k], v)\n        else:\n            merged[k] = v # This replaces lists, violating H12\n    return merged\n```\n\nFix:\n- Handle list concatenation.\n- Ensure we don't mutate the original `base` or `override` if they contain mutable objects (like lists). Since `dict(base)` copies references, if `base['flags']` is a list, `merged['flags']` points to the same list. If we later did `merged['flags'].append(...)`, it would mutate base. However, here we are replacing `merged[k]`.\n- But wait, if `k` is in both and is a list, we want `base_list + override_list`.\n- If `k` is in both and is a dict, we recurse.\n- If `k` is only in base, keep it.\n- If `k` is only in override, set it.\n\nRefined `merge_step_args`:\n```python\ndef merge_step_args(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    # Defensive copy of base to avoid mutating caller's dict\n    merged = {k: v for k, v in base.items()}\n    \n    for k, v in override.items():\n        if k in merged:\n            base_val = merged[k]\n            if isinstance(base_val, dict) and isinstance(v, dict):\n                # Recursively merge dicts (H12)\n                merged[k] = merge_step_args(base_val, v)\n            elif isinstance(base_val, list) and isinstance(v, list):\n                # Concatenate lists, remove duplicates preserving order (H12)\n                combined = base_val + v\n                # Remove duplicates while preserving order\n                seen = set()\n                unique_combined = []\n                for item in combined:\n                    # Hashable check or use a different method if items are unhashable\n                    # Assuming flags are strings/ints based on context\n                    try:\n                        key = item\n                        if key not in seen:\n                            seen.add(key)\n                            unique_combined.append(item)\n                    except TypeError:\n                        # Fallback for unhashable types, though unlikely for build flags\n                        unique_combined.append(item) \n                merged[k] = unique_combined\n            else:\n                # Override value takes precedence (or simple replacement)\n                merged[k] = v\n        else:\n            merged[k] = v\n            \n    return merged\n```\n\nWait, H12 says \"duplicates removed preserving first-seen order\". `base_items + override_items` implies base comes first.\n\nAlso, H03 requires defensive deep copies or new collection instances. `dict(base)` is a shallow copy. If `base` contains lists, `merged` references the same list objects. If we just assign `merged[k] = unique_combined`, that's fine because `unique_combined` is a new list. We are not mutating the original `base_val` list. So H03 is satisfied for the top level and list concatenation. For nested dicts, `merge_step_args` creates a new dict via `{k: v ...}` or `dict()`, so it's safe.\n\nLet's refine the duplicate removal to be robust. Standard idiom:\n```python\n    elif isinstance(base_val, list) and isinstance(v, list):\n        merged[k] = list(dict.fromkeys(base_val + v))\n```\nThis preserves order and removes duplicates for hashable items. Build flags are strings, so this works.\n\nOne detail: `merge_step_args` is called with `base_args` and `env_args`. These might be the same object or share references? The test passes distinct dicts. But defensive coding suggests we shouldn't rely on that.\n\nLet's apply the fix.\n\n=== EDIT: pipeline_composer.py ===\n<<<<<<< SEARCH\ndef merge_step_args(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    merged = dict(base)\n    for k, v in override.items():\n        if k in merged and isinstance(merged[k], dict) and isinstance(v, dict):\n            merged[k] = merge_step_args(merged[k], v)\n        else:\n            merged[k] = v\n    return merged\n=======\ndef merge_step_args(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    # Defensive copy of base keys/values (H03)\n    merged = {k: v for k, v in base.items()}\n    \n    for k, v in override.items():\n        if k in merged:\n            base_val = merged[k]\n            if isinstance(base_val, dict) and isinstance(v, dict):\n                # Recursively merge nested dictionaries (H12)\n                merged[k] = merge_step_args(base_val, v)\n            elif isinstance(base_val, list) and isinstance(v, list):\n                # Concatenate lists: base then override, remove duplicates preserving first-seen order (H12)\n                combined = base_val + v\n                merged[k] = list(dict.fromkeys(combined))\n            else:\n                # Override value replaces base value\n                merged[k] = v\n        else:\n            merged[k] = v\n            \n    return merged\n>>>>>>> REPLACE",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-08T18:02:37.386918+00:00"
+}
