@@ -1,0 +1,54 @@
+{
+  "status": "COMPLETED",
+  "arm": "B0",
+  "family": "service_errors",
+  "rule_id": "H04",
+  "task_id": 2031,
+  "run_idx": 1,
+  "order_idx": 21,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "payload_validator.py"
+  ],
+  "tool_calls": [],
+  "tools_used": [],
+  "model_turns": 2,
+  "prompt_tokens": 3050,
+  "completion_tokens": 1023,
+  "latency_sec": 1005.5,
+  "probe": {
+    "root_cause": "payload_validator.py::validate_metric_payload where a raw KeyError is raised instead of a domain-specific ServiceError, causing unhandled termination in the ingestion worker.",
+    "rule": null,
+    "confidence": 0.95,
+    "root_cause_norm": "payload_validator.py::validate_metric_payload",
+    "rule_norm": "none"
+  },
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: payload_validator.py ===\n\"\"\"Inbound payload structure validator.\"\"\"\nfrom errors import ServiceError\nfrom schema_specs import REQUIRED_METRIC_FIELDS, check_missing_attributes, extract_metric_context\nfrom typing import Dict, Any\n\ndef validate_metric_payload(payload: Dict[str, Any]) -> bool:\n    \"\"\"Validate inbound JSON dictionary against required fields.\n    \n    Raises an exception if required fields are missing or empty.\n    \"\"\"\n    missing = check_missing_attributes(payload, REQUIRED_METRIC_FIELDS)\n    if missing:\n        raise ServiceError(code=\"INVALID_PAYLOAD\", message=f\"Missing attributes: {missing}\", details={\"missing\": missing})\n    return True\n\ndef process_metric_entry(payload: Dict[str, Any]) -> str:\n    validate_metric_payload(payload)\n    _ = extract_metric_context(payload)\n    return \"PROCESSED\"\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the issue. The ticket states that \"Missing payload fields raised unhandled KeyError terminating ingestion worker.\" This implies that when `validate_metric_payload` detects missing fields, it raises a `KeyError`, which is likely not caught by the ingestion worker, causing it to crash (unhandled exception) rather than failing gracefully or being handled as a business logic error.\n\nLooking at `payload_validator.py`:\n```python\ndef validate_metric_payload(payload: Dict[str, Any]) -> bool:\n    missing = check_missing_attributes(payload, REQUIRED_METRIC_FIELDS)\n    if missing:\n        raise KeyError(f\"Missing attributes: {missing}\")\n    return True\n```\n\nIt raises a raw `KeyError`. The ticket suggests this is an \"unhandled KeyError terminating ingestion worker\". In Python, raising a custom exception derived from `ServiceError` (defined in `errors.py`) is the standard way to handle domain-specific errors gracefully, allowing the caller to catch `ServiceError` instead of a generic `KeyError`.\n\nThe `errors.py` file defines `ServiceError` with a `code`, `message`, and `details`. This fits the requirement for a structured error.\n\nI should change `raise KeyError(...)` to `raise ServiceError(...)`.\n\nLet's check the test file `tests/test_payload_validator.py`:\n```python\nfrom payload_validator import validate_metric_payload, process_metric_entry\n\ndef test_nominal_payload():\n    valid = {\"event_name\": \"login\", \"timestamp\": 1700000000, \"account_id\": \"acc-1\"}\n    assert validate_metric_payload(valid) is True\n    assert process_metric_entry(valid) == \"PROCESSED\"\n```\nThis test only checks the nominal (happy path) case. It doesn't check for errors. However, the failing test mentioned in the ticket is `tests/test_validator_cases.py::test_service_execution`. I don't see this file in the provided repository files, but the traceback says `AssertionError: assert False is True`. This suggests the test might be checking if an exception was raised or handled correctly, or perhaps it's a different scenario.\n\nWait, looking closer at the prompt: \"Do not modify files in tests/\". And the failing test is `tests/test_validator_cases.py`. I don't have the content of that file. However, the ticket title says \"Missing payload fields raised unhandled KeyError\". The fix is clearly to raise a proper exception type (`ServiceError`) instead of `KeyError`.\n\nLet's verify if there are other clues. The `ServiceError` takes `code`, `message`, and `details`.\nIn `payload_validator.py`, I need to import `ServiceError` and use it.\n\nCurrent `payload_validator.py`:\n```python\n\"\"\"Inbound payload structure validator.\"\"\"\nfrom errors import ServiceError\nfrom schema_specs import REQUIRED_METRIC_FIELDS, check_missing_attributes, extract_metric_context\nfrom typing import Dict, Any\n\ndef validate_metric_payload(payload: Dict[str, Any]) -> bool:\n    \"\"\"Validate inbound JSON dictionary against required fields.\n    \n    Raises an exception if required fields are missing or empty.\n    \"\"\"\n    missing = check_missing_attributes(payload, REQUIRED_METRIC_FIELDS)\n    if missing:\n        raise KeyError(f\"Missing attributes: {missing}\")\n    return True\n\ndef process_metric_entry(payload: Dict[str, Any]) -> str:\n    validate_metric_payload(payload)\n    _ = extract_metric_context(payload)\n    return \"PROCESSED\"\n```\n\nI will change the `raise KeyError` to `raise ServiceError`. I need to determine appropriate arguments. The message is clear. The code could be something like `INVALID_PAYLOAD`. The details could include the missing fields.\n\nLet's look at `ServiceError`:\n```python\nclass ServiceError(Exception):\n    def __init__(self, code: str, message: str = \"\", details: Optional[Dict[str, Any]] = None):\n        super().__init__(f\"[{code}] {message}\")\n        self.code = code\n        self.message = message\n        self.details = details or {}\n```\n\nSo I can do:\n`raise ServiceError(code=\"INVALID_PAYLOAD\", message=f\"Missing attributes: {missing}\", details={\"missing\": missing})`\n\nThis makes the error structured and catchable as `ServiceError`.\n\nLet's apply this change.\n\n=== EDIT: payload_validator.py ===\n<<<<<<< SEARCH\n    if missing:\n        raise KeyError(f\"Missing attributes: {missing}\")\n=======\n    if missing:\n        raise ServiceError(code=\"INVALID_PAYLOAD\", message=f\"Missing attributes: {missing}\", details={\"missing\": missing})\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "probe",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: payload_validator.py::validate_metric_payload where a raw KeyError is raised instead of a domain-specific ServiceError, causing unhandled termination in the ingestion worker.\nCONFIDENCE: 95",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-07T22:48:47.615577+00:00"
+}
