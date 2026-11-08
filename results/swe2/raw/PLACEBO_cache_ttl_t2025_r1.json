@@ -1,0 +1,45 @@
+{
+  "status": "COMPLETED",
+  "arm": "PLACEBO",
+  "family": "cache_ttl",
+  "rule_id": "H11",
+  "task_id": 2025,
+  "run_idx": 1,
+  "order_idx": 50,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "cache.py"
+  ],
+  "tool_calls": [],
+  "tools_used": [],
+  "model_turns": 1,
+  "prompt_tokens": 1610,
+  "completion_tokens": 326,
+  "latency_sec": 342.7,
+  "retrieved": [
+    "P05",
+    "P03"
+  ],
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: cache.py ===\n\"\"\"In-memory security token cache.\"\"\"\nimport time\nfrom typing import Dict, Optional, Callable\nfrom token_record import CachedToken\nfrom cache_utils import format_cache_key\n\nclass TokenCache:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        \"\"\"In-memory token cache with injectable clock.\"\"\"\n        self._clock = clock or time.time\n        self._store: Dict[str, CachedToken] = {}\n\n    def set(self, key: str, token_str: str, ttl_seconds: float) -> None:\n        now = self._clock()\n        norm_key = format_cache_key(\"tok\", key)\n        self._store[norm_key] = CachedToken(token_str=token_str, expires_at=now + ttl_seconds)\n\n    def get(self, key: str) -> Optional[str]:\n        norm_key = format_cache_key(\"tok\", key)\n        entry = self._store.get(norm_key)\n        if not entry:\n            return None\n        now = self._clock()\n        if now >= entry.expires_at:\n            del self._store[norm_key]\n            return None\n        return entry.token_str\n\n    def size(self) -> int:\n        return len(self._store)\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the issue. The ticket states: \"Stale bearer tokens remained valid at the exact expiration second due to loose inequality check.\"\n\nLooking at `cache.py`:\n```python\n        if now > entry.expires_at:\n            del self._store[norm_key]\n            return None\n        return entry.token_str\n```\n\nThe condition `now > entry.expires_at` means that if `now == entry.expires_at`, the token is NOT considered expired, and the token string is returned. This contradicts the requirement implied by `token_record.py`'s `is_expired_at` method which uses `>=`:\n```python\n    def is_expired_at(self, current_time: float) -> bool:\n        return current_time >= self.expires_at\n```\n\nThe test `test_token_expiry` (which is failing with `'val1' is None`) likely sets a token to expire at exactly the current time. If the check is `>`, it returns the value. If the fix changes it to `>=`, it deletes and returns `None`. The error `AssertionError: assert 'val1' is None` suggests the test expects `None` (expired) but got `'val1'` (not expired). This confirms the bug: the check should be `>=` instead of `>`.\n\nI will fix `cache.py` to use `>=` in the expiration check.\n\n=== EDIT: cache.py ===\n<<<<<<< SEARCH\n        if now > entry.expires_at:\n=======\n        if now >= entry.expires_at:\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-08T08:29:27.016961+00:00"
+}

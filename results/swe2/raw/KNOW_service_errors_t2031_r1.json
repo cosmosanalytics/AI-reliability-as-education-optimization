@@ -1,0 +1,46 @@
+{
+  "status": "COMPLETED",
+  "arm": "KNOW",
+  "family": "service_errors",
+  "rule_id": "H04",
+  "task_id": 2031,
+  "run_idx": 1,
+  "order_idx": 58,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "payload_validator.py"
+  ],
+  "tool_calls": [],
+  "tools_used": [],
+  "model_turns": 1,
+  "prompt_tokens": 2067,
+  "completion_tokens": 373,
+  "latency_sec": 307.1,
+  "retrieved": [
+    "H04",
+    "H08",
+    "H03"
+  ],
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: payload_validator.py ===\n\"\"\"Inbound payload structure validator.\"\"\"\nfrom errors import ServiceError\nfrom schema_specs import REQUIRED_METRIC_FIELDS, check_missing_attributes, extract_metric_context\nfrom typing import Dict, Any\n\ndef validate_metric_payload(payload: Dict[str, Any]) -> bool:\n    \"\"\"Validate inbound JSON dictionary against required fields.\n    \n    Raises an exception if required fields are missing or empty.\n    \"\"\"\n    missing = check_missing_attributes(payload, REQUIRED_METRIC_FIELDS)\n    if missing:\n        raise ServiceError(code=\"ERR_PAYLOAD_SCHEMA_INVALID\", message=f\"Missing attributes: {missing}\")\n    return True\n\ndef process_metric_entry(payload: Dict[str, Any]) -> str:\n    validate_metric_payload(payload)\n    _ = extract_metric_context(payload)\n    return \"PROCESSED\"\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the ticket and the relevant conventions.\n\n1.  **Issue**: `KeyError` is raised in `payload_validator.py` when required fields are missing, terminating the ingestion worker. The test `test_service_execution` (which likely mirrors production behavior or specific edge cases not fully shown in the snippet but implied by the traceback) fails because it expects a structured exception, not a raw `KeyError`.\n2.  **Convention H04**: Prohibits generic exceptions like `KeyError`. Requires using `ServiceError` with specific codes. Specifically, `ERR_PAYLOAD_SCHEMA_INVALID` is the code for \"missing or malformed request payload attributes and schema verification failures\".\n3.  **Current Code**: `payload_validator.py` raises `KeyError(...)`. This violates H04.\n\nI need to:\n1.  Modify `payload_validator.py` to raise `ServiceError(code=\"ERR_PAYLOAD_SCHEMA_INVALID\", ...)` instead of `KeyError`.\n\nLet's check if there are other files involved. The traceback mentions `test_service_execution`, but the provided test file is `test_payload_validator.py`. It's possible `test_service_execution` is in a different file or the snippet provided is incomplete regarding tests, but I am instructed not to modify tests. The fix must be in the source code.\n\nLet's apply the fix to `payload_validator.py`.\n\n=== EDIT: payload_validator.py ===\n<<<<<<< SEARCH\n    missing = check_missing_attributes(payload, REQUIRED_METRIC_FIELDS)\n    if missing:\n        raise KeyError(f\"Missing attributes: {missing}\")\n=======\n    missing = check_missing_attributes(payload, REQUIRED_METRIC_FIELDS)\n    if missing:\n        raise ServiceError(code=\"ERR_PAYLOAD_SCHEMA_INVALID\", message=f\"Missing attributes: {missing}\")\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-08T09:47:01.279648+00:00"
+}

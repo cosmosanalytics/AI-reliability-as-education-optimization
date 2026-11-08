@@ -1,0 +1,46 @@
+{
+  "status": "COMPLETED",
+  "arm": "KNOW",
+  "family": "idempotency_keys",
+  "rule_id": "H13",
+  "task_id": 2062,
+  "run_idx": 1,
+  "order_idx": 40,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "idempotency_generator.py"
+  ],
+  "tool_calls": [],
+  "tools_used": [],
+  "model_turns": 1,
+  "prompt_tokens": 1915,
+  "completion_tokens": 904,
+  "latency_sec": 651.9,
+  "retrieved": [
+    "H13",
+    "H03",
+    "H04"
+  ],
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: idempotency_generator.py ===\n\"\"\"Idempotency token generation helpers.\"\"\"\nimport time\nimport uuid\n\ndef generate_outbound_key() -> str:\n    \"\"\"Generates unique key for outbound request tracking.\n    \n    Format: idemp_<timestamp_ms>_<hex_token_8chars>\n    \"\"\"\n    timestamp_ms = int(time.time() * 1000)\n    hex_token = uuid.uuid4().hex[:8]\n    return f\"idemp_{timestamp_ms}_{hex_token}\"\n\ndef is_valid_token_length(token: str) -> bool:\n    return len(token) > 0\n\ndef get_token_prefix() -> str:\n    return \"idemp_\"\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the ticket and the failing test.\n\n1.  **Ticket**: INC-9302 - \"Order fulfillment RPC failed gateway schema check due to non-standard raw UUID idempotency key.\"\n2.  **Convention H13**: Outbound request idempotency headers.\n    *   Scope: All mutating outbound RPC or HTTP requests.\n    *   Literal: Header name = `X-Idempotency-Key`.\n    *   Format: Idempotency key = `idemp_<timestamp_ms>_<hex_token_8chars>`.\n    *   Behavior: Retries reuse the exact same idempotency key.\n3.  **Current Code (`idempotency_generator.py`)**:\n    *   `generate_outbound_key()` returns `str(uuid.uuid4())`. This is a raw UUID (e.g., `550e8400-e29b-41d4-a716-446655440000`).\n    *   It does *not* follow the format `idemp_<timestamp_ms>_<hex_token_8chars>`.\n4.  **Current Code (`fulfillment_service.py`)**:\n    *   Uses `generate_outbound_key()`.\n    *   Passes it in header `X-Idempotency-Key`.\n    *   Retries loop reuses the same `key` variable, which is correct behavior per H13.\n5.  **Test Traceback**: `FAILED tests/test_fulfillment_cases.py::test_case_1 - AssertionError: assert False == True`. The provided test file `tests/test_fulfillment.py` doesn't seem to be the one failing based on the name (`test_fulfillment_cases.py` vs `test_fulfillment.py`). However, the principle remains: the generated key format is wrong.\n\nI need to fix `idempotency_generator.py` to generate keys in the format `idemp_<timestamp_ms>_<hex_token_8chars>`.\n\nLet's check if there are other files or tests I might be missing. The traceback mentions `tests/test_fulfillment_cases.py`, but only `tests/test_fulfillment.py` is listed in the repository files. I will assume the provided files are the complete set for this ticket and that fixing the generator is the correct action.\n\nPlan:\n1.  Update `idempotency_generator.py` to generate keys in the format `idemp_<timestamp_ms>_<hex_token_8chars>`.\n    *   Need `time` module for timestamp.\n    *   Need `uuid` or `secrets` for hex token. The current code imports `uuid`. I'll use `uuid.uuid4().hex[:8]` to get 8 hex chars.\n\nLet's verify the format: `idemp_<timestamp_ms>_<hex_token_8chars>`.\nExample: `idemp_1678901234567_a1b2c3d4`.\n\nI will edit `idempotency_generator.py`.\n\n=== EDIT: idempotency_generator.py ===\n<<<<<<< SEARCH\n\"\"\"Idempotency token generation helpers.\"\"\"\nimport uuid\n\ndef generate_outbound_key() -> str:\n    \"\"\"Generates unique key for outbound request tracking.\"\"\"\n    return str(uuid.uuid4())\n\ndef is_valid_token_length(token: str) -> bool:\n    return len(token) > 0\n\ndef get_token_prefix() -> str:\n    return \"idemp_\"\n=======\n\"\"\"Idempotency token generation helpers.\"\"\"\nimport time\nimport uuid\n\ndef generate_outbound_key() -> str:\n    \"\"\"Generates unique key for outbound request tracking.\n    \n    Format: idemp_<timestamp_ms>_<hex_token_8chars>\n    \"\"\"\n    timestamp_ms = int(time.time() * 1000)\n    hex_token = uuid.uuid4().hex[:8]\n    return f\"idemp_{timestamp_ms}_{hex_token}\"\n\ndef is_valid_token_length(token: str) -> bool:\n    return len(token) > 0\n\ndef get_token_prefix() -> str:\n    return \"idemp_\"\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-08T07:10:43.590928+00:00"
+}
