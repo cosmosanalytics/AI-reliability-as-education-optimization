@@ -8,7 +8,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from run_swe2 import ARMS, FAMILY_TASKS, FAMILY_TO_RULE, OUT_DIR, load_records  # noqa: E402
+from run_swe2 import ARMS, FAMILY_TASKS, FAMILY_TO_RULE, OUT_DIR, family_attempts, load_records  # noqa: E402
 
 QUIZ = os.path.join(OUT_DIR, "familiarity_quiz.json")
 
@@ -61,6 +61,10 @@ def wilson(k, n, z=1.96):
 
 def main():
     recs = [r for r in load_records() if r.get("run_idx", 0) > 0]
+    rounds = int(sys.argv[sys.argv.index("--rounds") + 1]) if "--rounds" in sys.argv else None
+    if rounds:
+        keep = {f: set(family_attempts(f, 4)[:rounds]) for f in FAMILY_TASKS}
+        recs = [r for r in recs if r["arm"] == "B0" or (r["task_id"], r["run_idx"]) in keep[r["family"]]]
     quiz = json.load(open(QUIZ))["families"] if os.path.exists(QUIZ) else {}
     fams = list(FAMILY_TASKS)
     cell = {}
@@ -92,6 +96,8 @@ def main():
 
     L = ["# SWE-2 results: ontology + knowledge harness + confidence harness", ""]
     L += ["Model: Qwen3.6-35B-A3B (UD-Q4_K_M, llama.cpp, CPU). Strict pass on hidden tests.", ""]
+    if rounds:
+        L += [f"Education arms restricted to balanced rounds 1-{rounds} (B0: all attempts).", ""]
     L += ["## Arm totals", "", "| Arm | strict pass | rate | 95% CI | gain vs B0 (pp) |", "|---|---|---|---|---|"]
     tot = {}
     for a in ARMS:

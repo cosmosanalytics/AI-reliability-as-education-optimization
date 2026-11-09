@@ -1,0 +1,46 @@
+{
+  "status": "COMPLETED",
+  "arm": "PLACEBO",
+  "family": "service_errors",
+  "rule_id": "H04",
+  "task_id": 2033,
+  "run_idx": 1,
+  "order_idx": 145,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "lock_manager.py"
+  ],
+  "tool_calls": [],
+  "tools_used": [],
+  "model_turns": 1,
+  "prompt_tokens": 1742,
+  "completion_tokens": 703,
+  "latency_sec": 755.7,
+  "retrieved": [
+    "P07",
+    "P05",
+    "P01"
+  ],
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: lock_manager.py ===\n\"\"\"Concurrent resource lock manager.\"\"\"\nfrom errors import ServiceError\nfrom lock_record import LockEntry\nfrom typing import Dict, Optional\n\nclass ResourceLockManager:\n    def __init__(self):\n        self._locks: Dict[str, LockEntry] = {}\n\n    def acquire_lock(self, resource_id: str, owner_id: str) -> LockEntry:\n        \"\"\"Acquire exclusive lock on resource.\n        \n        Raises an error if resource is currently held by another worker.\n        \"\"\"\n        existing = self._locks.get(resource_id)\n        if existing and existing.is_active and existing.owner_id != owner_id:\n            raise ServiceError(\n                code=\"LOCK_CONFLICT\",\n                message=f\"Resource {resource_id} is locked by owner {existing.owner_id}\",\n                details={\"resource_id\": resource_id, \"held_by\": existing.owner_id},\n            )\n        entry = LockEntry(resource_id=resource_id, owner_id=owner_id, is_active=True)\n        self._locks[resource_id] = entry\n        return entry\n\n    def release_lock(self, resource_id: str, owner_id: str) -> bool:\n        existing = self._locks.get(resource_id)\n        if existing and existing.owner_id == owner_id:\n            existing.is_active = False\n            return True\n        return False\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the issue. The ticket states that a \"Document lock conflict\" raised a generic `RuntimeError` instead of a structured domain exception. Looking at `lock_manager.py`, line 21 raises `RuntimeError`. According to convention P07, error messages must be professional, start with uppercase, omit trailing punctuation, and explicitly specify the problematic parameter identifier and offending value. Also, we should use the defined `ServiceError` from `errors.py` for structured domain exceptions.\n\nCurrent code:\n```python\nraise RuntimeError(f\"Resource {resource_id} is locked by {existing.owner_id}\")\n```\n\nThis violates P07 (generic exception) and likely P07's requirement to specify parameters/values clearly in a structured way (using the `ServiceError` which has `code`, `message`, `details`).\n\nI will modify `lock_manager.py` to:\n1. Import necessary types if needed (already done).\n2. Replace the `RuntimeError` with a `ServiceError`.\n3. Ensure the message follows P07 guidelines: uppercase start, no trailing punctuation, explicit parameter identifiers (`resource_id`, `owner_id`) and values.\n\nThe `ServiceError` takes `code`, `message`, and `details`.\nCode could be something like `LOCK_CONFLICT`.\nMessage should be clear: \"Resource lock conflict\".\nDetails can hold the specific parameters for triage: `resource_id` and `held_by` (or `owner_id`).\n\nLet's refine the message based on P07: \"Begin error descriptions with an uppercase character and omit trailing punctuation marks. Explicitly specify the problematic parameter identifier and offending value...\"\n\nSo, a good structure might be:\nMessage: \"Resource lock conflict\" or similar high-level description.\nDetails: `{\"resource_id\": resource_id, \"held_by\": existing.owner_id}`.\n\nWait, P07 says \"Explicitly specify the problematic parameter identifier and offending value within the message\". This might mean in the string itself or in the structured data. Given `ServiceError` has a `details` dict, putting it there is good for machine parsing, but the text message should also be clear.\n\nLet's look at `to_dict` in `ServiceError`. It returns code, message, details.\n\nProposed change:\n```python\nraise ServiceError(\n    code=\"LOCK_CONFLICT\",\n    message=f\"Resource {resource_id} is locked by owner {existing.owner_id}\",\n    details={\"resource_id\": resource_id, \"held_by\": existing.owner_id}\n)\n```\nThis starts with uppercase 'R', no trailing punctuation. It specifies `resource_id` and `owner_id` (as `held_by` in details for clarity of who holds it).\n\nLet's check if there are other conventions. P01 line length 88. The above fits easily.\n\nI will apply this fix to `lock_manager.py`.\n\n=== EDIT: lock_manager.py ===\n<<<<<<< SEARCH\n            raise RuntimeError(f\"Resource {resource_id} is locked by {existing.owner_id}\")\n=======\n            raise ServiceError(\n                code=\"LOCK_CONFLICT\",\n                message=f\"Resource {resource_id} is locked by owner {existing.owner_id}\",\n                details={\"resource_id\": resource_id, \"held_by\": existing.owner_id},\n            )\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-09T01:59:41.192579+00:00"
+}

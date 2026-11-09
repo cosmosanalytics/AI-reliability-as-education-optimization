@@ -1,0 +1,46 @@
+{
+  "status": "COMPLETED",
+  "arm": "KNOW",
+  "family": "service_errors",
+  "rule_id": "H04",
+  "task_id": 2033,
+  "run_idx": 1,
+  "order_idx": 114,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "lock_manager.py"
+  ],
+  "tool_calls": [],
+  "tools_used": [],
+  "model_turns": 1,
+  "prompt_tokens": 2138,
+  "completion_tokens": 642,
+  "latency_sec": 709.4,
+  "retrieved": [
+    "H04",
+    "H08",
+    "H03"
+  ],
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: lock_manager.py ===\n\"\"\"Concurrent resource lock manager.\"\"\"\nfrom errors import ServiceError\nfrom lock_record import LockEntry\nfrom typing import Dict, Optional\n\nclass ResourceLockManager:\n    def __init__(self):\n        self._locks: Dict[str, LockEntry] = {}\n\n    def acquire_lock(self, resource_id: str, owner_id: str) -> LockEntry:\n        \"\"\"Acquire exclusive lock on resource.\n        \n        Raises an error if resource is currently held by another worker.\n        \"\"\"\n        existing = self._locks.get(resource_id)\n        if existing and existing.is_active and existing.owner_id != owner_id:\n            raise ServiceError(\n                code=\"ERR_RESOURCE_LOCKED\",\n                message=f\"Resource {resource_id} is locked by {existing.owner_id}\"\n            )\n        entry = LockEntry(resource_id=resource_id, owner_id=owner_id, is_active=True)\n        self._locks[resource_id] = entry\n        return entry\n\n    def release_lock(self, resource_id: str, owner_id: str) -> bool:\n        existing = self._locks.get(resource_id)\n        if existing and existing.owner_id == owner_id:\n            existing.is_active = False\n            return True\n        return False\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the issue. The ticket states that a document lock conflict raised a generic `RuntimeError` instead of a structured domain exception. Looking at `lock_manager.py`, the `acquire_lock` method raises `RuntimeError`. According to convention [H04], we must use `ServiceError` for domain service errors, specifically `ERR_RESOURCE_LOCKED` for concurrent modification conflicts.\n\nI need to:\n1.  Update `lock_manager.py` to raise `ServiceError(code=\"ERR_RESOURCE_LOCKED\", message=...)` instead of `RuntimeError`.\n2.  Verify the test failure is due to this change (the test likely expects the new exception type or checks for it). The failing test `tests/test_lock_cases.py::test_service_execution` is not provided in the file list, but `tests/test_lock_manager.py` only tests nominal lifecycle. The failure suggests there's another test file checking error handling. However, I am instructed not to modify test files. My job is to fix the production code to conform to conventions.\n\nLet's check if there are other files or tests mentioned. The traceback mentions `tests/test_lock_cases.py`. This file is not in the provided repository files list, but it exists in the repo (since the test failed). I cannot modify it. I must fix `lock_manager.py`.\n\nPlan:\n1.  Edit `lock_manager.py` to import and use `ServiceError` with code `ERR_RESOURCE_LOCKED`.\n\n=== EDIT: lock_manager.py ===\n<<<<<<< SEARCH\n\"\"\"Concurrent resource lock manager.\"\"\"\nfrom errors import ServiceError\nfrom lock_record import LockEntry\nfrom typing import Dict, Optional\n\nclass ResourceLockManager:\n    def __init__(self):\n        self._locks: Dict[str, LockEntry] = {}\n\n    def acquire_lock(self, resource_id: str, owner_id: str) -> LockEntry:\n        \"\"\"Acquire exclusive lock on resource.\n        \n        Raises an error if resource is currently held by another worker.\n        \"\"\"\n        existing = self._locks.get(resource_id)\n        if existing and existing.is_active and existing.owner_id != owner_id:\n            raise RuntimeError(f\"Resource {resource_id} is locked by {existing.owner_id}\")\n=======\n\"\"\"Concurrent resource lock manager.\"\"\"\nfrom errors import ServiceError\nfrom lock_record import LockEntry\nfrom typing import Dict, Optional\n\nclass ResourceLockManager:\n    def __init__(self):\n        self._locks: Dict[str, LockEntry] = {}\n\n    def acquire_lock(self, resource_id: str, owner_id: str) -> LockEntry:\n        \"\"\"Acquire exclusive lock on resource.\n        \n        Raises an error if resource is currently held by another worker.\n        \"\"\"\n        existing = self._locks.get(resource_id)\n        if existing and existing.is_active and existing.owner_id != owner_id:\n            raise ServiceError(\n                code=\"ERR_RESOURCE_LOCKED\",\n                message=f\"Resource {resource_id} is locked by {existing.owner_id}\"\n            )\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-08T20:20:43.383204+00:00"
+}

@@ -1,0 +1,115 @@
+{
+  "status": "COMPLETED",
+  "arm": "SURE",
+  "family": "state_transitions",
+  "rule_id": "H15",
+  "task_id": 2080,
+  "run_idx": 1,
+  "order_idx": 170,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "instance_fsm.py"
+  ],
+  "tool_calls": [
+    {
+      "phase": "revise",
+      "turn": 1,
+      "tool": "pytest",
+      "rc": 4
+    }
+  ],
+  "tools_used": [
+    "pytest"
+  ],
+  "model_turns": 7,
+  "prompt_tokens": 16360,
+  "completion_tokens": 2547,
+  "latency_sec": 1136.3,
+  "sure": {
+    "diagnoses": [
+      {
+        "root_cause": "instance_fsm.py::apply_vm_transition",
+        "rule": null,
+        "confidence": 0.95,
+        "root_cause_norm": "instance_fsm.py::apply_vm_transition",
+        "rule_norm": "none"
+      },
+      {
+        "root_cause": "instance_fsm.py::apply_vm_transition",
+        "rule": null,
+        "confidence": 0.95,
+        "root_cause_norm": "instance_fsm.py::apply_vm_transition",
+        "rule_norm": "none"
+      },
+      {
+        "root_cause": "instance_fsm.py::apply_vm_transition",
+        "rule": null,
+        "confidence": 0.95,
+        "root_cause_norm": "instance_fsm.py::apply_vm_transition",
+        "rule_norm": "none"
+      }
+    ],
+    "stated": 0.9499999999999998,
+    "calibrated": 0.3469387755102041,
+    "conflict": false
+  },
+  "revised": true,
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: instance_fsm.py ===\n\"\"\"Cloud compute VM lifecycle state machine and schemas.\"\"\"\nfrom dataclasses import dataclass, field\nfrom typing import List, Tuple, Any, Dict, Set\nfrom errors import ServiceError\n\n@dataclass\nclass VirtualMachine:\n    entity_id: str\n    state: str = \"PROVISIONING\"\n    audit_trail: List[Tuple[Any, ...]] = field(default_factory=list)\n\n    def is_active(self) -> bool:\n        return self.state == \"RUNNING\"\n\nVM_TRANSITIONS: Dict[str, Set[str]] = {\n    \"PROVISIONING\": {\"RUNNING\", \"TERMINATED\"},\n    \"RUNNING\": {\"STOPPED\", \"TERMINATED\"},\n    \"STOPPED\": {\"RUNNING\", \"TERMINATED\"},\n    \"TERMINATED\": set(),\n}\n\ndef apply_vm_transition(vm: VirtualMachine, target_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Validates and applies compute lifecycle update.\"\"\"\n    cur = vm.state\n    allowed = VM_TRANSITIONS.get(cur, set())\n    if target_state not in allowed:\n        raise ServiceError(code=\"VM_INVALID_TRANSITION\", message=\"Invalid state jump\")\n    vm.state = target_state\n    vm.audit_trail.append((actor_id, timestamp_ms, target_state))\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the ticket and the failing test.\n\nTicket INC-8204 mentions two issues:\n1.  Non-standard error codes. The current code raises `ServiceError(code=\"ERR_VM_ILLEGAL_STATE\", ...)`. Standardizing this likely means using a more standard or specific code, but looking at the test failure is key.\n2.  Lack of lifecycle transition auditing. The `apply_vm_transition` function does not record the transition in `vm.audit_trail`.\n\nThe failing test is `test_case_1` in `tests/test_instance_cases.py`, which asserts `0 == 1`. This is a weird assertion, likely meaning \"expected 1 audit trail entry, got 0\" or similar logic inside that specific test file which I cannot see. However, I have `tests/test_instance.py` which passes basic checks.\n\nLet's look at `instance_fsm.py`:\n-   `apply_vm_transition` validates the state transition.\n-   If valid, it updates `vm.state`.\n-   It does **not** append to `vm.audit_trail`.\n\nThe ticket explicitly states \"lacked lifecycle transition auditing\". This is the primary fix needed. The error code might also need standardizing, but usually, that means something like changing `\"ERR_VM_ILLEGAL_STATE\"` to a more standard format if specified, or perhaps just ensuring it's consistent. However, without specific requirements on the *new* code, I should focus on the clear missing functionality: auditing.\n\nWait, looking closer at the error code part: \"Compute hypervisor raised non-standard error codes\". The current code uses `\"ERR_VM_ILLEGAL_STATE\"`. Is this non-standard? Maybe it should be something like `\"INVALID_TRANSITION\"` or similar. But without a spec, I can't guess the \"standard\" one.\n\nLet's re-read the failing test traceback: `FAILED tests/test_instance_cases.py::test_case_1 - AssertionError: assert 0 == 1`.\nThis strongly suggests the test expects a value of 1 (likely the length of the audit trail after a transition) but gets 0. This confirms the missing auditing is the root cause of the failure.\n\nThe fix should be in `instance_fsm.py` inside `apply_vm_transition`. I need to append a tuple to `vm.audit_trail` upon successful transition. The tuple should probably contain relevant info like `(actor_id, timestamp_ms, target_state)` or similar. Given the signature `(actor_id: str, timestamp_ms: int)`, a logical audit entry would be `(actor_id, timestamp_ms, cur, target_state)` or just `(target_state, actor_id, timestamp_ms)`.\n\nLet's look at `errors.py`. The error code `\"ERR_VM_ILLEGAL_STATE\"` might be considered non-standard if the standard is something like `\"VM_INVALID_TRANSITION\"`. However, since I don't have a reference for \"standard\", I will focus on the auditing which is explicitly mentioned as \"lacked ... auditing\".\n\nActually, often in these types of tickets, \"non-standard error codes\" implies changing the code string to something more generic or standard. But without guidance, I'll stick to the clear bug: missing audit trail.\n\nLet's refine the audit entry. A common pattern is `(timestamp, actor, event)`. Or `(actor_id, timestamp_ms, target_state)`. Let's use `(actor_id, timestamp_ms, target_state)` as it captures who, when, and what.\n\nOne more thing: The ticket says \"non-standard error codes\". If I look at `ServiceError`, it takes a `code`. Maybe the standard code is just `\"INVALID_STATE\"` or `\"TRANSITION_ERROR\"`. But again, guessing is risky. The audit trail fix is definite.\n\nLet's check if there are other files. `instance_controller.py` just wraps `apply_vm_transition`.\n\nI will modify `instance_fsm.py` to:\n1.  Add the audit trail entry on successful transition.\n2.  Potentially standardize the error code if I can infer it. \"ERR_VM_ILLEGAL_STATE\" -> maybe `\"VM_INVALID_TRANSITION\"`? Or simply remove the \"ERR_\" prefix if that's considered non-standard? Let's assume the audit trail is the main issue causing the `0 == 1` failure (where 1 is expected audits).\n\nLet's apply the fix to `instance_fsm.py`.\n\n=== EDIT: instance_fsm.py ===\n<<<<<<< SEARCH\ndef apply_vm_transition(vm: VirtualMachine, target_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Validates and applies compute lifecycle update.\"\"\"\n    cur = vm.state\n    allowed = VM_TRANSITIONS.get(cur, set())\n    if target_state not in allowed:\n        # Erroneous exception and missing audit tuple in unpatched baseline\n        raise ServiceError(code=\"ERR_VM_ILLEGAL_STATE\", message=\"Invalid state jump\")\n    vm.state = target_state\n=======\ndef apply_vm_transition(vm: VirtualMachine, target_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Validates and applies compute lifecycle update.\"\"\"\n    cur = vm.state\n    allowed = VM_TRANSITIONS.get(cur, set())\n    if target_state not in allowed:\n        raise ServiceError(code=\"VM_INVALID_TRANSITION\", message=\"Invalid state jump\")\n    vm.state = target_state\n    vm.audit_trail.append((actor_id, timestamp_ms, target_state))\n>>>>>>> REPLACE",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_1",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: instance_fsm.py::apply_vm_transition\nCONFIDENCE: 95",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_2",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: instance_fsm.py::apply_vm_transition\nCONFIDENCE: 95",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_3",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: instance_fsm.py::apply_vm_transition\nCONFIDENCE: 95",
+      "finish": "stop"
+    },
+    {
+      "kind": "sure_revise",
+      "prompt": "CONFIDENCE HARNESS REPORT on your current patch:\n- calibrated confidence that it passes the hidden CI tests: 0.35 (stated 0.95, mapped through this model's measured calibration)\nThis is below the reliability bar. Re-examine the root cause and the failing value: reproduce it, consider which behaviour the hidden tests most likely expect, and check edge cases. You have 2 more tool turn(s); then finish with your final edits (no tool blocks).",
+      "response": "=== TOOL: pytest ===\ntests/test_instance_cases.py::test_case_1\n=== END_TOOL ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "revise_tool_1",
+      "prompt": "=== TOOL_OUTPUT: pytest (exit code 4) ===\n\nno tests ran in 0.00s\nERROR: file or directory not found: tests/test_instance_cases.py::test_case_1\n\n\n=== END_TOOL_OUTPUT ===\n\nYou have 1 tool turn(s) left. Call more tools, or finish (final edits, no tool blocks).",
+      "response": "The test file `tests/test_instance_cases.py` does not exist in the repository yet, but the ticket implies it should fail with `assert 0 == 1`. This usually means a test expects one audit record. Since I can't run the hidden test, I must infer the expected behavior from the ticket and existing code structure.\n\nThe ticket says:\n1. \"raised non-standard error codes\": My change to `\"VM_INVALID_TRANSITION\"` is a guess. A more standard/common code might be just `\"INVALID_STATE\"` or keeping it but ensuring consistency. However, `ERR_` prefixes are common in some systems. Let's look at the audit trail again.\n2. \"lacked lifecycle transition auditing\": This is the key. The test `test_case_1` likely creates a VM, transitions it, and checks that the audit trail has 1 entry.\n\nMy previous patch added: `vm.audit_trail.append((actor_id, timestamp_ms, target_state))`.\n\nLet's reconsider the error code. \"Non-standard\" might mean it *should* be standard. What is standard? Maybe no prefix? Or a specific domain code? Without more info, I'll stick with the audit fix which is the primary functional gap. The error code change is secondary and speculative.\n\nHowever, the confidence was low (0.35). Let's look at `test_instance.py`. It doesn't check audit trails. The hidden test `test_case_1` in `tests/test_instance_cases.py` (which presumably exists in the CI environment but not locally) fails with `0 == 1`. This confirms 0 audits were recorded, and 1 was expected.\n\nMy fix adds the audit. Is the tuple format correct? `(actor_id, timestamp_ms, target_state)` seems reasonable.\n\nWhat about the error code? If I change it to `\"VM_INVALID_TRANSITION\"`, is that \"standard\"? Maybe the standard is `\"INVALID_TRANSITION\"`? Or maybe the error code was *already* non-standard and should be something else? The ticket says \"raised non-standard error codes\". This implies the current one `ERR_VM_ILLEGAL_STATE` is wrong.\n\nLet's assume the standard code is `\"INVALID_TRANSITION\"`.\n\nAlso, I should ensure the audit trail is appended *only* on success, which my patch does.\n\nOne edge case: Does the test check for a specific tuple structure? `(actor_id, timestamp_ms, target_state)` vs `(timestamp_ms, actor_id, target_state)`? Usually, timestamps come first in logs, but in domain models, (actor, action) is common. Let's stick with `(actor_id, timestamp_ms, target_state)` as it groups the metadata of the change.\n\nWait, looking at `VirtualMachine` dataclass: `audit_trail: List[Tuple[Any, ...]]`. The type is generic.\n\nLet's refine the patch to be safer on the error code if possible, but I have to pick one. `ERR_VM_ILLEGAL_STATE` -> `VM_INVALID_TRANSITION` seems like a good \"standardization\" (removing ERR_ prefix, using clearer term).\n\nI will re-apply the fix with slightly more confidence in the audit tuple order `(timestamp_ms, actor_id, target_state)` as that is often standard for audit logs (time-first), but actually, domain-driven design often puts the action first. Let's look at `instance_controller.py`... no help there.\n\nLet's try to find if there's a pattern in other files. No other files have audit trails.\n\nI'll stick with my previous logic but ensure the error code is reasonable. I'll use `\"INVALID_TRANSITION\"` as it's shorter and cleaner than `VM_INVALID_TRANSITION`.\n\nFinal check:\n1.  Audit trail added on success.\n2.  Error code standardized to `\"INVALID_TRANSITION\"`.\n\n=== EDIT: instance_fsm.py ===\n<<<<<<< SEARCH\ndef apply_vm_transition(vm: VirtualMachine, target_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Validates and applies compute lifecycle update.\"\"\"\n    cur = vm.state\n    allowed = VM_TRANSITIONS.get(cur, set())\n    if target_state not in allowed:\n        # Erroneous exception and missing audit tuple in unpatched baseline\n        raise ServiceError(code=\"ERR_VM_ILLEGAL_STATE\", message=\"Invalid state jump\")\n    vm.state = target_state\n=======\ndef apply_vm_transition(vm: VirtualMachine, target_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Validates and applies compute lifecycle update.\"\"\"\n    cur = vm.state\n    allowed = VM_TRANSITIONS.get(cur, set())\n    if target_state not in allowed:\n        raise ServiceError(code=\"INVALID_TRANSITION\", message=\"Invalid state jump\")\n    vm.state = target_state\n    vm.audit_trail.append((actor_id, timestamp_ms, target_state))\n>>>>>>> REPLACE",
+      "finish": "stop"
+    },
+    {
+      "kind": "revise_edit_fix",
+      "prompt": "Not applied: EDIT instance_fsm.py: SEARCH text not found\nReply with corrected EDIT or FILE blocks for these changes only, no tool blocks.",
+      "response": "The previous edit failed because the `SEARCH` block didn't match the current file content exactly (likely due to my previous hypothetical edit being applied in the sandbox state or a mismatch). I will use the original file content from the prompt to ensure the SEARCH block is correct.\n\n=== EDIT: instance_fsm.py ===\n<<<<<<< SEARCH\ndef apply_vm_transition(vm: VirtualMachine, target_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Validates and applies compute lifecycle update.\"\"\"\n    cur = vm.state\n    allowed = VM_TRANSITIONS.get(cur, set())\n    if target_state not in allowed:\n        # Erroneous exception and missing audit tuple in unpatched baseline\n        raise ServiceError(code=\"ERR_VM_ILLEGAL_STATE\", message=\"Invalid state jump\")\n    vm.state = target_state\n=======\ndef apply_vm_transition(vm: VirtualMachine, target_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Validates and applies compute lifecycle update.\"\"\"\n    cur = vm.state\n    allowed = VM_TRANSITIONS.get(cur, set())\n    if target_state not in allowed:\n        raise ServiceError(code=\"INVALID_TRANSITION\", message=\"Invalid state jump\")\n    vm.state = target_state\n    vm.audit_trail.append((actor_id, timestamp_ms, target_state))\n>>>>>>> REPLACE",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-09T03:58:38.306196+00:00"
+}
