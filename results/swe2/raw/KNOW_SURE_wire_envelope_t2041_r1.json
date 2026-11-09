@@ -1,0 +1,120 @@
+{
+  "status": "COMPLETED",
+  "arm": "KNOW_SURE",
+  "family": "wire_envelope",
+  "rule_id": "H08",
+  "task_id": 2041,
+  "run_idx": 1,
+  "order_idx": 221,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "activity_dispatcher.py"
+  ],
+  "tool_calls": [
+    {
+      "phase": "revise",
+      "turn": 1,
+      "tool": "pytest",
+      "rc": 0
+    }
+  ],
+  "tools_used": [
+    "pytest"
+  ],
+  "model_turns": 7,
+  "prompt_tokens": 26044,
+  "completion_tokens": 3293,
+  "latency_sec": 1594.6,
+  "retrieved": [
+    "H08",
+    "H03",
+    "H04"
+  ],
+  "sure": {
+    "diagnoses": [
+      {
+        "root_cause": "activity_dispatcher.py::dispatch_user_activity",
+        "rule": "H08",
+        "confidence": 0.95,
+        "root_cause_norm": "activity_dispatcher.py::dispatch_user_activity",
+        "rule_norm": "H08"
+      },
+      {
+        "root_cause": "activity_dispatcher.py::dispatch_user_activity",
+        "rule": "H08",
+        "confidence": 0.95,
+        "root_cause_norm": "activity_dispatcher.py::dispatch_user_activity",
+        "rule_norm": "H08"
+      },
+      {
+        "root_cause": "activity_dispatcher.py::dispatch_user_activity",
+        "rule": "H08",
+        "confidence": 0.95,
+        "root_cause_norm": "activity_dispatcher.py::dispatch_user_activity",
+        "rule_norm": "H08"
+      }
+    ],
+    "stated": 0.9499999999999998,
+    "calibrated": 0.3469387755102041,
+    "conflict": false
+  },
+  "revised": true,
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: activity_dispatcher.py ===\n\"\"\"User activity notification dispatcher.\"\"\"\nfrom key_normalizer import normalize_dict_keys\nfrom wire_envelope import build_envelope, is_valid_envelope, extract_payload\nfrom typing import Dict, Any\n\ndef dispatch_user_activity(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    \"\"\"Dispatch user activity record to notification bus.\"\"\"\n    normalized_payload = normalize_dict_keys(data)\n    return build_envelope(\"activity_service\", epoch_ms, normalized_payload)\n\ndef broadcast_activity_update(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    msg = dispatch_user_activity(data, epoch_ms)\n    _ = is_valid_envelope(msg)\n    return msg\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the ticket and conventions.\n\n**Ticket:** ACT-203: User activity messages missing wire envelope failed schema ingestion validation.\n**Test Failure:** `tests/test_activity_cases.py::test_service_execution - AssertionError: assert None == 2`\n\nThe failing test is in `tests/test_activity_cases.py`, which is not provided in the file list, but the traceback indicates it expects a result of `2` (likely `_v`) or similar envelope structure validation to pass, and currently gets `None`.\n\n**Conventions:**\n1.  **H08 (Wire Envelope):**\n    *   Format: `{\"_v\": 2, \"_ts\": epoch_ms, \"_src\": service_name, \"payload\": data}`\n    *   `_src` derivation: first word of module filename before underscore + `_service`. For `activity_dispatcher.py`, the first word is `activity`, so `_src` should be `activity_service`.\n    *   Requirement: All dictionary keys inside the payload normalized to snake_case.\n\n2.  **H03 (Container Immutability):**\n    *   Functions accepting mutable containers must not mutate them in place; use defensive copies or new instances.\n\n**Current Code Analysis (`activity_dispatcher.py`):**\n*   `dispatch_user_activity(data, epoch_ms)`:\n    *   Currently returns `dict(data)`. This is a shallow copy, which satisfies H03 partially but doesn't build the envelope.\n    *   It ignores `epoch_ms`.\n    *   It does not build the wire envelope required by H08.\n    *   It does not normalize keys in the payload (H08 requirement).\n*   `broadcast_activity_update(data, epoch_ms)`:\n    *   Calls `dispatch_user_activity`.\n    *   Checks validity of the result (which is just a dict copy, so `is_valid_envelope` will likely return False because it lacks `_v`, `_ts`, `_src`).\n    *   Extracts normalized keys but doesn't use them.\n    *   Returns the raw data copy.\n\n**The Fix:**\n1.  Update `dispatch_user_activity` to:\n    *   Normalize the keys of `data` using `normalize_dict_keys` (H08 requirement for payload).\n    *   Build the envelope using `build_envelope`.\n    *   Use `activity_service` as the source name (H08 convention).\n    *   Ensure defensive copying is handled (though `normalize_dict_keys` creates a new dict, and `build_envelope` creates a new dict, so H03 is satisfied if we don't modify `data` in place).\n\n2.  Update `broadcast_activity_update` to:\n    *   Return the result of `dispatch_user_activity` (which will now be a valid envelope).\n    *   The current test `test_activity_cases.py` expects an assertion `None == 2`. This suggests the test might be checking `msg.get(\"_v\")` or similar. If `broadcast_activity_update` returns the envelope, `msg[\"_v\"]` is `2`.\n\nLet's look at the existing test in `tests/test_activity_dispatcher.py`:\n```python\ndef test_nominal_activity_dispatch():\n    raw = {\"action\": \"view\"}\n    res = dispatch_user_activity(raw, 300)\n    assert isinstance(res, dict)\n    assert broadcast_activity_update(raw, 300) == res\n```\nThis test expects `dispatch` and `broadcast` to return the same thing. If we make them both return the envelope, this will pass (assuming `raw` keys are already snake_case or `normalize_dict_keys` handles it consistently).\n\nThe failing test `test_activity_cases.py::test_service_execution` likely does something like:\n```python\nmsg = broadcast_activity_update(data, ts)\nassert msg.get(\"_v\") == 2 # or similar\n```\nCurrently `broadcast` returns a plain dict copy (no `_v`), so `.get(\"_v\")` is `None`. The assertion `assert None == 2` fails.\n\n**Plan:**\n1.  Modify `activity_dispatcher.py`:\n    *   Import `normalize_dict_keys`.\n    *   Update `dispatch_user_activity` to normalize keys and build the envelope with `_src=\"activity_service\"`.\n    *   Update `broadcast_activity_update` to return the envelope from `dispatch_user_activity`.\n\n**Refinement on H03:**\n`dispatch_user_activity(data, ...)` receives `data`. We must not mutate `data`.\n`normalize_dict_keys(data)` creates a new dict with normalized keys. This is safe.\n`build_envelope(..., payload=normalized_data)` creates a new dict. This is safe.\n\n**Refinement on H08:**\nSource name: Module is `activity_dispatcher.py`. First word before underscore is `activity`. Append `_service` -> `activity_service`.\n\nLet's write the edit.\n\n=== EDIT: activity_dispatcher.py ===\n<<<<<<< SEARCH\n\"\"\"User activity notification dispatcher.\"\"\"\nfrom key_normalizer import normalize_dict_keys, extract_normalized_keys\nfrom wire_envelope import build_envelope, is_valid_envelope, extract_payload\nfrom typing import Dict, Any\n\ndef dispatch_user_activity(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    \"\"\"Dispatch user activity record to notification bus.\"\"\"\n    return dict(data)\n\ndef broadcast_activity_update(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    msg = dispatch_user_activity(data, epoch_ms)\n    _ = is_valid_envelope(msg)\n    _ = extract_normalized_keys(data)\n    return msg\n=======\n\"\"\"User activity notification dispatcher.\"\"\"\nfrom key_normalizer import normalize_dict_keys\nfrom wire_envelope import build_envelope, is_valid_envelope, extract_payload\nfrom typing import Dict, Any\n\ndef dispatch_user_activity(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    \"\"\"Dispatch user activity record to notification bus.\"\"\"\n    normalized_payload = normalize_dict_keys(data)\n    return build_envelope(\"activity_service\", epoch_ms, normalized_payload)\n\ndef broadcast_activity_update(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    msg = dispatch_user_activity(data, epoch_ms)\n    _ = is_valid_envelope(msg)\n    return msg\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_1",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nRULE: <id of the house convention your fix applies, e.g. H07, or none>\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: activity_dispatcher.py::dispatch_user_activity\nRULE: H08\nCONFIDENCE: 95",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_2",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nRULE: <id of the house convention your fix applies, e.g. H07, or none>\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: activity_dispatcher.py::dispatch_user_activity\nRULE: H08\nCONFIDENCE: 95",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_3",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nRULE: <id of the house convention your fix applies, e.g. H07, or none>\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: activity_dispatcher.py::dispatch_user_activity\nRULE: H08\nCONFIDENCE: 95",
+      "finish": "stop"
+    },
+    {
+      "kind": "sure_revise",
+      "prompt": "CONFIDENCE HARNESS REPORT on your current patch:\n- calibrated confidence that it passes the hidden CI tests: 0.35 (stated 0.95, mapped through this model's measured calibration)\nThis is below the reliability bar. Re-examine the root cause and the failing value: reproduce it, consider which behaviour the hidden tests most likely expect, and check edge cases and the knowledge graph (use the know tool to look up the relevant convention). You have 2 more tool turn(s); then finish with your final edits (no tool blocks).",
+      "response": "Let's re-examine the failing test trace: `FAILED tests/test_activity_cases.py::test_service_execution - AssertionError: assert None == 2`.\n\nThis implies the test expects a value of `2` (likely `_v`) but got `None`. My previous fix makes `broadcast_activity_update` return the envelope, so `_v` should be `2`. This seems correct.\n\nHowever, let's look closer at the conventions and the existing test `test_activity_dispatcher.py`.\n```python\ndef test_nominal_activity_dispatch():\n    raw = {\"action\": \"view\"}\n    res = dispatch_user_activity(raw, 300)\n    assert isinstance(res, dict)\n    assert broadcast_activity_update(raw, 300) == res\n```\n\nMy proposed fix:\n1. `dispatch_user_activity` returns the envelope.\n2. `broadcast_activity_update` calls `dispatch_user_activity` and returns its result.\nSo `res` (from dispatch) and the return of `broadcast` are identical. This test should pass.\n\nIs there any other convention I missed?\nH08 says: `requires -> Behavior: all dictionary keys inside the payload normalized to snake_case`.\nMy fix uses `normalize_dict_keys(data)` which does this.\n\nH03 says: `prohibits -> Alternative: mutating caller-supplied arguments in place`.\n`normalize_dict_keys` creates a new dict. `build_envelope` creates a new dict. No mutation of `data`. This is safe.\n\nLet's check the source name derivation again.\nH08: `derived_by -> Behavior: first word of the module's file name before the underscore, followed by _service = _service`.\nModule: `activity_dispatcher.py`.\nFirst word before `_`: `activity`.\nResult: `activity_service`.\nThis matches my fix.\n\nLet's check if there are any other files involved or if I missed a detail about `broadcast_activity_update`.\nThe current code in `broadcast_activity_update` does `_ = extract_normalized_keys(data)`. This suggests it might be expected to *do* something with the normalization, or at least that the convention requires it. My fix moves the normalization into `dispatch_user_activity`, which is called by `broadcast`. This seems logically sound as the envelope building should happen once.\n\nWait, let's look at the test failure again: `assert None == 2`.\nIf the test is `test_service_execution`, it might be testing a specific service endpoint or a different function? No, the ticket says \"User activity messages missing wire envelope\". The file is `activity_dispatcher.py`.\n\nLet's run the existing tests to see if my change breaks anything else.\n\n=== TOOL: pytest ===\ntests/test_activity_dispatcher.py\n=== END_TOOL ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "revise_tool_1",
+      "prompt": "=== TOOL_OUTPUT: pytest (exit code 0) ===\n.                                                                        [100%]\n1 passed in 0.01s\n\n=== END_TOOL_OUTPUT ===\n\nYou have 1 tool turn(s) left. Call more tools, or finish (final edits, no tool blocks).",
+      "response": "The existing test passes. Let's verify the logic against the hidden test scenario. The hidden test `test_service_execution` likely calls `broadcast_activity_update` (or `dispatch_user_activity`) and checks for `_v == 2`.\n\nMy fix:\n1.  Normalizes keys in payload (H08).\n2.  Builds envelope with `_v=2`, `_ts`, `_src=\"activity_service\"` (H08).\n3.  Returns the envelope from both functions, ensuring consistency (existing test passes).\n4.  Does not mutate input (H03).\n\nOne potential edge case: Does `broadcast_activity_update` need to do anything *else*? The original code called `is_valid_envelope` and `extract_normalized_keys`. I kept `is_valid_envelope` call (though result is discarded with `_`). This might be a \"side effect\" or validation step required by convention, even if not used. The original code also called `extract_normalized_keys(data)` but didn't use it. In my fix, normalization happens inside `dispatch_user_activity`.\n\nIs it possible `broadcast_activity_update` is supposed to return the *original* data if envelope building fails? No, H08 requires the envelope format.\n\nLet's double check H08 case examples:\n- `order_dispatcher.py` -> `order_service`\n- `activity_dispatcher.py` -> `activity_service`\nThis confirms my source name.\n\nI am confident in the fix. The previous confidence was low because I wasn't sure if the hidden test expected a different structure, but given the explicit \"missing wire envelope\" error and `_v == 2` assertion, building the envelope is the only logical solution.\n\nFinal check on H03: `defensive deep copies or new collection instances`.\n`normalize_dict_keys` returns a new dict with new keys (strings are immutable) and same values. If values are mutable containers, this is a shallow copy of the payload structure.\nH08 says \"all dictionary keys inside the payload normalized\". It doesn't explicitly require deep copying nested structures in the payload, just key normalization.\nHowever, H03 applies to functions accepting mutable containers. `dispatch_user_activity` accepts `data`.\nIf `data` contains mutable objects (e.g., lists), and we put them in the envelope, subsequent mutation of those objects in `data` would affect the envelope.\nBut `normalize_dict_keys` creates a *new* dict object for the payload. The values are shared references.\nIs this sufficient? H03 requires \"defensive deep copies OR new collection instances\". It doesn't strictly mandate deep copy of nested mutable objects unless specified, but \"defensive\" often implies isolation.\nHowever, `build_envelope` creates a new dict for the envelope.\nIf I want to be strictly compliant with H03's \"defensive allocation\", I should consider if `normalize_dict_keys` needs to deep copy.\nThe convention H03 says: \"prohibits mutating caller-supplied arguments in place\". It doesn't explicitly say \"deep copy nested values\". It says \"return newly allocated data structures\".\nMy code returns a newly allocated envelope dict and a newly allocated payload dict (from normalization). This satisfies the \"newly allocated\" part. The sharing of nested mutable objects is a common pattern unless deep copy is explicitly required. Given no convention explicitly mandates `copy.deepcopy` for nested payloads, and H03 focuses on \"mutating arguments in place\" and \"returning new structures\", my current approach is likely sufficient.\n\nI will proceed with the submission.\n\n=== EDIT: activity_dispatcher.py ===\n<<<<<<< SEARCH\n\"\"\"User activity notification dispatcher.\"\"\"\nfrom key_normalizer import normalize_dict_keys, extract_normalized_keys\nfrom wire_envelope import build_envelope, is_valid_envelope, extract_payload\nfrom typing import Dict, Any\n\ndef dispatch_user_activity(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    \"\"\"Dispatch user activity record to notification bus.\"\"\"\n    return dict(data)\n\ndef broadcast_activity_update(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    msg = dispatch_user_activity(data, epoch_ms)\n    _ = is_valid_envelope(msg)\n    _ = extract_normalized_keys(data)\n    return msg\n=======\n\"\"\"User activity notification dispatcher.\"\"\"\nfrom key_normalizer import normalize_dict_keys\nfrom wire_envelope import build_envelope, is_valid_envelope, extract_payload\nfrom typing import Dict, Any\n\ndef dispatch_user_activity(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    \"\"\"Dispatch user activity record to notification bus.\"\"\"\n    normalized_payload = normalize_dict_keys(data)\n    return build_envelope(\"activity_service\", epoch_ms, normalized_payload)\n\ndef broadcast_activity_update(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    msg = dispatch_user_activity(data, epoch_ms)\n    _ = is_valid_envelope(msg)\n    return msg\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "revise_edit_fix",
+      "prompt": "Not applied: EDIT activity_dispatcher.py: SEARCH text not found\nReply with corrected EDIT or FILE blocks for these changes only, no tool blocks.",
+      "response": "The previous edit failed because the SEARCH block did not match the current file content in the sandbox (likely due to my previous simulated edit state vs actual sandbox state). I will use the `FILE` block to rewrite `activity_dispatcher.py` with the correct content, ensuring it is applied cleanly.\n\n=== FILE: activity_dispatcher.py ===\n\"\"\"User activity notification dispatcher.\"\"\"\nfrom key_normalizer import normalize_dict_keys\nfrom wire_envelope import build_envelope, is_valid_envelope, extract_payload\nfrom typing import Dict, Any\n\ndef dispatch_user_activity(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    \"\"\"Dispatch user activity record to notification bus.\"\"\"\n    normalized_payload = normalize_dict_keys(data)\n    return build_envelope(\"activity_service\", epoch_ms, normalized_payload)\n\ndef broadcast_activity_update(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    msg = dispatch_user_activity(data, epoch_ms)\n    _ = is_valid_envelope(msg)\n    return msg\n=== END ===",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-09T08:31:43.074585+00:00"
+}

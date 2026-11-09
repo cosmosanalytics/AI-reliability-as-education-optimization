@@ -1,0 +1,105 @@
+{
+  "status": "COMPLETED",
+  "arm": "KNOW_SURE",
+  "family": "state_transitions",
+  "rule_id": "H15",
+  "task_id": 2080,
+  "run_idx": 1,
+  "order_idx": 208,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "instance_fsm.py"
+  ],
+  "tool_calls": [],
+  "tools_used": [],
+  "model_turns": 6,
+  "prompt_tokens": 18235,
+  "completion_tokens": 3630,
+  "latency_sec": 1630.6,
+  "retrieved": [
+    "H15",
+    "H03",
+    "H04"
+  ],
+  "sure": {
+    "diagnoses": [
+      {
+        "root_cause": "instance_fsm.py::apply_vm_transition",
+        "rule": "H15",
+        "confidence": 0.95,
+        "root_cause_norm": "instance_fsm.py::apply_vm_transition",
+        "rule_norm": "H15"
+      },
+      {
+        "root_cause": "instance_fsm.py::apply_vm_transition uses wrong error code \"ERR_VM_ILLEGAL_STATE\" instead of \"ERR_INVALID_TRANSITION\" and fails to append audit tuples for valid transitions.",
+        "rule": "H15",
+        "confidence": 0.95,
+        "root_cause_norm": "instance_fsm.py::apply_vm_transition",
+        "rule_norm": "H15"
+      },
+      {
+        "root_cause": "instance_fsm.py::apply_vm_transition where the wrong error code is used and audit tuple is missing",
+        "rule": "H15",
+        "confidence": 0.95,
+        "root_cause_norm": "instance_fsm.py::apply_vm_transition",
+        "rule_norm": "H15"
+      }
+    ],
+    "stated": 0.9499999999999998,
+    "calibrated": 0.3469387755102041,
+    "conflict": false
+  },
+  "revised": true,
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: instance_fsm.py ===\n\"\"\"Cloud compute VM lifecycle state machine and schemas.\"\"\"\nfrom dataclasses import dataclass, field\nfrom typing import List, Tuple, Any, Dict, Set\nfrom errors import ServiceError\n\n@dataclass\nclass VirtualMachine:\n    entity_id: str\n    state: str = \"PROVISIONING\"\n    audit_trail: List[Tuple[Any, ...]] = field(default_factory=list)\n\n    def is_active(self) -> bool:\n        return self.state == \"RUNNING\"\n\nVM_TRANSITIONS: Dict[str, Set[str]] = {\n    \"PROVISIONING\": {\"RUNNING\", \"TERMINATED\"},\n    \"RUNNING\": {\"STOPPED\", \"TERMINATED\"},\n    \"STOPPED\": {\"RUNNING\", \"TERMINATED\"},\n    \"TERMINATED\": set(),\n}\n\ndef apply_vm_transition(vm: VirtualMachine, target_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Validates and applies compute lifecycle update.\"\"\"\n    cur = vm.state\n    allowed = VM_TRANSITIONS.get(cur, set())\n    if target_state not in allowed:\n        raise ServiceError(code=\"ERR_INVALID_TRANSITION\", message=\"Invalid state jump\")\n    \n    # H15: Audit tuple format for valid transitions\n    vm.audit_trail.append((\n        \"STATE_TRANSITION\",\n        vm.entity_id,\n        cur,\n        target_state,\n        actor_id,\n        timestamp_ms\n    ))\n    vm.state = target_state\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the ticket and the failing test.\n\n1.  **Ticket**: INC-8204 - Hypervisor raised non-standard error codes and lacked lifecycle transition auditing.\n2.  **Failing Test**: `test_instance_cases.py::test_case_1`. The traceback says `AssertionError: assert 0 == 1`. This suggests a test is checking for something that equals 1 (likely the presence of an audit record or a specific error code check) but getting 0. Note: `tests/test_instance.py` exists, but the failure mentions `test_instance_cases.py`. Let's look at the conventions first.\n3.  **Convention H15**: State machine transition validation and audit.\n    *   Requires: validate allowed transitions.\n    *   Format: audit tuple = `(\"STATE_TRANSITION\", entity_id, old_state, new_state, actor_id, timestamp_ms)`.\n    *   Literal: error for invalid transitions = `ServiceError(code=\"ERR_INVALID_TRANSITION\", ...)`.\n4.  **Convention H04**: Structured service exception hierarchy.\n    *   Uses literal: `ServiceError`.\n\n**Current Code Analysis (`instance_fsm.py`):**\n*   `apply_vm_transition`:\n    *   Checks if transition is allowed.\n    *   If invalid, raises `ServiceError(code=\"ERR_VM_ILLEGAL_STATE\", ...)`. This violates H15 which requires `code=\"ERR_INVALID_TRANSITION\"`.\n    *   Does **not** append an audit tuple to `vm.audit_trail` on valid transitions. This violates H15 which requires the audit tuple format.\n\n**Current Code Analysis (`errors.py`):**\n*   `ServiceError` looks correct and matches H04/H15 usage.\n\n**Plan:**\n1.  Modify `instance_fsm.py`:\n    *   Change the error code in `apply_vm_transition` from `\"ERR_VM_ILLEGAL_STATE\"` to `\"ERR_INVALID_TRANSITION\"`.\n    *   Add audit trail logging for valid transitions using the format specified in H15: `(\"STATE_TRANSITION\", vm.entity_id, cur, target_state, actor_id, timestamp_ms)`.\n\nLet's verify if there are other files or tests I need to look at. The prompt mentions `tests/test_instance_cases.py` failing, but only `tests/test_instance.py` is listed in the repository files. It's possible `test_instance_cases.py` is generated or I should assume the fix addresses the underlying logic that *any* such test would check (audit trail and error code).\n\nLet's apply the fix to `instance_fsm.py`.\n\n=== EDIT: instance_fsm.py ===\n<<<<<<< SEARCH\n    if target_state not in allowed:\n        # Erroneous exception and missing audit tuple in unpatched baseline\n        raise ServiceError(code=\"ERR_VM_ILLEGAL_STATE\", message=\"Invalid state jump\")\n    vm.state = target_state\n=======\n    if target_state not in allowed:\n        raise ServiceError(code=\"ERR_INVALID_TRANSITION\", message=\"Invalid state jump\")\n    \n    # H15: Audit tuple format\n    vm.audit_trail.append((\n        \"STATE_TRANSITION\",\n        vm.entity_id,\n        cur,\n        target_state,\n        actor_id,\n        timestamp_ms\n    ))\n    vm.state = target_state\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_1",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nRULE: <id of the house convention your fix applies, e.g. H07, or none>\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: instance_fsm.py::apply_vm_transition\nRULE: H15\nCONFIDENCE: 95",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_2",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nRULE: <id of the house convention your fix applies, e.g. H07, or none>\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: instance_fsm.py::apply_vm_transition uses wrong error code \"ERR_VM_ILLEGAL_STATE\" instead of \"ERR_INVALID_TRANSITION\" and fails to append audit tuples for valid transitions.\nRULE: H15\nCONFIDENCE: 95",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_3",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nRULE: <id of the house convention your fix applies, e.g. H07, or none>\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: instance_fsm.py::apply_vm_transition where the wrong error code is used and audit tuple is missing\nRULE: H15\nCONFIDENCE: 95",
+      "finish": "stop"
+    },
+    {
+      "kind": "sure_revise",
+      "prompt": "CONFIDENCE HARNESS REPORT on your current patch:\n- calibrated confidence that it passes the hidden CI tests: 0.35 (stated 0.95, mapped through this model's measured calibration)\nThis is below the reliability bar. Re-examine the root cause and the failing value: reproduce it, consider which behaviour the hidden tests most likely expect, and check edge cases and the knowledge graph (use the know tool to look up the relevant convention). You have 2 more tool turn(s); then finish with your final edits (no tool blocks).",
+      "response": "Let's double-check the conventions and the test failure. The failure is `assert 0 == 1`. This often implies a count check, e.g., `len(vm.audit_trail) == 1`.\n\nLet's look at H15 again.\n`audit tuple = (\"STATE_TRANSITION\", entity_id, old_state, new_state, actor_id, timestamp_ms)`\n\nMy proposed edit:\n1.  Changes error code to `ERR_INVALID_TRANSITION`.\n2.  Appends the audit tuple on *valid* transitions.\n\nIs there anything else?\nH03: Container immutability / defensive allocation.\n`apply_vm_transition` takes `vm` which is a mutable object. It modifies `vm.state` and `vm.audit_trail`.\nThe convention says \"functions accepting mutable containers ... prohibits mutating caller-supplied arguments in place\".\nWait, `VirtualMachine` is a dataclass instance passed by reference. Modifying its attributes is standard Python behavior for objects unless it's explicitly a container like a list/dict being mutated in place *instead* of returning a new one?\nH03 says: \"requires: return newly allocated data structures\".\nDoes `apply_vm_transition` need to return a new VM? Or just not mutate the input list?\nThe signature is `def apply_vm_transition(vm: VirtualMachine, ...) -> None:`. It returns None.\nIf H03 applies strictly to \"functions accepting mutable containers\", does it apply to objects?\nUsually, in Python, object mutation is fine unless specified otherwise. However, if the convention treats `VirtualMachine` as a value object that should be immutable, we might need to return a new instance.\nBut the test `test_startup` calls `update_instance_state` and then checks `vm.state`. If `apply_vm_transition` returned a new VM, the test would fail because it doesn't assign the result.\nThe existing test `test_startup` does:\n```python\n    update_instance_state(vm, \"RUNNING\", \"system\", 1700000000000)\n    assert vm.state == \"RUNNING\"\n```\nThis implies in-place mutation of the VM object is *expected* by the existing tests. So H03 likely doesn't require returning a new VM here, or `VirtualMachine` is not considered a \"mutable container\" in the sense of H03 (which lists `dict, list, set`). The audit trail is a list inside the VM.\n\nLet's look at the error code again.\nH15: `error for invalid transitions = ServiceError(code=\"ERR_INVALID_TRANSITION\", ...)`\nMy fix uses this.\n\nLet's look at the audit tuple format again.\nH15: `(\"STATE_TRANSITION\", entity_id, old_state, new_state, actor_id, timestamp_ms)`\nMy fix uses this.\n\nWhy might the confidence be low?\nMaybe the test `test_instance_cases.py` (which I can't see but is referenced) checks for something else?\nOr maybe I need to handle the case where the transition is invalid *and* still audit it? No, H15 says \"validate allowed transitions\". Invalid ones raise an error.\n\nLet's check if there are other conventions.\nH04: `ServiceError` definition. It matches.\n\nIs it possible that `test_instance_cases.py` expects the audit trail to be populated *even on failure*? No, usually you don't record a successful transition if it fails.\n\nWhat if the \"hidden CI tests\" check for the error code string exactly?\nMy fix: `\"ERR_INVALID_TRANSITION\"`. H15 literal: `\"ERR_INVALID_TRANSITION\"`. Matches.\n\nWhat if the audit tuple order is different?\nH15: `entity_id, old_state, new_state, actor_id, timestamp_ms`.\nMy fix: `vm.entity_id, cur, target_state, actor_id, timestamp_ms`. Matches.\n\nLet's look at H03 again. \"functions accepting mutable containers ... prohibits mutating caller-supplied arguments in place\".\nIf I pass a list to a function, I shouldn't do `lst.append()`.\nHere, `vm.audit_trail` is a list inside `vm`.\nIf the convention implies that we should not mutate `vm.audit_trail` in place, maybe we should reassign it?\n`vm.audit_trail = vm.audit_trail + [(...)]`?\nOr create a new list?\nBut `vm` itself is being mutated (`vm.state = target_state`).\nIf H03 applies to the VM object, then mutating `vm.state` is also prohibited. But the tests expect `vm.state` to change. So H03 likely doesn't prohibit object attribute mutation, only container mutation *if* it's a specific pattern. Or perhaps H03 is about not modifying the input *list* argument directly if passed as a list?\nActually, H03 says \"functions accepting mutable containers = `dict, list, set`\". It doesn't mention objects. So H03 might be irrelevant for `VirtualMachine` mutation.\n\nLet's re-read the failing test trace: `FAILED tests/test_instance_cases.py::test_case_1 - AssertionError: assert 0 == 1`.\nThis looks like `len(something) == 1` failed with `0`.\nIf `test_case_1` creates a VM and does a transition, and checks `len(vm.audit_trail)`, it would be 0 in the old code (no audit trail appended). My fix appends it, so it becomes 1. This matches the failure mode.\n\nIs there any other convention?\nH08: Message wire envelope. Not relevant.\nH09: UTC timestamp. `timestamp_ms` is an int. H09 says \"all exported string timestamps\". We are storing an int in the audit tuple. Is that okay?\nH15 format uses `timestamp_ms`. It doesn't say it must be a string. The tuple contains `timestamp_ms`.\n\nLet's check if there are any other files.\n`instance_controller.py` just wraps the FSM.\n`errors.py` is correct.\n\nOne potential issue:\nIn `apply_vm_transition`, I am appending to `vm.audit_trail`.\nIf `vm.audit_trail` is not initialized (default is `field(default_factory=list)`), it's fine.\n\nWait, look at H15 again.\n`has_format -> Format: audit tuple = (\"STATE_TRANSITION\", entity_id, old_state, new_state, actor_id, timestamp_ms)`\n\nIs it possible that the test expects the audit trail to be *returned*? No, the return type is `None`.\n\nLet's consider if I need to import anything else.\nNo.\n\nWhat if the error message matters?\nH15: `message=\"Invalid state jump\"` (implied by \"...\" but the comment in code says \"Invalid state jump\").\nMy fix keeps the message \"Invalid state jump\".\n\nLet's verify the H03 convention again.\n\"requires: return newly allocated data structures\".\nIf this applies to `apply_vm_transition`, maybe it should return a new VM?\nBut the signature is fixed in the existing code (`-> None`). Changing the return type might break other things or tests.\nAlso, the test `test_startup` doesn't use the return value.\n\nLet's look at H12: Configuration merge. Not relevant.\n\nIs it possible that `test_instance_cases.py` checks for the error code in a specific way?\ne.g. `assert e.code == \"ERR_INVALID_TRANSITION\"`.\n\nI think my fix is solid based on H15. Why is confidence low?\nMaybe I missed a convention?\nLet's check H04 again.\n`uses_literal -> Literal: exception class = ServiceError(code=\"ERR_<CATEGORY>_<DETAIL>\", message=\"...\")`\nMy code uses `ServiceError(code=\"ERR_INVALID_TRANSITION\", ...)`. This fits the pattern.\n\nWhat if the \"hidden tests\" also check for H03 compliance on the *audit_trail* list?\nH03 prohibits mutating caller-supplied arguments in place.\nIf I did:\n```python\ndef apply_vm_transition(vm, ...):\n    # If audit_trail was passed as an arg, I shouldn't mutate it.\n    # But it's an attribute of vm.\n```\nThis is a bit ambiguous. However, since `vm` is mutated in place anyway (`vm.state = ...`), it's consistent to mutate `vm.audit_trail` in place.\n\nLet's consider if I need to add the audit trail for *invalid* transitions too?\nH15: \"validate allowed transitions\". It doesn't say \"audit failed transitions\". Usually, you don't record a state transition if it didn't happen.\n\nLet's look at the `test_instance.py` file again.\n```python\ndef test_startup():\n    vm = VirtualMachine(\"vm-01\")\n    update_instance_state(vm, \"RUNNING\", \"system\", 1700000000000)\n    assert vm.state == \"RUNNING\"\n```\nThis test doesn't check the audit trail. It just checks state.\n\nThe failing test `test_case_1` likely checks the audit trail.\n\nI will stick with my fix. It directly addresses H15 violations:\n1.  Wrong error code.\n2.  Missing audit tuple.\n\nOne small detail:\nIn `instance_fsm.py`, `VM_TRANSITIONS` is a global dict.\nIs it mutable? Yes.\nDoes `apply_vm_transition` modify it? No.\n\nLet's double check the H15 format string.\n`(\"STATE_TRANSITION\", entity_id, old_state, new_state, actor_id, timestamp_ms)`\n\nMy code:\n```python\n    vm.audit_trail.append((\n        \"STATE_TRANSITION\",\n        vm.entity_id,\n        cur,\n        target_state,\n        actor_id,\n        timestamp_ms\n    ))\n```\nThis matches.\n\nI will proceed with the edit.\n\n=== EDIT: instance_fsm.py ===\n<<<<<<< SEARCH\n    if target_state not in allowed:\n        # Erroneous exception and missing audit tuple in unpatched baseline\n        raise ServiceError(code=\"ERR_VM_ILLEGAL_STATE\", message=\"Invalid state jump\")\n    vm.state = target_state\n=======\n    if target_state not in allowed:\n        raise ServiceError(code=\"ERR_INVALID_TRANSITION\", message=\"Invalid state jump\")\n    \n    # H15: Audit tuple format for valid transitions\n    vm.audit_trail.append((\n        \"STATE_TRANSITION\",\n        vm.entity_id,\n        cur,\n        target_state,\n        actor_id,\n        timestamp_ms\n    ))\n    vm.state = target_state\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "revise_edit_fix",
+      "prompt": "Not applied: EDIT instance_fsm.py: SEARCH text not found\nReply with corrected EDIT or FILE blocks for these changes only, no tool blocks.",
+      "response": "The previous SEARCH block failed because the indentation or whitespace in the provided file content might have been slightly different than what I matched, or the file content in the sandbox is identical to the prompt but my search string had extra whitespace or newlines that didn't match exactly. Let's look at the `instance_fsm.py` content from the prompt again very carefully.\n\n```python\n    if target_state not in allowed:\n        # Erroneous exception and missing audit tuple in unpatched baseline\n        raise ServiceError(code=\"ERR_VM_ILLEGAL_STATE\", message=\"Invalid state jump\")\n    vm.state = target_state\n```\n\nI will use a whole-file replacement for `instance_fsm.py` to ensure correctness, as it's small.\n\n=== FILE: instance_fsm.py ===\n\"\"\"Cloud compute VM lifecycle state machine and schemas.\"\"\"\nfrom dataclasses import dataclass, field\nfrom typing import List, Tuple, Any, Dict, Set\nfrom errors import ServiceError\n\n@dataclass\nclass VirtualMachine:\n    entity_id: str\n    state: str = \"PROVISIONING\"\n    audit_trail: List[Tuple[Any, ...]] = field(default_factory=list)\n\n    def is_active(self) -> bool:\n        return self.state == \"RUNNING\"\n\nVM_TRANSITIONS: Dict[str, Set[str]] = {\n    \"PROVISIONING\": {\"RUNNING\", \"TERMINATED\"},\n    \"RUNNING\": {\"STOPPED\", \"TERMINATED\"},\n    \"STOPPED\": {\"RUNNING\", \"TERMINATED\"},\n    \"TERMINATED\": set(),\n}\n\ndef apply_vm_transition(vm: VirtualMachine, target_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Validates and applies compute lifecycle update.\"\"\"\n    cur = vm.state\n    allowed = VM_TRANSITIONS.get(cur, set())\n    if target_state not in allowed:\n        raise ServiceError(code=\"ERR_INVALID_TRANSITION\", message=\"Invalid state jump\")\n    \n    # H15: Audit tuple format for valid transitions\n    vm.audit_trail.append((\n        \"STATE_TRANSITION\",\n        vm.entity_id,\n        cur,\n        target_state,\n        actor_id,\n        timestamp_ms\n    ))\n    vm.state = target_state\n=== END ===",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-09T07:40:59.124037+00:00"
+}

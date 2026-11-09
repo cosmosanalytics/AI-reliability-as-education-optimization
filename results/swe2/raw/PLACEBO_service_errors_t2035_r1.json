@@ -1,0 +1,46 @@
+{
+  "status": "COMPLETED",
+  "arm": "PLACEBO",
+  "family": "service_errors",
+  "rule_id": "H04",
+  "task_id": 2035,
+  "run_idx": 1,
+  "order_idx": 176,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "throttle_guard.py"
+  ],
+  "tool_calls": [],
+  "tools_used": [],
+  "model_turns": 1,
+  "prompt_tokens": 1660,
+  "completion_tokens": 725,
+  "latency_sec": 366.0,
+  "retrieved": [
+    "P07",
+    "P01",
+    "P05"
+  ],
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: throttle_guard.py ===\n\"\"\"Stream burst throttling guard.\"\"\"\nfrom errors import ServiceError\nfrom quota_tracker import BurstBucket\n\n\ndef enforce_burst_capacity(bucket: BurstBucket, incoming_tokens: int) -> bool:\n    \"\"\"Enforce burst quota for streaming client.\n\n    Raises an error when consumed tokens exceed maximum burst capacity.\n    \"\"\"\n    if not bucket.record_token_burst(incoming_tokens):\n        raise ServiceError(\n            code=\"QUOTA_EXCEEDED\",\n            message=(\n                f\"Burst quota exhausted for stream {bucket.stream_id} \"\n                f\"with incoming tokens {incoming_tokens}\"\n            ),\n        )\n    return True\n\n\ndef admit_stream_tokens(bucket: BurstBucket, tokens: int) -> str:\n    enforce_burst_capacity(bucket, tokens)\n    return \"ADMITTED\"\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the issue. The test `test_service_execution` in `tests/test_throttle_cases.py` is failing. However, the provided file list includes `tests/test_throttle_guard.py`, not `tests/test_throttle_cases.py`. It's likely `test_throttle_cases.py` exists but wasn't fully listed or contains a similar test case that triggers the `OverflowError` in `throttle_guard.py`.\n\nThe core problem is defined in the ticket: \"Unhandled OverflowError raised when burst rate quota exceeded.\"\nLooking at `throttle_guard.py`:\n1. It raises a raw `OverflowError` with the message `\"Burst quota exhausted for stream {bucket.stream_id}\"`.\n2. According to convention [P07] (Error message phrasing), error messages must be professional, start with uppercase, omit trailing punctuation, and explicitly specify the problematic parameter identifier and offending value. The current message lacks the `incoming_tokens` (offending value) and uses a raw exception type instead of the domain-specific `ServiceError`.\n3. According to convention [P07], we should use `ServiceError` for domain errors.\n4. According to convention [P01], line length must be <= 88 chars.\n\nLet's fix `throttle_guard.py` to:\n1. Use `ServiceError` instead of `OverflowError`.\n2. Include the stream ID and the incoming tokens (offending value) in the error message as per P07.\n3. Ensure formatting complies with P01 and P05 (imports are fine).\n\nI will also check if there are other files to ensure I haven't missed anything, but based on the provided list, `throttle_guard.py` is the source of the issue.\n\nPlan:\n1. Edit `throttle_guard.py` to raise `ServiceError` with a compliant message including `stream_id` and `incoming_tokens`.\n\n=== EDIT: throttle_guard.py ===\n<<<<<<< SEARCH\n\"\"\"Stream burst throttling guard.\"\"\"\nfrom errors import ServiceError\nfrom quota_tracker import BurstBucket\n\ndef enforce_burst_capacity(bucket: BurstBucket, incoming_tokens: int) -> bool:\n    \"\"\"Enforce burst quota for streaming client.\n    \n    Raises an error when consumed tokens exceed maximum burst capacity.\n    \"\"\"\n    if not bucket.record_token_burst(incoming_tokens):\n        raise OverflowError(f\"Burst quota exhausted for stream {bucket.stream_id}\")\n    return True\n\ndef admit_stream_tokens(bucket: BurstBucket, tokens: int) -> str:\n    enforce_burst_capacity(bucket, tokens)\n    return \"ADMITTED\"\n=======\n\"\"\"Stream burst throttling guard.\"\"\"\nfrom errors import ServiceError\nfrom quota_tracker import BurstBucket\n\n\ndef enforce_burst_capacity(bucket: BurstBucket, incoming_tokens: int) -> bool:\n    \"\"\"Enforce burst quota for streaming client.\n\n    Raises an error when consumed tokens exceed maximum burst capacity.\n    \"\"\"\n    if not bucket.record_token_burst(incoming_tokens):\n        raise ServiceError(\n            code=\"QUOTA_EXCEEDED\",\n            message=(\n                f\"Burst quota exhausted for stream {bucket.stream_id} \"\n                f\"with incoming tokens {incoming_tokens}\"\n            ),\n        )\n    return True\n\n\ndef admit_stream_tokens(bucket: BurstBucket, tokens: int) -> str:\n    enforce_burst_capacity(bucket, tokens)\n    return \"ADMITTED\"\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-09T04:12:51.917096+00:00"
+}

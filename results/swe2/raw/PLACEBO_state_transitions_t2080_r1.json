@@ -1,0 +1,46 @@
+{
+  "status": "COMPLETED",
+  "arm": "PLACEBO",
+  "family": "state_transitions",
+  "rule_id": "H15",
+  "task_id": 2080,
+  "run_idx": 1,
+  "order_idx": 191,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "instance_fsm.py"
+  ],
+  "tool_calls": [],
+  "tools_used": [],
+  "model_turns": 1,
+  "prompt_tokens": 1764,
+  "completion_tokens": 1424,
+  "latency_sec": 563.3,
+  "retrieved": [
+    "P07",
+    "P05",
+    "P01"
+  ],
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: instance_fsm.py ===\n\"\"\"Cloud compute VM lifecycle state machine and schemas.\"\"\"\nfrom dataclasses import dataclass, field\nfrom typing import List, Tuple, Any, Dict, Set\nfrom errors import ServiceError\n\n@dataclass\nclass VirtualMachine:\n    entity_id: str\n    state: str = \"PROVISIONING\"\n    audit_trail: List[Tuple[Any, ...]] = field(default_factory=list)\n\n    def is_active(self) -> bool:\n        return self.state == \"RUNNING\"\n\nVM_TRANSITIONS: Dict[str, Set[str]] = {\n    \"PROVISIONING\": {\"RUNNING\", \"TERMINATED\"},\n    \"RUNNING\": {\"STOPPED\", \"TERMINATED\"},\n    \"STOPPED\": {\"RUNNING\", \"TERMINATED\"},\n    \"TERMINATED\": set(),\n}\n\ndef apply_vm_transition(vm: VirtualMachine, target_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Validates and applies compute lifecycle update.\"\"\"\n    cur = vm.state\n    allowed = VM_TRANSITIONS.get(cur, set())\n    if target_state not in allowed:\n        raise ServiceError(\n            code=\"ERR_VM_ILLEGAL_STATE\",\n            message=f\"Cannot transition instance {vm.entity_id} from {cur} to {target_state}\",\n        )\n    vm.state = target_state\n    vm.audit_trail.append((actor_id, timestamp_ms, cur, target_state))\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the failing test and the codebase against the conventions.\n\n1.  **Test Analysis**: `test_case_1` in `tests/test_instance_cases.py` fails with `AssertionError: assert 0 == 1`. The provided file list includes `tests/test_instance.py`, but the traceback mentions `tests/test_instance_cases.py`. Let's look at the available test files. The prompt lists `tests/test_instance.py`. It does *not* list `tests/test_instance_cases.py`. However, the traceback says `FAILED tests/test_instance_cases.py::test_case_1`.\n    Wait, the \"REPOSITORY FILES\" section lists:\n    - `errors.py`\n    - `instance_fsm.py`\n    - `instance_controller.py`\n    - `tests/test_instance.py`\n\n    It does *not* list `tests/test_instance_cases.py`. This is a discrepancy. However, usually, if a test file isn't listed in the \"REPOSITORY FILES\" but is mentioned in the traceback, it might be an implicit file or I need to infer its content from the failure.\n    \n    Actually, looking closer at the prompt structure: \"REPOSITORY FILES:\" lists specific files. If `test_instance_cases.py` is not there, I cannot edit it. But the instruction says \"Do not modify files in tests/\". So even if I could see it, I shouldn't touch it.\n    \n    The failure `assert 0 == 1` suggests a test is checking for a specific condition that is currently false (or true, depending on assertion order). Given the ticket \"Compute hypervisor raised non-standard error codes and lacked lifecycle transition auditing\", the fix likely involves:\n    1.  Standardizing error codes/messages (`P07`).\n    2.  Adding lifecycle transition auditing (`P06` or general behavior implied by ticket).\n    \n    Let's look at `instance_fsm.py`.\n    - The `apply_vm_transition` function raises `ServiceError(code=\"ERR_VM_ILLEGAL_STATE\", message=\"Invalid state jump\")`.\n    - `P07` requires:\n        - Professional clarity.\n        - Begin with uppercase (it does: \"Invalid...\").\n        - Omit trailing punctuation (it does: no period).\n        - Explicitly specify the problematic parameter identifier and offending value. The current message \"Invalid state jump\" is vague. It should probably say something like \"Cannot transition VM vm-01 from PROVISIONING to STOPPED\".\n    - The ticket mentions \"lacked lifecycle transition auditing\". The `VirtualMachine` dataclass has an `audit_trail` field, but `apply_vm_transition` does not append to it. This is a clear bug/missing feature relative to the ticket description.\n\n    Let's check `P05` (imports) and `P01` (formatting).\n    - `instance_fsm.py`: imports are standard lib then internal. Sorted? `dataclasses`, `typing`, `errors`. Yes.\n    - `instance_controller.py`: `typing`, `instance_fsm`. Yes.\n    - Line lengths look fine.\n\n    Let's check `P07` more closely on the error message.\n    Current: `message=\"Invalid state jump\"`\n    Required: \"Explicitly specify the problematic parameter identifier and offending value\".\n    The parameters are `vm.state` (cur), `target_state`.\n    A compliant message might be: `\"Cannot transition instance {entity_id} from {current} to {target}\"`.\n\n    Also, the ticket says \"raised non-standard error codes\". The code uses `\"ERR_VM_ILLEGAL_STATE\"`. Is this non-standard? The convention `P07` doesn't define standard codes, but usually \"non-standard\" implies it should follow a specific naming scheme or be more descriptive. However, without a specific \"standard code format\" convention in the knowledge graph provided, I will focus on the explicit requirements of `P07` (clarity, parameters) and the ticket's explicit complaint about \"lacked lifecycle transition auditing\".\n\n    **Plan:**\n    1.  Modify `instance_fsm.py`:\n        - Update `apply_vm_transition` to append an audit tuple to `vm.audit_trail` upon successful transition. The ticket mentions \"lifecycle transition auditing\". A tuple like `(actor_id, timestamp_ms, vm.state, target_state)` or similar is appropriate.\n        - Update the error message in the exception to comply with `P07`: include parameter identifiers and values. e.g., `\"Cannot transition instance {vm.entity_id} from {cur} to {target_state}\"`.\n\n    Let's verify the audit trail structure. The field is `List[Tuple[Any, ...]]`.\n    \n    One detail: The test failure is in `test_instance_cases.py` which I don't have. But `test_instance.py` is provided. I should ensure my changes don't break `test_instance.py`.\n    `test_startup` calls `update_instance_state` with valid transition (PROVISIONING -> RUNNING). This should succeed and add an audit entry.\n    \n    Let's refine the error message per `P07`:\n    \"Begin error descriptions with an uppercase character and omit trailing punctuation marks\"\n    \"Explicitly specify the problematic parameter identifier and offending value\"\n    \n    Bad: \"Invalid state jump\"\n    Good: \"Cannot transition instance vm-01 from PROVISIONING to STOPPED\" (if that were the case).\n    \n    Let's write the edit for `instance_fsm.py`.\n\n=== EDIT: instance_fsm.py ===\n<<<<<<< SEARCH\ndef apply_vm_transition(vm: VirtualMachine, target_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Validates and applies compute lifecycle update.\"\"\"\n    cur = vm.state\n    allowed = VM_TRANSITIONS.get(cur, set())\n    if target_state not in allowed:\n        # Erroneous exception and missing audit tuple in unpatched baseline\n        raise ServiceError(code=\"ERR_VM_ILLEGAL_STATE\", message=\"Invalid state jump\")\n    vm.state = target_state\n=======\ndef apply_vm_transition(vm: VirtualMachine, target_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Validates and applies compute lifecycle update.\"\"\"\n    cur = vm.state\n    allowed = VM_TRANSITIONS.get(cur, set())\n    if target_state not in allowed:\n        raise ServiceError(\n            code=\"ERR_VM_ILLEGAL_STATE\",\n            message=f\"Cannot transition instance {vm.entity_id} from {cur} to {target_state}\",\n        )\n    vm.state = target_state\n    vm.audit_trail.append((actor_id, timestamp_ms, cur, target_state))\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-09T05:30:04.884391+00:00"
+}

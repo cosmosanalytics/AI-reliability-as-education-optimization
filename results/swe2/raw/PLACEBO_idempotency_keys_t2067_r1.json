@@ -1,0 +1,46 @@
+{
+  "status": "COMPLETED",
+  "arm": "PLACEBO",
+  "family": "idempotency_keys",
+  "rule_id": "H13",
+  "task_id": 2067,
+  "run_idx": 1,
+  "order_idx": 194,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "token_builder.py"
+  ],
+  "tool_calls": [],
+  "tools_used": [],
+  "model_turns": 1,
+  "prompt_tokens": 1830,
+  "completion_tokens": 559,
+  "latency_sec": 201.3,
+  "retrieved": [
+    "P05",
+    "P10",
+    "P03"
+  ],
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: token_builder.py ===\n\"\"\"RPC header token builders for compute instances.\"\"\"\nimport uuid\nfrom typing import Dict, Optional\n\ndef build_mutation_headers() -> Dict[str, str]:\n    \"\"\"Generates standard request mutation headers.\"\"\"\n    return {\n        \"X-Request-Id\": str(uuid.uuid4()),\n        \"X-Idempotency-Key\": str(uuid.uuid4())\n    }\n\ndef is_valid_header_dict(hdrs: dict) -> bool:\n    \"\"\"Validates that header mapping is non-empty.\"\"\"\n    return isinstance(hdrs, dict) and len(hdrs) > 0\n\ndef extract_request_token(hdrs: dict) -> Optional[str]:\n    \"\"\"Extracts existing request identifier if present.\"\"\"\n    return hdrs.get(\"X-Request-Id\")\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the issue. The test `test_vm_cases.py::test_case_1` fails because the header dictionary returned by `provision_instance` does not contain the key `'X-Idempotency-Key'`. The current implementation in `token_builder.py` only generates `X-Request-Id`.\n\nThe incident states that the cloud control plane rejected the RPC due to the absent `X-Idempotency-Key` header. This implies we need to ensure this header is present and valid (likely a UUID, given it's an idempotency key).\n\nI need to:\n1.  Update `token_builder.py` to generate an `X-Idempotency-Key` in addition to or instead of just `X-Request-Id`. Given the name \"mutation headers\", it likely needs both or specifically the idempotency key for writes/mutations. The test failure shows `{'X-Request-Id': '...'}`, implying we need to add the other one.\n2.  Ensure `vm_provisioner.py` uses this updated builder correctly.\n\nLet's look at `token_builder.py`. It has `build_mutation_headers()` which currently returns only `X-Request-Id`. I should modify it to include `X-Idempotency-Key`.\n\nAlso, check conventions:\n[P03] snake_case for functions/variables. `build_mutation_headers` is fine.\n[P05] Imports organized. `token_builder.py` imports `uuid`, `Dict`, `Optional`. This is standard lib only. No third party or internal imports here yet.\n[P10] Headers? No file headers in the provided files, but I shouldn't add them if they aren't there unless required by P10 \"Every newly created...\". These are existing files. I will stick to the functional fix.\n\nLet's modify `token_builder.py` to include the idempotency key.\n\n=== EDIT: token_builder.py ===\n<<<<<<< SEARCH\n\"\"\"RPC header token builders for compute instances.\"\"\"\nimport uuid\nfrom typing import Dict, Optional\n\ndef build_mutation_headers() -> Dict[str, str]:\n    \"\"\"Generates standard request mutation headers.\"\"\"\n    return {\"X-Request-Id\": str(uuid.uuid4())}\n=======\n\"\"\"RPC header token builders for compute instances.\"\"\"\nimport uuid\nfrom typing import Dict, Optional\n\ndef build_mutation_headers() -> Dict[str, str]:\n    \"\"\"Generates standard request mutation headers.\"\"\"\n    return {\n        \"X-Request-Id\": str(uuid.uuid4()),\n        \"X-Idempotency-Key\": str(uuid.uuid4())\n    }\n>>>>>>> REPLACE",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-09T05:33:27.037132+00:00"
+}
