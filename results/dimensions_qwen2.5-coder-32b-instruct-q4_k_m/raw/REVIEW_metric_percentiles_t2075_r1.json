@@ -1,0 +1,47 @@
+{
+  "status": "COMPLETED",
+  "arm": "REVIEW",
+  "dimension": "Review",
+  "family": "metric_percentiles",
+  "rule_id": "H14",
+  "task_id": 2075,
+  "run_idx": 1,
+  "stage": "middle",
+  "order_idx": 93,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "io_calc.py"
+  ],
+  "model_turns": 2,
+  "prompt_tokens": 1870,
+  "candidate_tokens": 364,
+  "thoughts_tokens": 0,
+  "review_changed_patch": false,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: io_calc.py ===\n\"\"\"Disk IO wait time percentile calculation.\"\"\"\nimport math\nfrom typing import List, Dict, Any\nfrom io_types import IoBatch, IoWaitSample\nfrom io_summary import format_io_summary\n\ndef compute_io_percentile(batch: IoBatch, p: float) -> float:\n    \"\"\"Computes storage wait percentile.\"\"\"\n    times = batch.times()\n    if not times:\n        raise ValueError(\"Empty IO batch\")\n    s = sorted(times)\n    n = len(s)\n    idx = min(int(math.ceil((p / 100.0) * n)) - 1, n - 1)\n    return float(s[idx])\n\ndef summarize_io_batch(batch: IoBatch, p: float) -> Dict[str, Any]:\n    val = compute_io_percentile(batch, p)\n    return format_io_summary(batch.count(), val)\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: io_calc.py ===\n\"\"\"Disk IO wait time percentile calculation.\"\"\"\nimport math\nfrom typing import List, Dict, Any\nfrom io_types import IoBatch, IoWaitSample\nfrom io_summary import format_io_summary\n\ndef compute_io_percentile(batch: IoBatch, p: float) -> float:\n    \"\"\"Computes storage wait percentile.\"\"\"\n    times = batch.times()\n    if not times:\n        raise ValueError(\"Empty IO batch\")\n    s = sorted(times)\n    n = len(s)\n    idx = min(int(math.ceil((p / 100.0) * n)) - 1, n - 1)\n    return float(s[idx])\n\ndef summarize_io_batch(batch: IoBatch, p: float) -> Dict[str, Any]:\n    val = compute_io_percentile(batch, p)\n    return format_io_summary(batch.count(), val)\n=== END ===",
+      "stop_reason": "STOP"
+    },
+    {
+      "kind": "review",
+      "prompt": "Before this patch is submitted, review it yourself. Re-read the ticket, the failing test traceback and every repository file, then check: (1) Does the patch make the failing value in the traceback come out right, and does it fix the root cause in the module where the wrong value is produced rather than only at the call site? (2) Does it break any other caller, the visible tests, or the documented contracts in the docstrings? (3) Are edge cases handled (empty input, zero, ties, boundaries)? (4) Is every file syntactically valid, with every import available in this repository? (5) Did you leave every test file untouched? Then output your complete final patch in the required === FILE: path === ... === END === format (repeat it unchanged if it is already correct). Do not write any explanation outside the file blocks.",
+      "response": "=== FILE: io_calc.py ===\n\"\"\"Disk IO wait time percentile calculation.\"\"\"\nimport math\nfrom typing import List, Dict, Any\nfrom io_types import IoBatch, IoWaitSample\nfrom io_summary import format_io_summary\n\ndef compute_io_percentile(batch: IoBatch, p: float) -> float:\n    \"\"\"Computes storage wait percentile.\"\"\"\n    times = batch.times()\n    if not times:\n        raise ValueError(\"Empty IO batch\")\n    s = sorted(times)\n    n = len(s)\n    idx = min(int(math.ceil((p / 100.0) * n)) - 1, n - 1)\n    return float(s[idx])\n\ndef summarize_io_batch(batch: IoBatch, p: float) -> Dict[str, Any]:\n    val = compute_io_percentile(batch, p)\n    return format_io_summary(batch.count(), val)\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-30T16:23:11.781392+00:00"
+}

@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "FULL",
+  "dimension": "Books",
+  "family": "config_lists",
+  "rule_id": "H12",
+  "task_id": 2057,
+  "run_idx": 1,
+  "stage": "extremes",
+  "order_idx": 109,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "gate_combiner.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2172,
+  "candidate_tokens": 175,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: gate_combiner.py ===\n\"\"\"Feature gate dictionary combiner.\"\"\"\nfrom typing import Dict, Any, List\n\ndef combine_gate_dicts(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    \"\"\"Combines gate dictionaries.\"\"\"\n    res = dict(base)\n    for k, v in override.items():\n        if k in res and isinstance(res[k], dict) and isinstance(v, dict):\n            res[k] = combine_gate_dicts(res[k], v)\n        elif k == \"roles\" and isinstance(res[k], list) and isinstance(v, list):\n            res[k] = list(set(res[k] + v))\n        else:\n            res[k] = v\n    return res\n\ndef is_valid_gate_key(key: str) -> bool:\n    return bool(key and isinstance(key, str))\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: gate_combiner.py ===\n\"\"\"Feature gate dictionary combiner.\"\"\"\nfrom typing import Dict, Any, List\n\ndef combine_gate_dicts(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    \"\"\"Combines gate dictionaries.\"\"\"\n    res = dict(base)\n    for k, v in override.items():\n        if k in res and isinstance(res[k], dict) and isinstance(v, dict):\n            res[k] = combine_gate_dicts(res[k], v)\n        elif k == \"roles\" and isinstance(res[k], list) and isinstance(v, list):\n            res[k] = list(set(res[k] + v))\n        else:\n            res[k] = v\n    return res\n\ndef is_valid_gate_key(key: str) -> bool:\n    return bool(key and isinstance(key, str))\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-29T07:33:20.325004+00:00"
+}

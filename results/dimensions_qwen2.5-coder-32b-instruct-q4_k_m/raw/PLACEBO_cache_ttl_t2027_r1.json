@@ -1,0 +1,41 @@
+{
+  "status": "COMPLETED",
+  "arm": "PLACEBO",
+  "dimension": "Books (control)",
+  "family": "cache_ttl",
+  "rule_id": "H11",
+  "task_id": 2027,
+  "run_idx": 1,
+  "stage": "middle",
+  "order_idx": 2,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "lease_guard.py",
+    "tests/test_lease_cases.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2078,
+  "candidate_tokens": 352,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: lease_guard.py ===\n\"\"\"Distributed cluster lease manager.\"\"\"\nfrom typing import Optional, Callable\nfrom clock_source import is_lease_valid\nfrom lease_entry import LeaseRecord\n\nclass LeaseGuard:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        self._clock = clock\n        self._leases = {}\n\n    def acquire(self, key: str, owner: str, lease_duration: float) -> None:\n        now = self._clock() if self._clock else self._get_current_time()\n        self._leases[key] = LeaseRecord(key, owner, now + lease_duration)\n\n    def holds_lease(self, key: str, owner: str) -> bool:\n        lease = self._leases.get(key)\n        if not lease or lease.owner != owner:\n            return False\n        now = self._clock() if self._clock else self._get_current_time()\n        return is_lease_valid(lease.valid_until, now)\n\n    def lease_count(self) -> int:\n        return len(self._leases)\n\n    def _get_current_time(self) -> float:\n        import time\n        return time.monotonic()\n=== END ===\n\n=== FILE: tests/test_lease_cases.py ===\nfrom lease_guard import LeaseGuard\n\ndef test_lease_validity_boundary():\n    import time\n    lg = LeaseGuard(clock=lambda: 0.0)\n    lg.acquire(\"lock1\", \"nodeA\", 1.0)\n    assert lg.holds_lease(\"lock1\", \"nodeA\") is True\n    time.sleep(1.1)\n    assert lg.holds_lease(\"lock1\", \"nodeA\") is False\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: lease_guard.py ===\n\"\"\"Distributed cluster lease manager.\"\"\"\nfrom typing import Optional, Callable\nfrom clock_source import is_lease_valid\nfrom lease_entry import LeaseRecord\n\nclass LeaseGuard:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        self._clock = clock\n        self._leases = {}\n\n    def acquire(self, key: str, owner: str, lease_duration: float) -> None:\n        now = self._clock() if self._clock else self._get_current_time()\n        self._leases[key] = LeaseRecord(key, owner, now + lease_duration)\n\n    def holds_lease(self, key: str, owner: str) -> bool:\n        lease = self._leases.get(key)\n        if not lease or lease.owner != owner:\n            return False\n        now = self._clock() if self._clock else self._get_current_time()\n        return is_lease_valid(lease.valid_until, now)\n\n    def lease_count(self) -> int:\n        return len(self._leases)\n\n    def _get_current_time(self) -> float:\n        import time\n        return time.monotonic()\n=== END ===\n\n=== FILE: tests/test_lease_cases.py ===\nfrom lease_guard import LeaseGuard\n\ndef test_lease_validity_boundary():\n    import time\n    lg = LeaseGuard(clock=lambda: 0.0)\n    lg.acquire(\"lock1\", \"nodeA\", 1.0)\n    assert lg.holds_lease(\"lock1\", \"nodeA\") is True\n    time.sleep(1.1)\n    assert lg.holds_lease(\"lock1\", \"nodeA\") is False\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-30T07:38:02.450308+00:00"
+}

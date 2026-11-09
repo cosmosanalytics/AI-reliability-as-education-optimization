@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "RULE",
+  "dimension": "Books",
+  "family": "permission_prefix",
+  "rule_id": "H06",
+  "task_id": 2020,
+  "run_idx": 1,
+  "stage": "extremes",
+  "order_idx": 75,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "prefix_validator.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 840,
+  "candidate_tokens": 165,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: prefix_validator.py ===\n\"\"\"Topic path subscription matcher.\"\"\"\ndef is_topic_subscribed(subscribed_pattern: str, event_topic: str) -> bool:\n    subscribed_segments = subscribed_pattern.split(\"::\")\n    event_segments = event_topic.split(\"::\")\n    \n    if len(subscribed_segments) > len(event_segments):\n        return False\n    \n    for i, subscribed_segment in enumerate(subscribed_segments):\n        if subscribed_segment == \"**\":\n            return True\n        if subscribed_segment == \"*\":\n            continue\n        if subscribed_segment != event_segments[i]:\n            return False\n    \n    return True\n\ndef clean_topic_segment(topic: str) -> str:\n    return topic.strip().lower()\n\ndef is_wildcard_subscription(pattern: str) -> bool:\n    return pattern.strip() in (\"*\", \"**\")\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: prefix_validator.py ===\n\"\"\"Topic path subscription matcher.\"\"\"\ndef is_topic_subscribed(subscribed_pattern: str, event_topic: str) -> bool:\n    subscribed_segments = subscribed_pattern.split(\"::\")\n    event_segments = event_topic.split(\"::\")\n    \n    if len(subscribed_segments) > len(event_segments):\n        return False\n    \n    for i, subscribed_segment in enumerate(subscribed_segments):\n        if subscribed_segment == \"**\":\n            return True\n        if subscribed_segment == \"*\":\n            continue\n        if subscribed_segment != event_segments[i]:\n            return False\n    \n    return True\n\ndef clean_topic_segment(topic: str) -> str:\n    return topic.strip().lower()\n\ndef is_wildcard_subscription(pattern: str) -> bool:\n    return pattern.strip() in (\"*\", \"**\")\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-29T05:55:51.119512+00:00"
+}

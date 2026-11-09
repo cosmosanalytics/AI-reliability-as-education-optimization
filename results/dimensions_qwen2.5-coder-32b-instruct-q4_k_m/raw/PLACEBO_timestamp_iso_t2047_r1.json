@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "PLACEBO",
+  "dimension": "Books (control)",
+  "family": "timestamp_iso",
+  "rule_id": "H09",
+  "task_id": 2047,
+  "run_idx": 1,
+  "stage": "extremes",
+  "order_idx": 6,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "webhook_sender.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2228,
+  "candidate_tokens": 152,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: webhook_sender.py ===\n\"\"\"Webhook delivery payload construction.\"\"\"\nfrom datetime import datetime, timezone\nfrom typing import Dict, Any\nfrom envelope_schema import WebhookEnvelope\nfrom signature_utils import generate_delivery_headers\n\ndef build_webhook_payload(topic: str, data: Dict[str, Any], dt: datetime) -> WebhookEnvelope:\n    hdrs = generate_delivery_headers(topic)\n    ts = dt.strftime(\"%Y-%m-%dT%H:%M:%S.%f\")[:-3] + \"Z\"\n    env = WebhookEnvelope(topic=topic, body=data, sent_at=ts, headers=hdrs)\n    if not env.is_dispatched():\n        raise ValueError(\"Invalid envelope state\")\n    return env\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: webhook_sender.py ===\n\"\"\"Webhook delivery payload construction.\"\"\"\nfrom datetime import datetime, timezone\nfrom typing import Dict, Any\nfrom envelope_schema import WebhookEnvelope\nfrom signature_utils import generate_delivery_headers\n\ndef build_webhook_payload(topic: str, data: Dict[str, Any], dt: datetime) -> WebhookEnvelope:\n    hdrs = generate_delivery_headers(topic)\n    ts = dt.strftime(\"%Y-%m-%dT%H:%M:%S.%f\")[:-3] + \"Z\"\n    env = WebhookEnvelope(topic=topic, body=data, sent_at=ts, headers=hdrs)\n    if not env.is_dispatched():\n        raise ValueError(\"Invalid envelope state\")\n    return env\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-29T02:00:11.178362+00:00"
+}

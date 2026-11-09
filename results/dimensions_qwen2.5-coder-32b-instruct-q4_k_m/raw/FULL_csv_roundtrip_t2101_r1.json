@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "FULL",
+  "dimension": "Books",
+  "family": "csv_roundtrip",
+  "rule_id": "H10",
+  "task_id": 2101,
+  "run_idx": 1,
+  "stage": "extremes",
+  "order_idx": 88,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "log_serializer.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2274,
+  "candidate_tokens": 150,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: log_serializer.py ===\n\"\"\"System Log TSV Serializer TSV line serializer.\"\"\"\nfrom typing import List\nfrom tsv_helper import escape_tsv_cell, sanitize_tsv_record\nfrom tsv_model import create_record\n\ndef serialize_log_line(level: str, msg: str, target: str) -> str:\n    rec = create_record(level, msg, target)\n    esc_msg = escape_tsv_cell(rec.message).replace(\"\\t\", \"\\\\t\")\n    esc_msg = esc_msg.replace('\"', '\\\\\"')\n    return f\"{rec.level}\\t{esc_msg}\\t{rec.target}\"\n\ndef validate_line(line: str) -> bool:\n    return len(line.split(\"\\t\")) == 3\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: log_serializer.py ===\n\"\"\"System Log TSV Serializer TSV line serializer.\"\"\"\nfrom typing import List\nfrom tsv_helper import escape_tsv_cell, sanitize_tsv_record\nfrom tsv_model import create_record\n\ndef serialize_log_line(level: str, msg: str, target: str) -> str:\n    rec = create_record(level, msg, target)\n    esc_msg = escape_tsv_cell(rec.message).replace(\"\\t\", \"\\\\t\")\n    esc_msg = esc_msg.replace('\"', '\\\\\"')\n    return f\"{rec.level}\\t{esc_msg}\\t{rec.target}\"\n\ndef validate_line(line: str) -> bool:\n    return len(line.split(\"\\t\")) == 3\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-29T06:37:49.617156+00:00"
+}

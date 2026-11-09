@@ -1,0 +1,47 @@
+{
+  "status": "COMPLETED",
+  "arm": "REVIEW",
+  "dimension": "Review",
+  "family": "event_ordering",
+  "rule_id": "H07",
+  "task_id": 2022,
+  "run_idx": 1,
+  "stage": "extremes",
+  "order_idx": 222,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "sorter.py"
+  ],
+  "model_turns": 2,
+  "prompt_tokens": 1964,
+  "candidate_tokens": 328,
+  "thoughts_tokens": 0,
+  "review_changed_patch": false,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: sorter.py ===\n\"\"\"Notification priority batch sorter.\"\"\"\nfrom typing import List\nfrom notification import NotificationMessage\nfrom formatter import format_batch_summary\n\ndef sort_notification_batch(batch: List[NotificationMessage]) -> List[NotificationMessage]:\n    \"\"\"Sort notification messages in batch by priority level and msg_id for deterministic order.\"\"\"\n    _ = format_batch_summary(batch)\n    return sorted(batch, key=lambda m: (-m.priority, m.msg_id))\n\ndef extract_urgent_notifications(batch: List[NotificationMessage]) -> List[NotificationMessage]:\n    sorted_msgs = sort_notification_batch(batch)\n    return [m for m in sorted_msgs if m.is_urgent()]\n\ndef get_oldest_notification(batch: List[NotificationMessage]):\n    if not batch:\n        return None\n    return batch[0]\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: sorter.py ===\n\"\"\"Notification priority batch sorter.\"\"\"\nfrom typing import List\nfrom notification import NotificationMessage\nfrom formatter import format_batch_summary\n\ndef sort_notification_batch(batch: List[NotificationMessage]) -> List[NotificationMessage]:\n    \"\"\"Sort notification messages in batch by priority level and msg_id for deterministic order.\"\"\"\n    _ = format_batch_summary(batch)\n    return sorted(batch, key=lambda m: (-m.priority, m.msg_id))\n\ndef extract_urgent_notifications(batch: List[NotificationMessage]) -> List[NotificationMessage]:\n    sorted_msgs = sort_notification_batch(batch)\n    return [m for m in sorted_msgs if m.is_urgent()]\n\ndef get_oldest_notification(batch: List[NotificationMessage]):\n    if not batch:\n        return None\n    return batch[0]\n=== END ===",
+      "stop_reason": "STOP"
+    },
+    {
+      "kind": "review",
+      "prompt": "Before this patch is submitted, review it yourself. Re-read the ticket, the failing test traceback and every repository file, then check: (1) Does the patch make the failing value in the traceback come out right, and does it fix the root cause in the module where the wrong value is produced rather than only at the call site? (2) Does it break any other caller, the visible tests, or the documented contracts in the docstrings? (3) Are edge cases handled (empty input, zero, ties, boundaries)? (4) Is every file syntactically valid, with every import available in this repository? (5) Did you leave every test file untouched? Then output your complete final patch in the required === FILE: path === ... === END === format (repeat it unchanged if it is already correct). Do not write any explanation outside the file blocks.",
+      "response": "=== FILE: sorter.py ===\n\"\"\"Notification priority batch sorter.\"\"\"\nfrom typing import List\nfrom notification import NotificationMessage\nfrom formatter import format_batch_summary\n\ndef sort_notification_batch(batch: List[NotificationMessage]) -> List[NotificationMessage]:\n    \"\"\"Sort notification messages in batch by priority level and msg_id for deterministic order.\"\"\"\n    _ = format_batch_summary(batch)\n    return sorted(batch, key=lambda m: (-m.priority, m.msg_id))\n\ndef extract_urgent_notifications(batch: List[NotificationMessage]) -> List[NotificationMessage]:\n    sorted_msgs = sort_notification_batch(batch)\n    return [m for m in sorted_msgs if m.is_urgent()]\n\ndef get_oldest_notification(batch: List[NotificationMessage]):\n    if not batch:\n        return None\n    return batch[0]\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-30T01:43:17.587720+00:00"
+}

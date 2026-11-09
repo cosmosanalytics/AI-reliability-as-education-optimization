@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "B0",
+  "dimension": "Baseline",
+  "family": "calendar_recurrence",
+  "rule_id": "H05",
+  "task_id": 2010,
+  "run_idx": 4,
+  "stage": "ranking",
+  "order_idx": 111,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "period_calc.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 810,
+  "candidate_tokens": 108,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-7b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-7b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: period_calc.py ===\ndef check_in_window(start_ts: int, end_ts: int, probe_ts: int) -> bool:\n    return start_ts < probe_ts < end_ts\n\ndef get_window_duration(start_ts: int, end_ts: int) -> int:\n    return max(0, end_ts - start_ts)\n\ndef is_valid_epoch_range(start_ts: int, end_ts: int) -> bool:\n    return end_ts >= start_ts >= 0\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: period_calc.py ===\n```python\ndef check_in_window(start_ts: int, end_ts: int, probe_ts: int) -> bool:\n    return start_ts < probe_ts < end_ts\n\ndef get_window_duration(start_ts: int, end_ts: int) -> int:\n    return max(0, end_ts - start_ts)\n\ndef is_valid_epoch_range(start_ts: int, end_ts: int) -> bool:\n    return end_ts >= start_ts >= 0\n```\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-28T23:33:11.449297+00:00"
+}

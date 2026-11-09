@@ -1,0 +1,38 @@
+{
+  "status": "COMPLETED",
+  "arm": "B0",
+  "dimension": "Baseline",
+  "family": "csv_roundtrip",
+  "rule_id": "H10",
+  "task_id": 2015,
+  "run_idx": 1,
+  "stage": "ranking",
+  "order_idx": 65,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [],
+  "model_turns": 1,
+  "prompt_tokens": 694,
+  "candidate_tokens": 157,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-7b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-7b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: exporter.py ===\n\"\"\"Metric telemetry exporter.\"\"\"\nfrom typing import List\nfrom sanitizer import sanitize_cell\nfrom metric import MetricEntry\n\ndef format_metric_row(entry: MetricEntry) -> str:\n    \"\"\"Format single metric row into TSV line.\"\"\"\n    return f\"{sanitize_cell(entry.key)}\\t{sanitize_cell(entry.value_label)}\"\n\ndef export_metric_batch(metrics: List[MetricEntry]) -> str:\n    return \"\\n\".join(format_metric_row(m) for m in metrics)\n\ndef export_with_header(metrics: List[MetricEntry]) -> str:\n    header = \"metric_key\\tvalue_label\"\n    rows = export_metric_batch(metrics)\n    return f\"{header}\\n{rows}\" if rows else header\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: exporter.py ===\n```python\n\"\"\"Metric telemetry exporter.\"\"\"\nfrom typing import List\nfrom sanitizer import sanitize_cell\nfrom metric import MetricEntry\n\ndef format_metric_row(entry: MetricEntry) -> str:\n    \"\"\"Format single metric row into TSV line.\"\"\"\n    return f\"{sanitize_cell(entry.key)}\\t{sanitize_cell(entry.value_label)}\"\n\ndef export_metric_batch(metrics: List[MetricEntry]) -> str:\n    return \"\\n\".join(format_metric_row(m) for m in metrics)\n\ndef export_with_header(metrics: List[MetricEntry]) -> str:\n    header = \"metric_key\\tvalue_label\"\n    rows = export_metric_batch(metrics)\n    return f\"{header}\\n{rows}\" if rows else header\n```\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-28T23:25:48.604474+00:00"
+}

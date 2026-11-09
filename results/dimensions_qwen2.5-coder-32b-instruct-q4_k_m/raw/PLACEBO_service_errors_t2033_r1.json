@@ -1,0 +1,41 @@
+{
+  "status": "COMPLETED",
+  "arm": "PLACEBO",
+  "dimension": "Books (control)",
+  "family": "service_errors",
+  "rule_id": "H04",
+  "task_id": 2033,
+  "run_idx": 1,
+  "stage": "middle",
+  "order_idx": 12,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "errors.py",
+    "lock_manager.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2183,
+  "candidate_tokens": 438,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: errors.py ===\n\"\"\"Domain exception specifications.\"\"\"\nfrom typing import Dict, Any, Optional\n\nclass ServiceError(Exception):\n    def __init__(self, code: str, message: str = \"\", details: Optional[Dict[str, Any]] = None):\n        super().__init__(f\"[{code}] {message}\")\n        self.code = code\n        self.message = message\n        self.details = details or {}\n\n    def to_dict(self) -> Dict[str, Any]:\n        return {\"code\": self.code, \"message\": self.message, \"details\": self.details}\n\nclass LockConflictError(ServiceError):\n    \"\"\"Exception raised when a lock conflict occurs.\"\"\"\n    def __init__(self, resource_id: str, owner_id: str):\n        super().__init__(\"LOCK_CONFLICT\", f\"Resource {resource_id} is locked by {owner_id}\", {\"resource_id\": resource_id, \"owner_id\": owner_id})\n=== END ===\n=== FILE: lock_manager.py ===\n\"\"\"Concurrent resource lock manager.\"\"\"\nfrom errors import ServiceError, LockConflictError\nfrom lock_record import LockEntry\nfrom typing import Dict, Optional\n\nclass ResourceLockManager:\n    def __init__(self):\n        self._locks: Dict[str, LockEntry] = {}\n\n    def acquire_lock(self, resource_id: str, owner_id: str) -> LockEntry:\n        \"\"\"Acquire exclusive lock on resource.\n        \n        Raises:\n            LockConflictError: If resource is currently held by another worker.\n        \"\"\"\n        existing = self._locks.get(resource_id)\n        if existing and existing.is_active and existing.owner_id != owner_id:\n            raise LockConflictError(resource_id, existing.owner_id)\n        entry = LockEntry(resource_id=resource_id, owner_id=owner_id, is_active=True)\n        self._locks[resource_id] = entry\n        return entry\n\n    def release_lock(self, resource_id: str, owner_id: str) -> bool:\n        existing = self._locks.get(resource_id)\n        if existing and existing.owner_id == owner_id:\n            existing.is_active = False\n            return True\n        return False\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: errors.py ===\n\"\"\"Domain exception specifications.\"\"\"\nfrom typing import Dict, Any, Optional\n\nclass ServiceError(Exception):\n    def __init__(self, code: str, message: str = \"\", details: Optional[Dict[str, Any]] = None):\n        super().__init__(f\"[{code}] {message}\")\n        self.code = code\n        self.message = message\n        self.details = details or {}\n\n    def to_dict(self) -> Dict[str, Any]:\n        return {\"code\": self.code, \"message\": self.message, \"details\": self.details}\n\nclass LockConflictError(ServiceError):\n    \"\"\"Exception raised when a lock conflict occurs.\"\"\"\n    def __init__(self, resource_id: str, owner_id: str):\n        super().__init__(\"LOCK_CONFLICT\", f\"Resource {resource_id} is locked by {owner_id}\", {\"resource_id\": resource_id, \"owner_id\": owner_id})\n=== END ===\n=== FILE: lock_manager.py ===\n\"\"\"Concurrent resource lock manager.\"\"\"\nfrom errors import ServiceError, LockConflictError\nfrom lock_record import LockEntry\nfrom typing import Dict, Optional\n\nclass ResourceLockManager:\n    def __init__(self):\n        self._locks: Dict[str, LockEntry] = {}\n\n    def acquire_lock(self, resource_id: str, owner_id: str) -> LockEntry:\n        \"\"\"Acquire exclusive lock on resource.\n        \n        Raises:\n            LockConflictError: If resource is currently held by another worker.\n        \"\"\"\n        existing = self._locks.get(resource_id)\n        if existing and existing.is_active and existing.owner_id != owner_id:\n            raise LockConflictError(resource_id, existing.owner_id)\n        entry = LockEntry(resource_id=resource_id, owner_id=owner_id, is_active=True)\n        self._locks[resource_id] = entry\n        return entry\n\n    def release_lock(self, resource_id: str, owner_id: str) -> bool:\n        existing = self._locks.get(resource_id)\n        if existing and existing.owner_id == owner_id:\n            existing.is_active = False\n            return True\n        return False\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-30T08:29:54.534861+00:00"
+}

@@ -1,0 +1,42 @@
+{
+  "status": "COMPLETED",
+  "arm": "RULE",
+  "dimension": "Books",
+  "family": "cache_ttl",
+  "rule_id": "H11",
+  "task_id": 2027,
+  "run_idx": 3,
+  "stage": "extremes",
+  "order_idx": 294,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "lease_entry.py",
+    "lease_guard.py",
+    "tests/test_lease_cases.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 760,
+  "candidate_tokens": 834,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen3-coder-30b-a3b-instruct-q4_k_m",
+  "cfg_model_id": "qwen3-coder-30b-a3b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: lease_entry.py ===\n\"\"\"Lease entry metadata.\"\"\"\nfrom dataclasses import dataclass\nfrom typing import Optional\n\n@dataclass\nclass LeaseRecord:\n    lease_key: str\n    owner: str\n    valid_until: float\n    fencing_token: int = 100\n\n    def matches_owner(self, candidate: str) -> bool:\n        return self.owner == candidate\n\n    def __post_init__(self):\n        # Normalize the lease key to follow cache key namespace architecture\n        if ':' in self.lease_key:\n            parts = self.lease_key.split(':')\n            if len(parts) >= 4:\n                # Reconstruct using lowercase colon-delimited format\n                self.lease_key = ':'.join([\n                    parts[0].lower(),\n                    parts[1],\n                    parts[2],\n                    parts[3],\n                    parts[4] if len(parts) > 4 else ''\n                ])\n            else:\n                # If format is not recognized, keep as-is but ensure lowercase\n                self.lease_key = self.lease_key.lower()\n        else:\n            # Ensure lowercase for simple keys too\n            self.lease_key = self.lease_key.lower()\n=== END ===\n=== FILE: lease_guard.py ===\n\"\"\"Distributed cluster lease manager.\"\"\"\nfrom typing import Optional, Callable\nfrom clock_source import is_lease_valid\nfrom lease_entry import LeaseRecord\n\nclass LeaseGuard:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        self._clock = clock\n        self._leases = {}\n\n    def acquire(self, key: str, owner: str, lease_duration: float) -> None:\n        import time\n        now = self._clock() if self._clock else time.monotonic()\n        # Normalize the key to follow cache key namespace architecture\n        normalized_key = self._normalize_key(key)\n        self._leases[normalized_key] = LeaseRecord(normalized_key, owner, now + lease_duration)\n\n    def holds_lease(self, key: str, owner: str) -> bool:\n        normalized_key = self._normalize_key(key)\n        lease = self._leases.get(normalized_key)\n        if not lease or lease.owner != owner:\n            return False\n        import time\n        now = self._clock() if self._clock else time.monotonic()\n        return is_lease_valid(lease.valid_until, now)\n\n    def lease_count(self) -> int:\n        return len(self._leases)\n\n    def _normalize_key(self, key: str) -> str:\n        # Apply cache key namespace architecture: app:v2:<tenant_id>:<entity_type>:<entity_id>\n        # Replace spaces with underscores and ensure lowercase\n        normalized = key.lower().replace(' ', '_')\n        if ':' not in normalized:\n            # For simple keys, apply standard namespace pattern\n            return f\"app:v2::::{normalized}\"\n        else:\n            # Already in proper format\n            return normalized\n=== END ===\n=== FILE: tests/test_lease_cases.py ===\nimport pytest\nfrom lease_guard import LeaseGuard\n\ndef test_lease_validity_boundary():\n    # Test for split-brain scenario where lease validity boundary is critical\n    lg = LeaseGuard()\n    lg.acquire(\"lock1\", \"nodeA\", 1.0)\n    \n    # Simulate time just before expiry\n    import time\n    now = time.monotonic()\n    # Ensure we're within valid range for the lease\n    assert lg.holds_lease(\"lock1\", \"nodeA\") is True\n    # Sleep to ensure the lease expires\n    time.sleep(1.1)\n    # After expiry, lease should not be held\n    assert lg.holds_lease(\"lock1\", \"nodeA\") is False\n    # Ensure that we can acquire a new lease with same key\n    lg.acquire(\"lock1\", \"nodeB\", 1.0)\n    assert lg.holds_lease(\"lock1\", \"nodeB\") is True\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: lease_entry.py ===\n\"\"\"Lease entry metadata.\"\"\"\nfrom dataclasses import dataclass\nfrom typing import Optional\n\n@dataclass\nclass LeaseRecord:\n    lease_key: str\n    owner: str\n    valid_until: float\n    fencing_token: int = 100\n\n    def matches_owner(self, candidate: str) -> bool:\n        return self.owner == candidate\n\n    def __post_init__(self):\n        # Normalize the lease key to follow cache key namespace architecture\n        if ':' in self.lease_key:\n            parts = self.lease_key.split(':')\n            if len(parts) >= 4:\n                # Reconstruct using lowercase colon-delimited format\n                self.lease_key = ':'.join([\n                    parts[0].lower(),\n                    parts[1],\n                    parts[2],\n                    parts[3],\n                    parts[4] if len(parts) > 4 else ''\n                ])\n            else:\n                # If format is not recognized, keep as-is but ensure lowercase\n                self.lease_key = self.lease_key.lower()\n        else:\n            # Ensure lowercase for simple keys too\n            self.lease_key = self.lease_key.lower()\n=== END ===\n=== FILE: lease_guard.py ===\n\"\"\"Distributed cluster lease manager.\"\"\"\nfrom typing import Optional, Callable\nfrom clock_source import is_lease_valid\nfrom lease_entry import LeaseRecord\n\nclass LeaseGuard:\n    def __init__(self, clock: Optional[Callable[[], float]] = None):\n        self._clock = clock\n        self._leases = {}\n\n    def acquire(self, key: str, owner: str, lease_duration: float) -> None:\n        import time\n        now = self._clock() if self._clock else time.monotonic()\n        # Normalize the key to follow cache key namespace architecture\n        normalized_key = self._normalize_key(key)\n        self._leases[normalized_key] = LeaseRecord(normalized_key, owner, now + lease_duration)\n\n    def holds_lease(self, key: str, owner: str) -> bool:\n        normalized_key = self._normalize_key(key)\n        lease = self._leases.get(normalized_key)\n        if not lease or lease.owner != owner:\n            return False\n        import time\n        now = self._clock() if self._clock else time.monotonic()\n        return is_lease_valid(lease.valid_until, now)\n\n    def lease_count(self) -> int:\n        return len(self._leases)\n\n    def _normalize_key(self, key: str) -> str:\n        # Apply cache key namespace architecture: app:v2:<tenant_id>:<entity_type>:<entity_id>\n        # Replace spaces with underscores and ensure lowercase\n        normalized = key.lower().replace(' ', '_')\n        if ':' not in normalized:\n            # For simple keys, apply standard namespace pattern\n            return f\"app:v2::::{normalized}\"\n        else:\n            # Already in proper format\n            return normalized\n=== END ===\n=== FILE: tests/test_lease_cases.py ===\nimport pytest\nfrom lease_guard import LeaseGuard\n\ndef test_lease_validity_boundary():\n    # Test for split-brain scenario where lease validity boundary is critical\n    lg = LeaseGuard()\n    lg.acquire(\"lock1\", \"nodeA\", 1.0)\n    \n    # Simulate time just before expiry\n    import time\n    now = time.monotonic()\n    # Ensure we're within valid range for the lease\n    assert lg.holds_lease(\"lock1\", \"nodeA\") is True\n    # Sleep to ensure the lease expires\n    time.sleep(1.1)\n    # After expiry, lease should not be held\n    assert lg.holds_lease(\"lock1\", \"nodeA\") is False\n    # Ensure that we can acquire a new lease with same key\n    lg.acquire(\"lock1\", \"nodeB\", 1.0)\n    assert lg.holds_lease(\"lock1\", \"nodeB\") is True\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-11-08T08:53:47.644407+00:00"
+}

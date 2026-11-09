@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "B0",
+  "dimension": "Baseline",
+  "family": "config_lists",
+  "rule_id": "H12",
+  "task_id": 2057,
+  "run_idx": 1,
+  "stage": "ranking",
+  "order_idx": 56,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "gate_manager.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 763,
+  "candidate_tokens": 188,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-7b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-7b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: gate_manager.py ===\n\"\"\"Feature gate resolution manager.\"\"\"\nfrom typing import Dict, Any\nfrom gate_combiner import combine_gate_dicts, is_valid_gate_key\nfrom license_checker import check_tenant_tier, is_tier_supported\n\ndef resolve_feature_gates(tenant_id: str, default_gates: Dict[str, Any], tenant_gates: Dict[str, Any]) -> Dict[str, Any]:\n    tier = check_tenant_tier(tenant_id)\n    if not is_tier_supported(tier):\n        raise ValueError(\"Unsupported tier\")\n    merged = combine_gate_dicts(default_gates, tenant_gates)\n    if \"roles\" in merged and \"editor\" in merged[\"roles\"]:\n        merged[\"roles\"].append(\"viewer\")\n    return {\n        \"tenant_id\": tenant_id,\n        \"tier\": tier,\n        \"gates\": merged\n    }\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: gate_manager.py ===\n```python\n\"\"\"Feature gate resolution manager.\"\"\"\nfrom typing import Dict, Any\nfrom gate_combiner import combine_gate_dicts, is_valid_gate_key\nfrom license_checker import check_tenant_tier, is_tier_supported\n\ndef resolve_feature_gates(tenant_id: str, default_gates: Dict[str, Any], tenant_gates: Dict[str, Any]) -> Dict[str, Any]:\n    tier = check_tenant_tier(tenant_id)\n    if not is_tier_supported(tier):\n        raise ValueError(\"Unsupported tier\")\n    merged = combine_gate_dicts(default_gates, tenant_gates)\n    if \"roles\" in merged and \"editor\" in merged[\"roles\"]:\n        merged[\"roles\"].append(\"viewer\")\n    return {\n        \"tenant_id\": tenant_id,\n        \"tier\": tier,\n        \"gates\": merged\n    }\n```\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-28T23:23:55.294411+00:00"
+}

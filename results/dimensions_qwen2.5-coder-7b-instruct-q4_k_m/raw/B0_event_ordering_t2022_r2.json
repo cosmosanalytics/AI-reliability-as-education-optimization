@@ -1,0 +1,38 @@
+{
+  "status": "COMPLETED",
+  "arm": "B0",
+  "dimension": "Baseline",
+  "family": "event_ordering",
+  "rule_id": "H07",
+  "task_id": 2022,
+  "run_idx": 2,
+  "stage": "ranking",
+  "order_idx": 46,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [],
+  "model_turns": 1,
+  "prompt_tokens": 807,
+  "candidate_tokens": 163,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-7b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-7b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: sorter.py ===\n\"\"\"Notification priority batch sorter.\"\"\"\nfrom typing import List\nfrom notification import NotificationMessage\nfrom formatter import format_batch_summary\n\ndef sort_notification_batch(batch: List[NotificationMessage]) -> List[NotificationMessage]:\n    \"\"\"Sort notification messages in batch by priority level.\"\"\"\n    _ = format_batch_summary(batch)\n    return sorted(batch, key=lambda m: (-m.priority, m.msg_id))\n\ndef extract_urgent_notifications(batch: List[NotificationMessage]) -> List[NotificationMessage]:\n    sorted_msgs = sort_notification_batch(batch)\n    return [m for m in sorted_msgs if m.is_urgent()]\n\ndef get_oldest_notification(batch: List[NotificationMessage]):\n    if not batch:\n        return None\n    return batch[0]\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: sorter.py ===\n```python\n\"\"\"Notification priority batch sorter.\"\"\"\nfrom typing import List\nfrom notification import NotificationMessage\nfrom formatter import format_batch_summary\n\ndef sort_notification_batch(batch: List[NotificationMessage]) -> List[NotificationMessage]:\n    \"\"\"Sort notification messages in batch by priority level.\"\"\"\n    _ = format_batch_summary(batch)\n    return sorted(batch, key=lambda m: (-m.priority, m.msg_id))\n\ndef extract_urgent_notifications(batch: List[NotificationMessage]) -> List[NotificationMessage]:\n    sorted_msgs = sort_notification_batch(batch)\n    return [m for m in sorted_msgs if m.is_urgent()]\n\ndef get_oldest_notification(batch: List[NotificationMessage]):\n    if not batch:\n        return None\n    return batch[0]\n```\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-28T23:21:15.631721+00:00"
+}

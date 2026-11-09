@@ -1,0 +1,47 @@
+{
+  "status": "COMPLETED",
+  "arm": "REVIEW",
+  "dimension": "Review",
+  "family": "csv_roundtrip",
+  "rule_id": "H10",
+  "task_id": 2015,
+  "run_idx": 1,
+  "stage": "extremes",
+  "order_idx": 210,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "sanitizer.py"
+  ],
+  "model_turns": 2,
+  "prompt_tokens": 1806,
+  "candidate_tokens": 464,
+  "thoughts_tokens": 0,
+  "review_changed_patch": false,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: exporter.py ===\n\"\"\"Metric telemetry exporter.\"\"\"\nfrom typing import List\nfrom sanitizer import sanitize_cell\nfrom metric import MetricEntry\n\ndef format_metric_row(entry: MetricEntry) -> str:\n    \"\"\"Format single metric row into TSV line.\"\"\"\n    return f\"{sanitize_cell(entry.key)}\\t{sanitize_cell(entry.value_label)}\"\n\ndef export_metric_batch(metrics: List[MetricEntry]) -> str:\n    return \"\\n\".join(format_metric_row(m) for m in metrics)\n\ndef export_with_header(metrics: List[MetricEntry]) -> str:\n    header = \"metric_key\\tvalue_label\"\n    rows = export_metric_batch(metrics)\n    return f\"{header}\\n{rows}\" if rows else header\n=== END ===\n\n=== FILE: sanitizer.py ===\n\"\"\"TSV cell sanitizer.\"\"\"\nfrom typing import Optional\n\ndef sanitize_cell(text: Optional[str]) -> str:\n    if text is None:\n        return \"\"\n    return text.replace('\"', '\\\\\"')\n\ndef requires_sanitization(text: str) -> bool:\n    return any(c in text for c in ('\\t', '\\n', '\"'))\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: exporter.py ===\n\"\"\"Metric telemetry exporter.\"\"\"\nfrom typing import List\nfrom sanitizer import sanitize_cell\nfrom metric import MetricEntry\n\ndef format_metric_row(entry: MetricEntry) -> str:\n    \"\"\"Format single metric row into TSV line.\"\"\"\n    return f\"{sanitize_cell(entry.key)}\\t{sanitize_cell(entry.value_label)}\"\n\ndef export_metric_batch(metrics: List[MetricEntry]) -> str:\n    return \"\\n\".join(format_metric_row(m) for m in metrics)\n\ndef export_with_header(metrics: List[MetricEntry]) -> str:\n    header = \"metric_key\\tvalue_label\"\n    rows = export_metric_batch(metrics)\n    return f\"{header}\\n{rows}\" if rows else header\n=== END ===\n\n=== FILE: sanitizer.py ===\n\"\"\"TSV cell sanitizer.\"\"\"\nfrom typing import Optional\n\ndef sanitize_cell(text: Optional[str]) -> str:\n    if text is None:\n        return \"\"\n    return text.replace('\"', '\\\\\"')\n\ndef requires_sanitization(text: str) -> bool:\n    return any(c in text for c in ('\\t', '\\n', '\"'))\n=== END ===",
+      "stop_reason": "STOP"
+    },
+    {
+      "kind": "review",
+      "prompt": "Before this patch is submitted, review it yourself. Re-read the ticket, the failing test traceback and every repository file, then check: (1) Does the patch make the failing value in the traceback come out right, and does it fix the root cause in the module where the wrong value is produced rather than only at the call site? (2) Does it break any other caller, the visible tests, or the documented contracts in the docstrings? (3) Are edge cases handled (empty input, zero, ties, boundaries)? (4) Is every file syntactically valid, with every import available in this repository? (5) Did you leave every test file untouched? Then output your complete final patch in the required === FILE: path === ... === END === format (repeat it unchanged if it is already correct). Do not write any explanation outside the file blocks.",
+      "response": "=== FILE: exporter.py ===\n\"\"\"Metric telemetry exporter.\"\"\"\nfrom typing import List\nfrom sanitizer import sanitize_cell\nfrom metric import MetricEntry\n\ndef format_metric_row(entry: MetricEntry) -> str:\n    \"\"\"Format single metric row into TSV line.\"\"\"\n    return f\"{sanitize_cell(entry.key)}\\t{sanitize_cell(entry.value_label)}\"\n\ndef export_metric_batch(metrics: List[MetricEntry]) -> str:\n    return \"\\n\".join(format_metric_row(m) for m in metrics)\n\ndef export_with_header(metrics: List[MetricEntry]) -> str:\n    header = \"metric_key\\tvalue_label\"\n    rows = export_metric_batch(metrics)\n    return f\"{header}\\n{rows}\" if rows else header\n=== END ===\n\n=== FILE: sanitizer.py ===\n\"\"\"TSV cell sanitizer.\"\"\"\nfrom typing import Optional\n\ndef sanitize_cell(text: Optional[str]) -> str:\n    if text is None:\n        return \"\"\n    return text.replace('\"', '\\\\\"')\n\ndef requires_sanitization(text: str) -> bool:\n    return any(c in text for c in ('\\t', '\\n', '\"'))\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-30T00:50:10.866242+00:00"
+}

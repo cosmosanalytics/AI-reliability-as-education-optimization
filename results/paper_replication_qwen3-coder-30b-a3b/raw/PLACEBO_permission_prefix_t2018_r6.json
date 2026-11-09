@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "PLACEBO",
+  "dimension": "Books (control)",
+  "family": "permission_prefix",
+  "rule_id": "H06",
+  "task_id": 2018,
+  "run_idx": 6,
+  "stage": "middle",
+  "order_idx": 46,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "rbac.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2246,
+  "candidate_tokens": 420,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen3-coder-30b-a3b-instruct-q4_k_m",
+  "cfg_model_id": "qwen3-coder-30b-a3b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: rbac.py ===\n\"\"\"Document scope RBAC filter.\"\"\"\nfrom path_resolver import clean_scope, split_scope_segments\nfrom audit_logger import format_access_attempt\n\ndef check_scope_access(allowed_scope: str, requested_scope: str) -> bool:\n    \"\"\"Verify if requested scope is permitted within the designated scope pattern.\"\"\"\n    allowed_scope_clean = clean_scope(allowed_scope)\n    requested_scope_clean = clean_scope(requested_scope)\n    \n    # Check if requested scope starts with allowed scope\n    if not requested_scope_clean.startswith(allowed_scope_clean):\n        return False\n    \n    # Additional check: ensure exact segment boundary match\n    allowed_segments = split_scope_segments(allowed_scope_clean)\n    requested_segments = split_scope_segments(requested_scope_clean)\n    \n    # If allowed scope has more segments, requested scope must match exactly up to that point\n    if len(allowed_segments) > len(requested_segments):\n        return False\n    \n    # If allowed scope has fewer segments, requested scope must have exact segment match\n    if len(allowed_segments) < len(requested_segments):\n        # Check if requested scope has additional segments that are not allowed\n        # by checking that the prefix matches the allowed scope exactly\n        if not requested_scope_clean.startswith(allowed_scope_clean + \"::\"):\n            # If the prefix doesn't end with ::, then it's a partial segment match\n            # e.g. \"corp::public\" matching \"corp::public_internal\" should fail\n            return False\n    \n    # If we reach here, it's allowed\n    allowed = requested_scope_clean.startswith(allowed_scope_clean)\n    _ = format_access_attempt(allowed_scope, requested_scope, allowed)\n    return allowed\n\ndef filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:\n    return [s for s in scopes if check_scope_access(allowed_scope, s)]\n\ndef can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:\n    return all(check_scope_access(allowed_scope, s) for s in scopes)\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: rbac.py ===\n\"\"\"Document scope RBAC filter.\"\"\"\nfrom path_resolver import clean_scope, split_scope_segments\nfrom audit_logger import format_access_attempt\n\ndef check_scope_access(allowed_scope: str, requested_scope: str) -> bool:\n    \"\"\"Verify if requested scope is permitted within the designated scope pattern.\"\"\"\n    allowed_scope_clean = clean_scope(allowed_scope)\n    requested_scope_clean = clean_scope(requested_scope)\n    \n    # Check if requested scope starts with allowed scope\n    if not requested_scope_clean.startswith(allowed_scope_clean):\n        return False\n    \n    # Additional check: ensure exact segment boundary match\n    allowed_segments = split_scope_segments(allowed_scope_clean)\n    requested_segments = split_scope_segments(requested_scope_clean)\n    \n    # If allowed scope has more segments, requested scope must match exactly up to that point\n    if len(allowed_segments) > len(requested_segments):\n        return False\n    \n    # If allowed scope has fewer segments, requested scope must have exact segment match\n    if len(allowed_segments) < len(requested_segments):\n        # Check if requested scope has additional segments that are not allowed\n        # by checking that the prefix matches the allowed scope exactly\n        if not requested_scope_clean.startswith(allowed_scope_clean + \"::\"):\n            # If the prefix doesn't end with ::, then it's a partial segment match\n            # e.g. \"corp::public\" matching \"corp::public_internal\" should fail\n            return False\n    \n    # If we reach here, it's allowed\n    allowed = requested_scope_clean.startswith(allowed_scope_clean)\n    _ = format_access_attempt(allowed_scope, requested_scope, allowed)\n    return allowed\n\ndef filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:\n    return [s for s in scopes if check_scope_access(allowed_scope, s)]\n\ndef can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:\n    return all(check_scope_access(allowed_scope, s) for s in scopes)\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-11-08T16:23:43.826408+00:00"
+}

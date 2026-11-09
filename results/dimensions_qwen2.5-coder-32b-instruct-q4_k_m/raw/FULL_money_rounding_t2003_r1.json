@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "FULL",
+  "dimension": "Books",
+  "family": "money_rounding",
+  "rule_id": "H02",
+  "task_id": 2003,
+  "run_idx": 1,
+  "stage": "extremes",
+  "order_idx": 115,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "fx_engine.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2164,
+  "candidate_tokens": 156,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: fx_engine.py ===\n\"\"\"Low-level exchange rate computation.\"\"\"\nfrom typing import Tuple\nfrom decimal import Decimal, ROUND_HALF_UP\n\ndef apply_fx_rate(cents: int, rate: float) -> int:\n    \"\"\"Compute converted currency amount in cents with half-up rounding.\"\"\"\n    return int(Decimal(cents) * Decimal(rate).quantize(Decimal('1'), rounding=ROUND_HALF_UP))\n\ndef compute_spread(cents: int, base_rate: float, spread_bps: int = 10) -> Tuple[int, float]:\n    effective_rate = base_rate * (1.0 + spread_bps / 10000.0)\n    return apply_fx_rate(cents, effective_rate), effective_rate\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: fx_engine.py ===\n\"\"\"Low-level exchange rate computation.\"\"\"\nfrom typing import Tuple\nfrom decimal import Decimal, ROUND_HALF_UP\n\ndef apply_fx_rate(cents: int, rate: float) -> int:\n    \"\"\"Compute converted currency amount in cents with half-up rounding.\"\"\"\n    return int(Decimal(cents) * Decimal(rate).quantize(Decimal('1'), rounding=ROUND_HALF_UP))\n\ndef compute_spread(cents: int, base_rate: float, spread_bps: int = 10) -> Tuple[int, float]:\n    effective_rate = base_rate * (1.0 + spread_bps / 10000.0)\n    return apply_fx_rate(cents, effective_rate), effective_rate\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-29T07:48:29.853816+00:00"
+}

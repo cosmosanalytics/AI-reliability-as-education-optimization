@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "B0",
+  "dimension": "Baseline",
+  "family": "state_transitions",
+  "rule_id": "H15",
+  "task_id": 2077,
+  "run_idx": 1,
+  "stage": "ranking",
+  "order_idx": 14,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "pipeline_manager.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 797,
+  "candidate_tokens": 272,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: pipeline_manager.py ===\n\"\"\"Deployment pipeline lifecycle state manager.\"\"\"\nfrom typing import Set, Dict, Any\nfrom errors import ServiceError\nfrom pipeline_models import PipelineEntity\n\nALLOWED_TRANSITIONS: Dict[str, Set[str]] = {\n    \"PENDING\": {\"BUILDING\", \"CANCELLED\"},\n    \"BUILDING\": {\"TESTING\", \"FAILED\", \"CANCELLED\"},\n    \"TESTING\": {\"DEPLOYED\", \"FAILED\", \"CANCELLED\"},\n    \"DEPLOYED\": set(),\n    \"FAILED\": set(),\n    \"CANCELLED\": set(),\n}\n\ndef transition_pipeline(pipeline: PipelineEntity, new_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Transitions pipeline to target state and records audit event.\"\"\"\n    old_state = pipeline.state\n    if new_state not in ALLOWED_TRANSITIONS[old_state]:\n        raise ServiceError(\"TRANSITION_ERROR\", f\"Illegal transition from {old_state} to {new_state}\")\n    pipeline.state = new_state\n    pipeline.audit_trail.append((old_state, new_state, actor_id, timestamp_ms))\n\ndef get_pipeline_status(pipeline: PipelineEntity) -> Dict[str, Any]:\n    return {\"id\": pipeline.entity_id, \"state\": pipeline.state, \"terminal\": pipeline.is_terminal()}\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: pipeline_manager.py ===\n\"\"\"Deployment pipeline lifecycle state manager.\"\"\"\nfrom typing import Set, Dict, Any\nfrom errors import ServiceError\nfrom pipeline_models import PipelineEntity\n\nALLOWED_TRANSITIONS: Dict[str, Set[str]] = {\n    \"PENDING\": {\"BUILDING\", \"CANCELLED\"},\n    \"BUILDING\": {\"TESTING\", \"FAILED\", \"CANCELLED\"},\n    \"TESTING\": {\"DEPLOYED\", \"FAILED\", \"CANCELLED\"},\n    \"DEPLOYED\": set(),\n    \"FAILED\": set(),\n    \"CANCELLED\": set(),\n}\n\ndef transition_pipeline(pipeline: PipelineEntity, new_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Transitions pipeline to target state and records audit event.\"\"\"\n    old_state = pipeline.state\n    if new_state not in ALLOWED_TRANSITIONS[old_state]:\n        raise ServiceError(\"TRANSITION_ERROR\", f\"Illegal transition from {old_state} to {new_state}\")\n    pipeline.state = new_state\n    pipeline.audit_trail.append((old_state, new_state, actor_id, timestamp_ms))\n\ndef get_pipeline_status(pipeline: PipelineEntity) -> Dict[str, Any]:\n    return {\"id\": pipeline.entity_id, \"state\": pipeline.state, \"terminal\": pipeline.is_terminal()}\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-29T00:22:30.111631+00:00"
+}

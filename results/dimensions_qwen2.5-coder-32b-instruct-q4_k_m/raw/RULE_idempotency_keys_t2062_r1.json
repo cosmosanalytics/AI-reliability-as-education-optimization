@@ -1,0 +1,41 @@
+{
+  "status": "COMPLETED",
+  "arm": "RULE",
+  "dimension": "Books",
+  "family": "idempotency_keys",
+  "rule_id": "H13",
+  "task_id": 2062,
+  "run_idx": 1,
+  "stage": "extremes",
+  "order_idx": 65,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "fulfillment_service.py",
+    "idempotency_generator.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 866,
+  "candidate_tokens": 331,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: idempotency_generator.py ===\n\"\"\"Idempotency token generation helpers.\"\"\"\nimport uuid\nimport time\n\ndef generate_outbound_key() -> str:\n    \"\"\"Generates unique key for outbound request tracking.\"\"\"\n    timestamp_ms = int(time.time() * 1000)\n    hex_token = uuid.uuid4().hex[:8]\n    return f\"idemp_{timestamp_ms}_{hex_token}\"\n\ndef is_valid_token_length(token: str) -> bool:\n    return len(token) > 0\n\ndef get_token_prefix() -> str:\n    return \"idemp_\"\n=== END ===\n=== FILE: fulfillment_service.py ===\n\"\"\"Order fulfillment RPC execution client.\"\"\"\nfrom typing import Dict, Any, List\nfrom idempotency_generator import generate_outbound_key, is_valid_token_length\nfrom transport_adapter import MockRpcTransport\n\nclass FulfillmentService:\n    def __init__(self, transport: MockRpcTransport):\n        self.transport = transport\n\n    def dispatch_fulfillment(self, order_id: str, items: List[str], retries: int = 1) -> Dict[str, Any]:\n        key = generate_outbound_key()\n        if not is_valid_token_length(key):\n            raise ValueError(\"Invalid token\")\n        res = None\n        for attempt in range(retries + 1):\n            headers = {\"X-Idempotency-Key\": key}\n            res = self.transport.transmit(\"/rpc/fulfill\", {\"order\": order_id, \"items\": items}, headers)\n            if res[\"status\"] == \"accepted\":\n                break\n        return res\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: idempotency_generator.py ===\n\"\"\"Idempotency token generation helpers.\"\"\"\nimport uuid\nimport time\n\ndef generate_outbound_key() -> str:\n    \"\"\"Generates unique key for outbound request tracking.\"\"\"\n    timestamp_ms = int(time.time() * 1000)\n    hex_token = uuid.uuid4().hex[:8]\n    return f\"idemp_{timestamp_ms}_{hex_token}\"\n\ndef is_valid_token_length(token: str) -> bool:\n    return len(token) > 0\n\ndef get_token_prefix() -> str:\n    return \"idemp_\"\n=== END ===\n=== FILE: fulfillment_service.py ===\n\"\"\"Order fulfillment RPC execution client.\"\"\"\nfrom typing import Dict, Any, List\nfrom idempotency_generator import generate_outbound_key, is_valid_token_length\nfrom transport_adapter import MockRpcTransport\n\nclass FulfillmentService:\n    def __init__(self, transport: MockRpcTransport):\n        self.transport = transport\n\n    def dispatch_fulfillment(self, order_id: str, items: List[str], retries: int = 1) -> Dict[str, Any]:\n        key = generate_outbound_key()\n        if not is_valid_token_length(key):\n            raise ValueError(\"Invalid token\")\n        res = None\n        for attempt in range(retries + 1):\n            headers = {\"X-Idempotency-Key\": key}\n            res = self.transport.transmit(\"/rpc/fulfill\", {\"order\": order_id, \"items\": items}, headers)\n            if res[\"status\"] == \"accepted\":\n                break\n        return res\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-29T05:35:00.040470+00:00"
+}

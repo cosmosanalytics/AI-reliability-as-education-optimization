@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "FULL",
+  "dimension": "Books",
+  "family": "state_transitions",
+  "rule_id": "H15",
+  "task_id": 2080,
+  "run_idx": 1,
+  "stage": "middle",
+  "order_idx": 36,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "instance_fsm.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2236,
+  "candidate_tokens": 287,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: instance_fsm.py ===\n\"\"\"Cloud compute VM lifecycle state machine and schemas.\"\"\"\nfrom dataclasses import dataclass, field\nfrom typing import List, Tuple, Any, Dict, Set\nfrom errors import ServiceError\n\n@dataclass\nclass VirtualMachine:\n    entity_id: str\n    state: str = \"PROVISIONING\"\n    audit_trail: List[Tuple[Any, ...]] = field(default_factory=list)\n\n    def is_active(self) -> bool:\n        return self.state == \"RUNNING\"\n\nVM_TRANSITIONS: Dict[str, Set[str]] = {\n    \"PROVISIONING\": {\"RUNNING\", \"TERMINATED\"},\n    \"RUNNING\": {\"STOPPED\", \"TERMINATED\"},\n    \"STOPPED\": {\"RUNNING\", \"TERMINATED\"},\n    \"TERMINATED\": set(),\n}\n\ndef apply_vm_transition(vm: VirtualMachine, target_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Validates and applies compute lifecycle update.\"\"\"\n    cur = vm.state\n    allowed = VM_TRANSITIONS.get(cur, set())\n    if target_state not in allowed:\n        raise ServiceError(code=\"ERR_INVALID_TRANSITION\", message=\"Invalid state jump\")\n    vm.state = target_state\n    vm.audit_trail.append((\"STATE_TRANSITION\", vm.entity_id, cur, target_state, actor_id, timestamp_ms))\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: instance_fsm.py ===\n\"\"\"Cloud compute VM lifecycle state machine and schemas.\"\"\"\nfrom dataclasses import dataclass, field\nfrom typing import List, Tuple, Any, Dict, Set\nfrom errors import ServiceError\n\n@dataclass\nclass VirtualMachine:\n    entity_id: str\n    state: str = \"PROVISIONING\"\n    audit_trail: List[Tuple[Any, ...]] = field(default_factory=list)\n\n    def is_active(self) -> bool:\n        return self.state == \"RUNNING\"\n\nVM_TRANSITIONS: Dict[str, Set[str]] = {\n    \"PROVISIONING\": {\"RUNNING\", \"TERMINATED\"},\n    \"RUNNING\": {\"STOPPED\", \"TERMINATED\"},\n    \"STOPPED\": {\"RUNNING\", \"TERMINATED\"},\n    \"TERMINATED\": set(),\n}\n\ndef apply_vm_transition(vm: VirtualMachine, target_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Validates and applies compute lifecycle update.\"\"\"\n    cur = vm.state\n    allowed = VM_TRANSITIONS.get(cur, set())\n    if target_state not in allowed:\n        raise ServiceError(code=\"ERR_INVALID_TRANSITION\", message=\"Invalid state jump\")\n    vm.state = target_state\n    vm.audit_trail.append((\"STATE_TRANSITION\", vm.entity_id, cur, target_state, actor_id, timestamp_ms))\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-30T09:45:01.767755+00:00"
+}

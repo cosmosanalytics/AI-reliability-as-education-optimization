@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "PLACEBO",
+  "dimension": "Books (control)",
+  "family": "idempotency_keys",
+  "rule_id": "H13",
+  "task_id": 2065,
+  "run_idx": 1,
+  "stage": "extremes",
+  "order_idx": 14,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "key_factory.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2202,
+  "candidate_tokens": 271,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: key_factory.py ===\n\"\"\"Idempotency key construction factory for refunds.\"\"\"\nimport uuid\nfrom typing import Optional\n\nREFUND_KEY_PREFIX = \"ref_\"\n\ndef create_refund_key(refund_id: str) -> str:\n    \"\"\"Creates refund idempotency key.\n\n    Args:\n        refund_id (str): Unique refund identifier.\n\n    Returns:\n        str: Refund idempotency key with standardized prefix.\n    \"\"\"\n    return f\"{REFUND_KEY_PREFIX}{refund_id}_{uuid.uuid4()}\"\n\ndef is_valid_refund_key(key: str) -> bool:\n    \"\"\"Validates structure and length of refund key.\n\n    Args:\n        key (str): Refund key to validate.\n\n    Returns:\n        bool: True if key is valid, False otherwise.\n    \"\"\"\n    if not key or not isinstance(key, str):\n        return False\n    return key.startswith(REFUND_KEY_PREFIX) and len(key) > len(REFUND_KEY_PREFIX) + 5\n\ndef format_refund_scope(refund_id: str) -> str:\n    \"\"\"Returns normalized refund scope identifier.\n\n    Args:\n        refund_id (str): Unique refund identifier.\n\n    Returns:\n        str: Normalized refund scope identifier.\n    \"\"\"\n    return f\"scope_{refund_id.lower().strip()}\"\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: key_factory.py ===\n\"\"\"Idempotency key construction factory for refunds.\"\"\"\nimport uuid\nfrom typing import Optional\n\nREFUND_KEY_PREFIX = \"ref_\"\n\ndef create_refund_key(refund_id: str) -> str:\n    \"\"\"Creates refund idempotency key.\n\n    Args:\n        refund_id (str): Unique refund identifier.\n\n    Returns:\n        str: Refund idempotency key with standardized prefix.\n    \"\"\"\n    return f\"{REFUND_KEY_PREFIX}{refund_id}_{uuid.uuid4()}\"\n\ndef is_valid_refund_key(key: str) -> bool:\n    \"\"\"Validates structure and length of refund key.\n\n    Args:\n        key (str): Refund key to validate.\n\n    Returns:\n        bool: True if key is valid, False otherwise.\n    \"\"\"\n    if not key or not isinstance(key, str):\n        return False\n    return key.startswith(REFUND_KEY_PREFIX) and len(key) > len(REFUND_KEY_PREFIX) + 5\n\ndef format_refund_scope(refund_id: str) -> str:\n    \"\"\"Returns normalized refund scope identifier.\n\n    Args:\n        refund_id (str): Unique refund identifier.\n\n    Returns:\n        str: Normalized refund scope identifier.\n    \"\"\"\n    return f\"scope_{refund_id.lower().strip()}\"\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-29T02:29:12.640220+00:00"
+}

@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "B0",
+  "dimension": "Baseline",
+  "family": "timestamp_iso",
+  "rule_id": "H09",
+  "task_id": 2047,
+  "run_idx": 1,
+  "stage": "ranking",
+  "order_idx": 81,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "webhook_sender.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 855,
+  "candidate_tokens": 595,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-7b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-7b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: envelope_schema.py ===\n\"\"\"Schema definitions for webhook payloads.\"\"\"\nfrom dataclasses import dataclass, field\nfrom typing import Dict, Any\n\n@dataclass\nclass WebhookEnvelope:\n    topic: str\n    body: Dict[str, Any]\n    sent_at: str\n    headers: Dict[str, str] = field(default_factory=dict)\n\n    def is_dispatched(self) -> bool:\n        return bool(self.topic and self.sent_at)\n\n    def to_dict(self) -> Dict[str, Any]:\n        return {\n            \"topic\": self.topic,\n            \"body\": self.body,\n            \"sent_at\": self.sent_at,\n            \"headers\": self.headers\n        }\n=== END ===\n=== FILE: signature_utils.py ===\n\"\"\"Webhook signature computation and hashing.\"\"\"\nimport hashlib\nfrom typing import Dict, Any\n\ndef compute_payload_hash(topic: str) -> str:\n    return hashlib.sha256(topic.encode(\"utf-8\")).hexdigest()[:12]\n\ndef generate_delivery_headers(topic: str) -> Dict[str, str]:\n    digest = compute_payload_hash(topic)\n    return {\"X-Webhook-Signature\": digest, \"X-Webhook-Version\": \"1.0\"}\n\ndef verify_delivery_signature(topic: str, signature: str) -> bool:\n    return compute_payload_hash(topic) == signature\n=== END ===\n=== FILE: webhook_sender.py ===\n\"\"\"Webhook delivery payload construction.\"\"\"\nfrom datetime import datetime, timezone\nfrom typing import Dict, Any\nfrom envelope_schema import WebhookEnvelope\nfrom signature_utils import generate_delivery_headers\n\ndef build_webhook_payload(topic: str, data: Dict[str, Any], dt: datetime) -> WebhookEnvelope:\n    hdrs = generate_delivery_headers(topic)\n    ts = dt.strftime(\"%Y-%m-%dT%H:%M:%S.%fZ\")[:-4]  # Remove microseconds\n    env = WebhookEnvelope(topic=topic, body=data, sent_at=ts, headers=hdrs)\n    if not env.is_dispatched():\n        raise ValueError(\"Invalid envelope state\")\n    return env\n=== END ===\n=== FILE: tests/test_webhook.py ===\nfrom datetime import datetime, timezone\nfrom webhook_sender import build_webhook_payload\n\ndef test_service_execution():\n    dt = datetime(2026, 10, 25, 10, 0, 0, 100000, tzinfo=timezone.utc)\n    env = build_webhook_payload(\"user.created\", {\"user_id\": 42}, dt)\n    assert env.topic == \"user.created\"\n    assert env.body[\"user_id\"] == 42\n    assert env.sent_at.endswith(\"Z\")\n    assert \"X-Webhook-Signature\" in env.headers\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: envelope_schema.py ===\n```python\n\"\"\"Schema definitions for webhook payloads.\"\"\"\nfrom dataclasses import dataclass, field\nfrom typing import Dict, Any\n\n@dataclass\nclass WebhookEnvelope:\n    topic: str\n    body: Dict[str, Any]\n    sent_at: str\n    headers: Dict[str, str] = field(default_factory=dict)\n\n    def is_dispatched(self) -> bool:\n        return bool(self.topic and self.sent_at)\n\n    def to_dict(self) -> Dict[str, Any]:\n        return {\n            \"topic\": self.topic,\n            \"body\": self.body,\n            \"sent_at\": self.sent_at,\n            \"headers\": self.headers\n        }\n```\n=== END ===\n=== FILE: signature_utils.py ===\n```python\n\"\"\"Webhook signature computation and hashing.\"\"\"\nimport hashlib\nfrom typing import Dict, Any\n\ndef compute_payload_hash(topic: str) -> str:\n    return hashlib.sha256(topic.encode(\"utf-8\")).hexdigest()[:12]\n\ndef generate_delivery_headers(topic: str) -> Dict[str, str]:\n    digest = compute_payload_hash(topic)\n    return {\"X-Webhook-Signature\": digest, \"X-Webhook-Version\": \"1.0\"}\n\ndef verify_delivery_signature(topic: str, signature: str) -> bool:\n    return compute_payload_hash(topic) == signature\n```\n=== END ===\n=== FILE: webhook_sender.py ===\n```python\n\"\"\"Webhook delivery payload construction.\"\"\"\nfrom datetime import datetime, timezone\nfrom typing import Dict, Any\nfrom envelope_schema import WebhookEnvelope\nfrom signature_utils import generate_delivery_headers\n\ndef build_webhook_payload(topic: str, data: Dict[str, Any], dt: datetime) -> WebhookEnvelope:\n    hdrs = generate_delivery_headers(topic)\n    ts = dt.strftime(\"%Y-%m-%dT%H:%M:%S.%fZ\")[:-4]  # Remove microseconds\n    env = WebhookEnvelope(topic=topic, body=data, sent_at=ts, headers=hdrs)\n    if not env.is_dispatched():\n        raise ValueError(\"Invalid envelope state\")\n    return env\n```\n=== END ===\n=== FILE: tests/test_webhook.py ===\n```python\nfrom datetime import datetime, timezone\nfrom webhook_sender import build_webhook_payload\n\ndef test_service_execution():\n    dt = datetime(2026, 10, 25, 10, 0, 0, 100000, tzinfo=timezone.utc)\n    env = build_webhook_payload(\"user.created\", {\"user_id\": 42}, dt)\n    assert env.topic == \"user.created\"\n    assert env.body[\"user_id\"] == 42\n    assert env.sent_at.endswith(\"Z\")\n    assert \"X-Webhook-Signature\" in env.headers\n```\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-28T23:30:14.828767+00:00"
+}

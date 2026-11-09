@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "B0",
+  "dimension": "Baseline",
+  "family": "state_transitions",
+  "rule_id": "H15",
+  "task_id": 2078,
+  "run_idx": 1,
+  "stage": "ranking",
+  "order_idx": 39,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "escrow_engine.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 884,
+  "candidate_tokens": 309,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: escrow_engine.py ===\n\"\"\"Escrow transaction schemas and transition validator.\"\"\"\nfrom dataclasses import dataclass, field\nfrom typing import List, Tuple, Any, Dict, Set\nfrom errors import ServiceError\n\n@dataclass\nclass EscrowAccount:\n    entity_id: str\n    amount_cents: int\n    state: str = \"INITIAL\"\n    audit_trail: List[Tuple[Any, ...]] = field(default_factory=list)\n\n    def is_finalized(self) -> bool:\n        return self.state in {\"RELEASED\", \"REFUNDED\"}\n\nESCROW_TRANSITIONS: Dict[str, Set[str]] = {\n    \"INITIAL\": {\"HELD\"},\n    \"HELD\": {\"RELEASED\", \"REFUNDED\", \"DISPUTED\"},\n    \"DISPUTED\": {\"RELEASED\", \"REFUNDED\"},\n    \"RELEASED\": set(),\n    \"REFUNDED\": set(),\n}\n\ndef execute_escrow_transition(escrow: EscrowAccount, target_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Validates and executes escrow state change.\"\"\"\n    cur = escrow.state\n    allowed = ESCROW_TRANSITIONS.get(cur, set())\n    if target_state not in allowed:\n        raise ServiceError(code=\"ERR_ESCROW_INVALID_STATE\", message=\"Invalid state transition\")\n    escrow.state = target_state\n    escrow.audit_trail.append((actor_id, timestamp_ms, target_state))\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: escrow_engine.py ===\n\"\"\"Escrow transaction schemas and transition validator.\"\"\"\nfrom dataclasses import dataclass, field\nfrom typing import List, Tuple, Any, Dict, Set\nfrom errors import ServiceError\n\n@dataclass\nclass EscrowAccount:\n    entity_id: str\n    amount_cents: int\n    state: str = \"INITIAL\"\n    audit_trail: List[Tuple[Any, ...]] = field(default_factory=list)\n\n    def is_finalized(self) -> bool:\n        return self.state in {\"RELEASED\", \"REFUNDED\"}\n\nESCROW_TRANSITIONS: Dict[str, Set[str]] = {\n    \"INITIAL\": {\"HELD\"},\n    \"HELD\": {\"RELEASED\", \"REFUNDED\", \"DISPUTED\"},\n    \"DISPUTED\": {\"RELEASED\", \"REFUNDED\"},\n    \"RELEASED\": set(),\n    \"REFUNDED\": set(),\n}\n\ndef execute_escrow_transition(escrow: EscrowAccount, target_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Validates and executes escrow state change.\"\"\"\n    cur = escrow.state\n    allowed = ESCROW_TRANSITIONS.get(cur, set())\n    if target_state not in allowed:\n        raise ServiceError(code=\"ERR_ESCROW_INVALID_STATE\", message=\"Invalid state transition\")\n    escrow.state = target_state\n    escrow.audit_trail.append((actor_id, timestamp_ms, target_state))\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-29T01:08:21.693967+00:00"
+}

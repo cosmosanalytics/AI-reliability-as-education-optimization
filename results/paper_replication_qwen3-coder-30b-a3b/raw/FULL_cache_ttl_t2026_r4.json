@@ -1,0 +1,41 @@
+{
+  "status": "COMPLETED",
+  "arm": "FULL",
+  "dimension": "Books",
+  "family": "cache_ttl",
+  "rule_id": "H11",
+  "task_id": 2026,
+  "run_idx": 4,
+  "stage": "extremes",
+  "order_idx": 395,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "session_validator.py",
+    "tests/test_session_store_cases.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2074,
+  "candidate_tokens": 175,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen3-coder-30b-a3b-instruct-q4_k_m",
+  "cfg_model_id": "qwen3-coder-30b-a3b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: session_validator.py ===\n\"\"\"Session expiration validation logic.\"\"\"\ndef is_session_expired(expires_at: float, current_ts: float) -> bool:\n    return current_ts >= expires_at\n\ndef time_remaining(expires_at: float, current_ts: float) -> float:\n    return max(0.0, expires_at - current_ts)\n=== END ===\n=== FILE: tests/test_session_store_cases.py ===\nimport time\nfrom session_store import SessionStore\n\ndef test_session_expiry():\n    s = SessionStore()\n    s.register(\"192.168.1.1\", 0.01)  # Very short TTL\n    time.sleep(0.02)  # Wait past expiry\n    assert s.is_active(\"192.168.1.1\") is False\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: session_validator.py ===\n\"\"\"Session expiration validation logic.\"\"\"\ndef is_session_expired(expires_at: float, current_ts: float) -> bool:\n    return current_ts >= expires_at\n\ndef time_remaining(expires_at: float, current_ts: float) -> float:\n    return max(0.0, expires_at - current_ts)\n=== END ===\n=== FILE: tests/test_session_store_cases.py ===\nimport time\nfrom session_store import SessionStore\n\ndef test_session_expiry():\n    s = SessionStore()\n    s.register(\"192.168.1.1\", 0.01)  # Very short TTL\n    time.sleep(0.02)  # Wait past expiry\n    assert s.is_active(\"192.168.1.1\") is False\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-11-08T12:22:27.064544+00:00"
+}

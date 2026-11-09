@@ -1,0 +1,41 @@
+{
+  "status": "COMPLETED",
+  "arm": "PLACEBO",
+  "dimension": "Books (control)",
+  "family": "service_errors",
+  "rule_id": "H04",
+  "task_id": 2030,
+  "run_idx": 1,
+  "stage": "middle",
+  "order_idx": 5,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "errors.py",
+    "tenant_guard.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2134,
+  "candidate_tokens": 404,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: errors.py ===\n\"\"\"Domain exception specifications.\"\"\"\nfrom typing import Dict, Any, Optional\n\nclass ServiceError(Exception):\n    def __init__(self, code: str, message: str = \"\", details: Optional[Dict[str, Any]] = None):\n        super().__init__(f\"[{code}] {message}\")\n        self.code = code\n        self.message = message\n        self.details = details or {}\n\n    def to_dict(self) -> Dict[str, Any]:\n        return {\"code\": self.code, \"message\": self.message, \"details\": self.details}\n\nclass AuthorizationError(ServiceError):\n    def __init__(self, tenant_id: str, required_scope: str, message: str = \"\", details: Optional[Dict[str, Any]] = None):\n        super().__init__(code=\"AUTHORIZATION_ERROR\", message=message, details=details)\n        self.tenant_id = tenant_id\n        self.required_scope = required_scope\n\n    def to_dict(self) -> Dict[str, Any]:\n        return {\n            **super().to_dict(),\n            \"tenant_id\": self.tenant_id,\n            \"required_scope\": self.required_scope\n        }\n=== END ===\n=== FILE: tenant_guard.py ===\n\"\"\"Tenant permission authorization guard.\"\"\"\nfrom errors import ServiceError, AuthorizationError\nfrom tenant_context import TenantContext\n\ndef authorize_tenant_action(ctx: TenantContext, required_scope: str) -> bool:\n    \"\"\"Authorize tenant action against target resource.\n    \n    Raises an AuthorizationError if tenant lacks required scope.\n    \"\"\"\n    if not ctx.permits(required_scope):\n        raise AuthorizationError(\n            tenant_id=ctx.tenant_id,\n            required_scope=required_scope,\n            message=f\"Scope {required_scope} denied for tenant {ctx.tenant_id}\"\n        )\n    return True\n\ndef dispatch_tenant_request(ctx: TenantContext, required_scope: str) -> str:\n    authorize_tenant_action(ctx, required_scope)\n    return \"DISPATCHED\"\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: errors.py ===\n\"\"\"Domain exception specifications.\"\"\"\nfrom typing import Dict, Any, Optional\n\nclass ServiceError(Exception):\n    def __init__(self, code: str, message: str = \"\", details: Optional[Dict[str, Any]] = None):\n        super().__init__(f\"[{code}] {message}\")\n        self.code = code\n        self.message = message\n        self.details = details or {}\n\n    def to_dict(self) -> Dict[str, Any]:\n        return {\"code\": self.code, \"message\": self.message, \"details\": self.details}\n\nclass AuthorizationError(ServiceError):\n    def __init__(self, tenant_id: str, required_scope: str, message: str = \"\", details: Optional[Dict[str, Any]] = None):\n        super().__init__(code=\"AUTHORIZATION_ERROR\", message=message, details=details)\n        self.tenant_id = tenant_id\n        self.required_scope = required_scope\n\n    def to_dict(self) -> Dict[str, Any]:\n        return {\n            **super().to_dict(),\n            \"tenant_id\": self.tenant_id,\n            \"required_scope\": self.required_scope\n        }\n=== END ===\n=== FILE: tenant_guard.py ===\n\"\"\"Tenant permission authorization guard.\"\"\"\nfrom errors import ServiceError, AuthorizationError\nfrom tenant_context import TenantContext\n\ndef authorize_tenant_action(ctx: TenantContext, required_scope: str) -> bool:\n    \"\"\"Authorize tenant action against target resource.\n    \n    Raises an AuthorizationError if tenant lacks required scope.\n    \"\"\"\n    if not ctx.permits(required_scope):\n        raise AuthorizationError(\n            tenant_id=ctx.tenant_id,\n            required_scope=required_scope,\n            message=f\"Scope {required_scope} denied for tenant {ctx.tenant_id}\"\n        )\n    return True\n\ndef dispatch_tenant_request(ctx: TenantContext, required_scope: str) -> str:\n    authorize_tenant_action(ctx, required_scope)\n    return \"DISPATCHED\"\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-30T07:51:52.143317+00:00"
+}

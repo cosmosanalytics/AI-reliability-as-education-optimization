@@ -1,0 +1,42 @@
+{
+  "status": "COMPLETED",
+  "arm": "PLACEBO",
+  "dimension": "Books (control)",
+  "family": "config_lists",
+  "rule_id": "H12",
+  "task_id": 2059,
+  "run_idx": 4,
+  "stage": "extremes",
+  "order_idx": 62,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "matcher_utils.py",
+    "mesh_config.py",
+    "tests/test_mesh_cases.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2122,
+  "candidate_tokens": 806,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen3-coder-30b-a3b-instruct-q4_k_m",
+  "cfg_model_id": "qwen3-coder-30b-a3b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: matcher_utils.py ===\n\"\"\"Route path matching and dictionary consolidation.\"\"\"\nfrom typing import Dict, Any, List\n\ndef deep_merge_matchers(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    res = dict(base)\n    for k, v in override.items():\n        if k in res and isinstance(res[k], dict) and isinstance(v, dict):\n            res[k] = deep_merge_matchers(res[k], v)\n        else:\n            res[k] = v\n    return res\n\ndef normalize_prefix(path: str) -> str:\n    return \"/\" + path.strip(\"/\")\n\ndef extract_headers(matchers: Dict[str, Any]) -> List[str]:\n    \"\"\"Extract header names from matcher configuration.\"\"\"\n    if not isinstance(matchers, dict):\n        return []\n    headers = []\n    for key, value in matchers.items():\n        if key == \"headers\" and isinstance(value, dict):\n            headers.extend(value.keys())\n        elif isinstance(value, dict):\n            headers.extend(extract_headers(value))\n    return headers\n=== END ===\n=== FILE: mesh_config.py ===\n\"\"\"Service mesh routing configuration compiler.\"\"\"\nfrom typing import Dict, Any\nfrom matcher_utils import deep_merge_matchers, normalize_prefix, extract_headers\n\ndef compile_route_profile(mesh_id: str, base_rules: Dict[str, Any], env_rules: Dict[str, Any]) -> Dict[str, Any]:\n    merged = deep_merge_matchers(base_rules, env_rules)\n    prefix = normalize_prefix(merged.get(\"prefix\", \"/\"))\n    primary = extract_primary_route(prefix)\n    return {\n        \"mesh_id\": mesh_id,\n        \"prefix\": prefix,\n        \"primary\": primary,\n        \"segments\": count_route_segments(prefix),\n        \"rules\": merged\n    }\n\ndef validate_headers(base_rules: Dict[str, Any], env_rules: Dict[str, Any]) -> List[str]:\n    \"\"\"Validate that header matchers are preserved through environment override.\"\"\"\n    merged = deep_merge_matchers(base_rules, env_rules)\n    return extract_headers(merged)\n=== END ===\n=== FILE: tests/test_mesh_cases.py ===\nimport pytest\nfrom mesh_config import compile_route_profile, validate_headers\n\ndef test_case_1():\n    base = {\n        \"prefix\": \"/api\",\n        \"matchers\": {\n            \"headers\": {\n                \"X-Tenant-Id\": \"tenant-123\",\n                \"Authorization\": \"Bearer token\",\n                \"X-Trace-Id\": \"trace-456\"\n            }\n        }\n    }\n    env = {\n        \"matchers\": {\n            \"headers\": {\n                \"Authorization\": \"Bearer new-token\"\n            }\n        }\n    }\n    \n    # Test that headers are properly preserved\n    headers = validate_headers(base, env)\n    expected = ['X-Tenant-Id', 'Authorization', 'X-Trace-Id']\n    assert headers == expected\n    \n    # Test full profile compilation\n    prof = compile_route_profile(\"mesh-1\", base, env)\n    assert prof[\"mesh_id\"] == \"mesh-1\"\n    assert prof[\"prefix\"] == \"/api\"\n    assert \"Authorization\" in prof[\"rules\"][\"matchers\"][\"headers\"]\n    assert \"X-Tenant-Id\" in prof[\"rules\"][\"matchers\"][\"headers\"]\n    assert \"X-Trace-Id\" in prof[\"rules\"][\"matchers\"][\"headers\"]\n=== END ===\n=== FILE: tests/test_mesh.py ===\nfrom mesh_config import compile_route_profile\n\ndef test_service_execution():\n    base = {\"prefix\": \"/api\", \"timeout_ms\": 500}\n    env = {\"timeout_ms\": 250}\n    prof = compile_route_profile(\"mesh-1\", base, env)\n    assert prof[\"mesh_id\"] == \"mesh-1\"\n    assert prof[\"prefix\"] == \"/api\"\n    assert prof[\"rules\"][\"timeout_ms\"] == 250\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: matcher_utils.py ===\n\"\"\"Route path matching and dictionary consolidation.\"\"\"\nfrom typing import Dict, Any, List\n\ndef deep_merge_matchers(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    res = dict(base)\n    for k, v in override.items():\n        if k in res and isinstance(res[k], dict) and isinstance(v, dict):\n            res[k] = deep_merge_matchers(res[k], v)\n        else:\n            res[k] = v\n    return res\n\ndef normalize_prefix(path: str) -> str:\n    return \"/\" + path.strip(\"/\")\n\ndef extract_headers(matchers: Dict[str, Any]) -> List[str]:\n    \"\"\"Extract header names from matcher configuration.\"\"\"\n    if not isinstance(matchers, dict):\n        return []\n    headers = []\n    for key, value in matchers.items():\n        if key == \"headers\" and isinstance(value, dict):\n            headers.extend(value.keys())\n        elif isinstance(value, dict):\n            headers.extend(extract_headers(value))\n    return headers\n=== END ===\n=== FILE: mesh_config.py ===\n\"\"\"Service mesh routing configuration compiler.\"\"\"\nfrom typing import Dict, Any\nfrom matcher_utils import deep_merge_matchers, normalize_prefix, extract_headers\n\ndef compile_route_profile(mesh_id: str, base_rules: Dict[str, Any], env_rules: Dict[str, Any]) -> Dict[str, Any]:\n    merged = deep_merge_matchers(base_rules, env_rules)\n    prefix = normalize_prefix(merged.get(\"prefix\", \"/\"))\n    primary = extract_primary_route(prefix)\n    return {\n        \"mesh_id\": mesh_id,\n        \"prefix\": prefix,\n        \"primary\": primary,\n        \"segments\": count_route_segments(prefix),\n        \"rules\": merged\n    }\n\ndef validate_headers(base_rules: Dict[str, Any], env_rules: Dict[str, Any]) -> List[str]:\n    \"\"\"Validate that header matchers are preserved through environment override.\"\"\"\n    merged = deep_merge_matchers(base_rules, env_rules)\n    return extract_headers(merged)\n=== END ===\n=== FILE: tests/test_mesh_cases.py ===\nimport pytest\nfrom mesh_config import compile_route_profile, validate_headers\n\ndef test_case_1():\n    base = {\n        \"prefix\": \"/api\",\n        \"matchers\": {\n            \"headers\": {\n                \"X-Tenant-Id\": \"tenant-123\",\n                \"Authorization\": \"Bearer token\",\n                \"X-Trace-Id\": \"trace-456\"\n            }\n        }\n    }\n    env = {\n        \"matchers\": {\n            \"headers\": {\n                \"Authorization\": \"Bearer new-token\"\n            }\n        }\n    }\n    \n    # Test that headers are properly preserved\n    headers = validate_headers(base, env)\n    expected = ['X-Tenant-Id', 'Authorization', 'X-Trace-Id']\n    assert headers == expected\n    \n    # Test full profile compilation\n    prof = compile_route_profile(\"mesh-1\", base, env)\n    assert prof[\"mesh_id\"] == \"mesh-1\"\n    assert prof[\"prefix\"] == \"/api\"\n    assert \"Authorization\" in prof[\"rules\"][\"matchers\"][\"headers\"]\n    assert \"X-Tenant-Id\" in prof[\"rules\"][\"matchers\"][\"headers\"]\n    assert \"X-Trace-Id\" in prof[\"rules\"][\"matchers\"][\"headers\"]\n=== END ===\n=== FILE: tests/test_mesh.py ===\nfrom mesh_config import compile_route_profile\n\ndef test_service_execution():\n    base = {\"prefix\": \"/api\", \"timeout_ms\": 500}\n    env = {\"timeout_ms\": 250}\n    prof = compile_route_profile(\"mesh-1\", base, env)\n    assert prof[\"mesh_id\"] == \"mesh-1\"\n    assert prof[\"prefix\"] == \"/api\"\n    assert prof[\"rules\"][\"timeout_ms\"] == 250\n=== END ===\n",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-11-08T02:21:12.689496+00:00"
+}

@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "FULL",
+  "dimension": "Books",
+  "family": "config_lists",
+  "rule_id": "H12",
+  "task_id": 2059,
+  "run_idx": 1,
+  "stage": "extremes",
+  "order_idx": 93,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "matcher_utils.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2179,
+  "candidate_tokens": 326,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: matcher_utils.py ===\n\"\"\"Route path matching and dictionary consolidation.\"\"\"\nfrom typing import Dict, Any, List\n\ndef deep_merge_matchers(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    res = dict(base)\n    for k, v in override.items():\n        if k in res and isinstance(res[k], dict) and isinstance(v, dict):\n            res[k] = deep_merge_matchers(res[k], v)\n        elif k == \"headers\" and isinstance(res.get(k), list) and isinstance(v, list):\n            res[k] = list(set(res[k] + v))\n        else:\n            res[k] = v\n    return res\n\ndef normalize_prefix(path: str) -> str:\n    return \"/\" + path.strip(\"/\")\n=== END ===\n=== FILE: mesh_config.py ===\n\"\"\"Service mesh routing configuration compiler.\"\"\"\nfrom typing import Dict, Any\nfrom matcher_utils import deep_merge_matchers, normalize_prefix\nfrom route_validator import is_valid_route_pattern, count_route_segments, extract_primary_route\n\ndef compile_route_profile(mesh_id: str, base_rules: Dict[str, Any], env_rules: Dict[str, Any]) -> Dict[str, Any]:\n    merged = deep_merge_matchers(base_rules, env_rules)\n    prefix = normalize_prefix(merged.get(\"prefix\", \"/\"))\n    primary = extract_primary_route(prefix)\n    return {\n        \"mesh_id\": mesh_id,\n        \"prefix\": prefix,\n        \"primary\": primary,\n        \"segments\": count_route_segments(prefix),\n        \"rules\": merged\n    }\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: matcher_utils.py ===\n\"\"\"Route path matching and dictionary consolidation.\"\"\"\nfrom typing import Dict, Any, List\n\ndef deep_merge_matchers(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    res = dict(base)\n    for k, v in override.items():\n        if k in res and isinstance(res[k], dict) and isinstance(v, dict):\n            res[k] = deep_merge_matchers(res[k], v)\n        elif k == \"headers\" and isinstance(res.get(k), list) and isinstance(v, list):\n            res[k] = list(set(res[k] + v))\n        else:\n            res[k] = v\n    return res\n\ndef normalize_prefix(path: str) -> str:\n    return \"/\" + path.strip(\"/\")\n=== END ===\n=== FILE: mesh_config.py ===\n\"\"\"Service mesh routing configuration compiler.\"\"\"\nfrom typing import Dict, Any\nfrom matcher_utils import deep_merge_matchers, normalize_prefix\nfrom route_validator import is_valid_route_pattern, count_route_segments, extract_primary_route\n\ndef compile_route_profile(mesh_id: str, base_rules: Dict[str, Any], env_rules: Dict[str, Any]) -> Dict[str, Any]:\n    merged = deep_merge_matchers(base_rules, env_rules)\n    prefix = normalize_prefix(merged.get(\"prefix\", \"/\"))\n    primary = extract_primary_route(prefix)\n    return {\n        \"mesh_id\": mesh_id,\n        \"prefix\": prefix,\n        \"primary\": primary,\n        \"segments\": count_route_segments(prefix),\n        \"rules\": merged\n    }\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-29T06:52:47.058706+00:00"
+}

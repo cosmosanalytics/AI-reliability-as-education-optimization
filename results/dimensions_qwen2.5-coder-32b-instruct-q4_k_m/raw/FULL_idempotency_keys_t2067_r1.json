@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "FULL",
+  "dimension": "Books",
+  "family": "idempotency_keys",
+  "rule_id": "H13",
+  "task_id": 2067,
+  "run_idx": 1,
+  "stage": "extremes",
+  "order_idx": 84,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "token_builder.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2236,
+  "candidate_tokens": 192,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: token_builder.py ===\n\"\"\"RPC header token builders for compute instances.\"\"\"\nimport uuid\nimport time\nfrom typing import Dict, Optional\n\ndef build_mutation_headers() -> Dict[str, str]:\n    \"\"\"Generates standard request mutation headers.\"\"\"\n    timestamp_ms = int(time.time() * 1000)\n    hex_token = uuid.uuid4().hex[:8]\n    return {\"X-Request-Id\": str(uuid.uuid4()), \"X-Idempotency-Key\": f\"idemp_{timestamp_ms}_{hex_token}\"}\n\ndef is_valid_header_dict(hdrs: dict) -> bool:\n    \"\"\"Validates that header mapping is non-empty.\"\"\"\n    return isinstance(hdrs, dict) and len(hdrs) > 0\n\ndef extract_request_token(hdrs: dict) -> Optional[str]:\n    \"\"\"Extracts existing request identifier if present.\"\"\"\n    return hdrs.get(\"X-Request-Id\")\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: token_builder.py ===\n\"\"\"RPC header token builders for compute instances.\"\"\"\nimport uuid\nimport time\nfrom typing import Dict, Optional\n\ndef build_mutation_headers() -> Dict[str, str]:\n    \"\"\"Generates standard request mutation headers.\"\"\"\n    timestamp_ms = int(time.time() * 1000)\n    hex_token = uuid.uuid4().hex[:8]\n    return {\"X-Request-Id\": str(uuid.uuid4()), \"X-Idempotency-Key\": f\"idemp_{timestamp_ms}_{hex_token}\"}\n\ndef is_valid_header_dict(hdrs: dict) -> bool:\n    \"\"\"Validates that header mapping is non-empty.\"\"\"\n    return isinstance(hdrs, dict) and len(hdrs) > 0\n\ndef extract_request_token(hdrs: dict) -> Optional[str]:\n    \"\"\"Extracts existing request identifier if present.\"\"\"\n    return hdrs.get(\"X-Request-Id\")\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-29T06:28:01.133954+00:00"
+}

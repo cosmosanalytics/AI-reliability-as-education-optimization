@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "B0",
+  "dimension": "Baseline",
+  "family": "money_rounding",
+  "rule_id": "H02",
+  "task_id": 2002,
+  "run_idx": 1,
+  "stage": "ranking",
+  "order_idx": 36,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "discount.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 859,
+  "candidate_tokens": 270,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_model_id": "qwen2.5-coder-32b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: discount.py ===\n\"\"\"Invoice discount allocation module.\"\"\"\nfrom typing import List\nfrom models import AllocationResult\nfrom utils import validate_line_totals\n\ndef prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:\n    \"\"\"Prorate discount across lines proportionally to their value.\n    line_totals: list of integer cents.\n    Returns list of discount cents per line.\n    \"\"\"\n    if not validate_line_totals(line_totals):\n        raise ValueError(\"Line totals must be non-negative integers\")\n    total = sum(line_totals)\n    if total == 0:\n        return [0] * len(line_totals)\n    allocs = [int(cents * total_discount_cents / total) for cents in line_totals]\n    remainder = total_discount_cents - sum(allocs)\n    for i in range(remainder):\n        allocs[i] += 1\n    return allocs\n\ndef allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:\n    \"\"\"Wrapper returning structured allocation result.\"\"\"\n    allocs = prorate_discount(line_totals, total_discount_cents)\n    tot = sum(allocs)\n    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: discount.py ===\n\"\"\"Invoice discount allocation module.\"\"\"\nfrom typing import List\nfrom models import AllocationResult\nfrom utils import validate_line_totals\n\ndef prorate_discount(line_totals: List[int], total_discount_cents: int) -> List[int]:\n    \"\"\"Prorate discount across lines proportionally to their value.\n    line_totals: list of integer cents.\n    Returns list of discount cents per line.\n    \"\"\"\n    if not validate_line_totals(line_totals):\n        raise ValueError(\"Line totals must be non-negative integers\")\n    total = sum(line_totals)\n    if total == 0:\n        return [0] * len(line_totals)\n    allocs = [int(cents * total_discount_cents / total) for cents in line_totals]\n    remainder = total_discount_cents - sum(allocs)\n    for i in range(remainder):\n        allocs[i] += 1\n    return allocs\n\ndef allocate_discounts(line_totals: List[int], total_discount_cents: int) -> AllocationResult:\n    \"\"\"Wrapper returning structured allocation result.\"\"\"\n    allocs = prorate_discount(line_totals, total_discount_cents)\n    tot = sum(allocs)\n    return AllocationResult(discounts=allocs, total_allocated=tot, is_fully_allocated=(tot == total_discount_cents))\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-10-29T01:03:36.485717+00:00"
+}
