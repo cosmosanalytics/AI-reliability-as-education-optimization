@@ -1,0 +1,133 @@
+{
+  "status": "COMPLETED",
+  "arm": "KNOW_SURE",
+  "family": "service_errors",
+  "rule_id": "H04",
+  "task_id": 2033,
+  "run_idx": 1,
+  "order_idx": 130,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "lock_manager.py"
+  ],
+  "tool_calls": [
+    {
+      "phase": "revise",
+      "turn": 1,
+      "tool": "know",
+      "rc": 0
+    },
+    {
+      "phase": "revise",
+      "turn": 2,
+      "tool": "pytest",
+      "rc": 0
+    }
+  ],
+  "tools_used": [
+    "know",
+    "pytest"
+  ],
+  "model_turns": 8,
+  "prompt_tokens": 20863,
+  "completion_tokens": 722,
+  "latency_sec": 752.8,
+  "retrieved": [
+    "H04",
+    "H08",
+    "H03"
+  ],
+  "sure": {
+    "diagnoses": [
+      {
+        "root_cause": "lock_manager.py::acquire_lock",
+        "rule": "H04",
+        "confidence": 1.0,
+        "root_cause_norm": "lock_manager.py::acquire_lock",
+        "rule_norm": "H04"
+      },
+      {
+        "root_cause": "lock_manager.py::acquire_lock",
+        "rule": "H04",
+        "confidence": 1.0,
+        "root_cause_norm": "lock_manager.py::acquire_lock",
+        "rule_norm": "H04"
+      },
+      {
+        "root_cause": "lock_manager.py::acquire_lock",
+        "rule": "H04",
+        "confidence": 1.0,
+        "root_cause_norm": "lock_manager.py::acquire_lock",
+        "rule_norm": "H04"
+      }
+    ],
+    "stated": 1.0,
+    "calibrated": 0.3469387755102041,
+    "conflict": false
+  },
+  "revised": true,
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: lock_manager.py ===\n\"\"\"Concurrent resource lock manager.\"\"\"\nfrom errors import ServiceError\nfrom lock_record import LockEntry\nfrom typing import Dict, Optional\n\nclass ResourceLockManager:\n    def __init__(self):\n        self._locks: Dict[str, LockEntry] = {}\n\n    def acquire_lock(self, resource_id: str, owner_id: str) -> LockEntry:\n        \"\"\"Acquire exclusive lock on resource.\n        \n        Raises an error if resource is currently held by another worker.\n        \"\"\"\n        existing = self._locks.get(resource_id)\n        if existing and existing.is_active and existing.owner_id != owner_id:\n            raise ServiceError(\n                code=\"ERR_RESOURCE_LOCKED\",\n                message=f\"Resource {resource_id} is locked by {existing.owner_id}\",\n                details={\"resource_id\": resource_id, \"current_owner\": existing.owner_id}\n            )\n        entry = LockEntry(resource_id=resource_id, owner_id=owner_id, is_active=True)\n        self._locks[resource_id] = entry\n        return entry\n\n    def release_lock(self, resource_id: str, owner_id: str) -> bool:\n        existing = self._locks.get(resource_id)\n        if existing and existing.owner_id == owner_id:\n            existing.is_active = False\n            return True\n        return False\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the ticket and apply the fix.\n\n1.  **Issue**: `lock_manager.py` raises a generic `RuntimeError` when a lock conflict occurs.\n2.  **Convention [H04]**: Requires using structured `ServiceError` for domain service errors, specifically `ERR_RESOURCE_LOCKED` for concurrent modification conflicts. It prohibits raw `Exception` or `ValueError`.\n3.  **Fix**: Replace the `raise RuntimeError(...)` in `lock_manager.py.acquire_lock` with `raise ServiceError(code=\"ERR_RESOURCE_LOCKED\", message=...)`.\n\nI will apply this edit to `lock_manager.py`.\n\n=== EDIT: lock_manager.py ===\n<<<<<<< SEARCH\n            raise RuntimeError(f\"Resource {resource_id} is locked by {existing.owner_id}\")\n=======\n            raise ServiceError(\n                code=\"ERR_RESOURCE_LOCKED\",\n                message=f\"Resource {resource_id} is locked by {existing.owner_id}\",\n                details={\"resource_id\": resource_id, \"current_owner\": existing.owner_id}\n            )\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_1",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nRULE: <id of the house convention your fix applies, e.g. H07, or none>\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: lock_manager.py::acquire_lock\nRULE: H04\nCONFIDENCE: 100",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_2",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nRULE: <id of the house convention your fix applies, e.g. H07, or none>\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: lock_manager.py::acquire_lock\nRULE: H04\nCONFIDENCE: 100",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_3",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nRULE: <id of the house convention your fix applies, e.g. H07, or none>\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: lock_manager.py::acquire_lock\nRULE: H04\nCONFIDENCE: 100",
+      "finish": "stop"
+    },
+    {
+      "kind": "sure_revise",
+      "prompt": "CONFIDENCE HARNESS REPORT on your current patch:\n- calibrated confidence that it passes the hidden CI tests: 0.35 (stated 1.0, mapped through this model's measured calibration)\nThis is below the reliability bar. Re-examine the root cause and the failing value: reproduce it, consider which behaviour the hidden tests most likely expect, and check edge cases and the knowledge graph (use the know tool to look up the relevant convention). You have 2 more tool turn(s); then finish with your final edits (no tool blocks).",
+      "response": "Let's look closer at H04 to see if I missed any details about the `ServiceError` usage or the specific error code.\n\n=== TOOL: know ===\nH04\n=== END_TOOL ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "revise_tool_1",
+      "prompt": "=== TOOL_OUTPUT: know (exit code 0) ===\n[H04] Convention: structured service exception hierarchy\n  uses_literal -> Literal: exception class = `ServiceError(code=\"ERR_<CATEGORY>_<DETAIL>\", message=\"...\")`\n    uses_literal -> Literal: defining module = `errors.py`\n  applies_to -> Scope: domain service errors, permission failures, schema validations\n  prohibits -> Alternative: generic exceptions = `ValueError, KeyError, or raw Exception`\n  uses_literal -> Literal: error code for unauthorized access or missing scope = `ERR_AUTH_SCOPE_DENIED`\n  uses_literal -> Literal: error code for missing or malformed request payload attributes and schema verification failures = `ERR_PAYLOAD_SCHEMA_INVALID`\n  uses_literal -> Literal: error code for missing or malformed request payload attributes and schema verification failures = `ERR_VALIDATION_FAILED`\n  uses_literal -> Literal: error code for concurrent modification conflicts = `ERR_RESOURCE_LOCKED`\n  uses_literal -> Literal: error code for quota and burst budget exhaustion = `ERR_RATE_LIMIT_EXCEEDED`\n=== END_TOOL_OUTPUT ===\n\nYou have 1 tool turn(s) left. Call more tools, or finish (final edits, no tool blocks).",
+      "response": "The H04 convention confirms `ERR_RESOURCE_LOCKED` is the correct code. The previous patch looked correct. Let's run the tests to see if there are any other failures or if the test expects something specific about the error message or details.\n\n=== TOOL: pytest ===\ntests/test_lock_manager.py\n=== END_TOOL ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "revise_tool_2",
+      "prompt": "=== TOOL_OUTPUT: pytest (exit code 0) ===\n.                                                                        [100%]\n1 passed in 0.01s\n\n=== END_TOOL_OUTPUT ===\n\nNo tool turns left. Finish: reply with your final edits (if any), no tool blocks.",
+      "response": "The test passes. The fix correctly replaces the generic `RuntimeError` with a structured `ServiceError` using the `ERR_RESOURCE_LOCKED` code as required by convention H04.\n\n=== EDIT: lock_manager.py ===\n<<<<<<< SEARCH\n            raise RuntimeError(f\"Resource {resource_id} is locked by {existing.owner_id}\")\n=======\n            raise ServiceError(\n                code=\"ERR_RESOURCE_LOCKED\",\n                message=f\"Resource {resource_id} is locked by {existing.owner_id}\",\n                details={\"resource_id\": resource_id, \"current_owner\": existing.owner_id}\n            )\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "revise_edit_fix",
+      "prompt": "Not applied: EDIT lock_manager.py: SEARCH text not found\nReply with corrected EDIT or FILE blocks for these changes only, no tool blocks.",
+      "response": "The previous edit failed because the sandbox state might have been reset or the search string didn't match exactly due to whitespace or indentation differences in my head vs reality. I will re-read the file content and provide a precise edit.\n\n=== EDIT: lock_manager.py ===\n<<<<<<< SEARCH\n        if existing and existing.is_active and existing.owner_id != owner_id:\n            raise RuntimeError(f\"Resource {resource_id} is locked by {existing.owner_id}\")\n=======\n        if existing and existing.is_active and existing.owner_id != owner_id:\n            raise ServiceError(\n                code=\"ERR_RESOURCE_LOCKED\",\n                message=f\"Resource {resource_id} is locked by {existing.owner_id}\",\n                details={\"resource_id\": resource_id, \"current_owner\": existing.owner_id}\n            )\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-08T23:19:39.811025+00:00"
+}

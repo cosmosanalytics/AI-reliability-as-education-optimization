@@ -1,0 +1,74 @@
+{
+  "status": "COMPLETED",
+  "arm": "KNOW",
+  "family": "config_merge",
+  "rule_id": "H03",
+  "task_id": 2006,
+  "run_idx": 1,
+  "order_idx": 30,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "env_loader.py"
+  ],
+  "tool_calls": [
+    {
+      "phase": "solve",
+      "turn": 1,
+      "tool": "know",
+      "rc": 0
+    },
+    {
+      "phase": "solve",
+      "turn": 2,
+      "tool": "python",
+      "rc": 0
+    }
+  ],
+  "tools_used": [
+    "know",
+    "python"
+  ],
+  "model_turns": 3,
+  "prompt_tokens": 6723,
+  "completion_tokens": 1133,
+  "latency_sec": 652.3,
+  "retrieved": [
+    "H03",
+    "H12",
+    "H11"
+  ],
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: env_loader.py ===\n\"\"\"Environment settings loader and merger.\"\"\"\nimport copy\nfrom typing import Dict, Any\n\nDEFAULT_CONN_TIMEOUT = 30\n\ndef load_system_env() -> Dict[str, Any]:\n    return {\"timeout\": DEFAULT_CONN_TIMEOUT}\n\ndef merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:\n    # H03: Defensive deep copy to prevent mutation of caller-supplied arguments\n    merged = copy.deepcopy(base_settings)\n    merged.update(override_settings)\n    return merged\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the problem.\n\n1.  **Ticket**: SEC-402: Shared database connection pool defaults corrupted across worker threads following tenant override.\n2.  **Failure**: `test_pool_defaults_isolation` fails with `AssertionError: assert 99 == 2`. This suggests that a value expected to be `2` (likely from base/defaults) is `99` (likely from an override or previous test's state).\n3.  **Code Analysis**:\n    *   `env_loader.py`: `merge_env_settings` does `merged = dict(base_settings)` then `merged.update(override_settings)`. This is a shallow copy. If `base_settings` contains mutable objects (like dicts inside the settings), those references are shared with the original `base_settings`.\n    *   `pool.py`: `configure_pool` calls `merge_env_settings`. It passes `base_template` and `overrides`.\n    *   **Convention H03**: \"container immutability / defensive allocation\". Functions accepting mutable containers must not mutate caller-supplied arguments. They must use defensive deep copies or new collection instances.\n    *   The current implementation in `env_loader.py` violates H03 because `dict(base_settings)` creates a new top-level dict, but nested dicts (like `pool_params`) are still shared references. If any code mutates the merged result's nested dicts, it corrupts the original `base_settings`.\n    *   Furthermore, if multiple threads call `configure_pool` with the same `base_template`, they might share mutable state if the merging isn't defensive enough or if the caller reuses objects. The ticket mentions \"corrupted across worker threads\", implying shared mutable state.\n\nLet's look at `tests/test_pool.py`. It only has one test. The failing test is `test_pool_defaults_isolation` in `tests/test_pool_cases.py`, which is not provided in the file list but is implied to exist or be part of the test suite run by pytest. Since I cannot modify tests, I must fix the source code to ensure isolation.\n\nThe core issue is likely that `merge_env_settings` returns a structure where nested mutable objects are shared with the input `base_settings`. If another thread or subsequent operation modifies the returned dict's nested content, it affects the original base template.\n\nLet's apply H03: Defensive copying.\nIn `env_loader.py`, `merge_env_settings` should perform a deep copy of `base_settings` before merging, or at least ensure that mutable values are copied. Given the structure is just dicts, `copy.deepcopy` is the safest and most correct approach to satisfy \"defensive allocation\" for nested structures.\n\nAlso, looking at H12 (configuration merge with list concatenation), although not explicitly triggered here, it's good practice. But the primary violation is H03 leading to state corruption.\n\nLet's fix `env_loader.py`.\n\n=== TOOL: know ===\nH03\n=== END_TOOL ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "solve_tool_1",
+      "prompt": "=== TOOL_OUTPUT: know (exit code 0) ===\n[H03] Convention: container immutability / defensive allocation\n  applies_to -> Scope: functions accepting mutable containers = `dict, list, set`\n  prohibits -> Alternative: mutating caller-supplied arguments in place\n  requires -> Behavior: defensive deep copies or new collection instances before modification\n  requires -> Behavior: return newly allocated data structures\n=== END_TOOL_OUTPUT ===\n\nYou have 2 tool turn(s) left. Call more tools, or finish (final edits, no tool blocks).",
+      "response": "=== TOOL: python ===\nimport sys\nsys.path.insert(0, '.')\ntry:\n    from tests.test_pool_cases import test_pool_defaults_isolation\n    test_pool_defaults_isolation()\nexcept Exception as e:\n    print(f\"Error: {e}\")\n    import traceback\n    traceback.print_exc()\n=== END_TOOL ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "solve_tool_2",
+      "prompt": "=== TOOL_OUTPUT: python (exit code 0) ===\nError: No module named 'tests.test_pool_cases'\nTraceback (most recent call last):\n  File \"<stdin>\", line 4, in <module>\nModuleNotFoundError: No module named 'tests.test_pool_cases'\n\n=== END_TOOL_OUTPUT ===\n\nYou have 1 tool turn(s) left. Call more tools, or finish (final edits, no tool blocks).",
+      "response": "The test file `test_pool_cases.py` doesn't exist yet in the repo files provided, but the ticket says it fails. The failure `assert 99 == 2` strongly suggests that a default value (`2`) is being overwritten by an override value (`99`) due to shared mutable state.\n\nLet's look at `pool.py`. It uses `merge_env_settings`. If `base_template` has a nested dict, and `overrides` also has it, the shallow update in `env_loader.py` will replace the top-level key but if there are nested structures that are mutated later, they might be shared.\n\nHowever, the most likely cause of \"corruption across threads\" with this specific pattern is that `merge_env_settings` returns a dict where some values are references to the original inputs. If those values are mutable (like lists or dicts), and if `configure_pool` or subsequent code mutates them, the original templates get corrupted.\n\nLet's apply H03 properly: Deep copy the base settings before merging.\n\n=== EDIT: env_loader.py ===\n<<<<<<< SEARCH\n\"\"\"Environment settings loader and merger.\"\"\"\nfrom typing import Dict, Any\n\nDEFAULT_CONN_TIMEOUT = 30\n\ndef load_system_env() -> Dict[str, Any]:\n    return {\"timeout\": DEFAULT_CONN_TIMEOUT}\n\ndef merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:\n    merged = dict(base_settings)\n    merged.update(override_settings)\n    return merged\n=======\n\"\"\"Environment settings loader and merger.\"\"\"\nimport copy\nfrom typing import Dict, Any\n\nDEFAULT_CONN_TIMEOUT = 30\n\ndef load_system_env() -> Dict[str, Any]:\n    return {\"timeout\": DEFAULT_CONN_TIMEOUT}\n\ndef merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:\n    # H03: Defensive deep copy to prevent mutation of caller-supplied arguments\n    merged = copy.deepcopy(base_settings)\n    merged.update(override_settings)\n    return merged\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-08T05:31:42.942003+00:00"
+}

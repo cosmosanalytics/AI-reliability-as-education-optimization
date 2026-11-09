@@ -1,0 +1,46 @@
+{
+  "status": "COMPLETED",
+  "arm": "KNOW",
+  "family": "state_transitions",
+  "rule_id": "H15",
+  "task_id": 2077,
+  "run_idx": 1,
+  "order_idx": 38,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "pipeline_manager.py"
+  ],
+  "tool_calls": [],
+  "tools_used": [],
+  "model_turns": 1,
+  "prompt_tokens": 2014,
+  "completion_tokens": 831,
+  "latency_sec": 797.5,
+  "retrieved": [
+    "H15",
+    "H03",
+    "H08"
+  ],
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: pipeline_manager.py ===\n\"\"\"Deployment pipeline lifecycle state manager.\"\"\"\nfrom typing import Set, Dict, Any\nfrom errors import ServiceError\nfrom pipeline_models import PipelineEntity\n\nALLOWED_TRANSITIONS: Dict[str, Set[str]] = {\n    \"PENDING\": {\"BUILDING\", \"CANCELLED\"},\n    \"BUILDING\": {\"TESTING\", \"FAILED\", \"CANCELLED\"},\n    \"TESTING\": {\"DEPLOYED\", \"FAILED\", \"CANCELLED\"},\n    \"DEPLOYED\": set(),\n    \"FAILED\": set(),\n    \"CANCELLED\": set(),\n}\n\ndef transition_pipeline(pipeline: PipelineEntity, new_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Transitions pipeline to target state and records audit event.\"\"\"\n    old_state = pipeline.state\n    if new_state not in ALLOWED_TRANSITIONS.get(old_state, set()):\n        raise ServiceError(\n            code=\"ERR_INVALID_TRANSITION\",\n            message=f\"Invalid transition from {old_state} to {new_state}\"\n        )\n    pipeline.state = new_state\n    pipeline.audit_trail.append((\n        \"STATE_TRANSITION\",\n        pipeline.entity_id,\n        old_state,\n        new_state,\n        actor_id,\n        timestamp_ms\n    ))\n\ndef get_pipeline_status(pipeline: PipelineEntity) -> Dict[str, Any]:\n    return {\"id\": pipeline.entity_id, \"state\": pipeline.state, \"terminal\": pipeline.is_terminal()}\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the ticket and the failing test.\n\n1.  **Issue**: INC-8201 reports illegal transitions and lack of audit records in the deployment pipeline service.\n2.  **Failing Test**: `tests/test_pipeline_cases.py::test_case_1` fails with `AssertionError: assert 0 == 1`. This suggests a test is checking for an audit count or transition record that currently doesn't exist because `transition_pipeline` does nothing but change state (and likely crashes or behaves incorrectly if the transition is invalid, though the current code just overwrites). Wait, looking at `test_pipeline.py`, it only checks normal steps. The failing test is in `test_pipeline_cases.py` which isn't listed in the files provided, but the traceback says `assert 0 == 1`. This likely means it expects an audit record to be present (count 1) but finds none (count 0).\n3.  **Convention [H15]**: State machine transition validation and audit.\n    *   Requires: Validate allowed transitions.\n    *   Format: Audit tuple = `(\"STATE_TRANSITION\", entity_id, old_state, new_state, actor_id, timestamp_ms)`.\n    *   Error: Invalid transitions raise `ServiceError(code=\"ERR_INVALID_TRANSITION\")`.\n\n**Plan**:\n1.  Modify `pipeline_manager.py` to:\n    *   Validate the transition against `ALLOWED_TRANSITIONS`. Raise `ServiceError` if invalid.\n    *   Append the audit tuple to `pipeline.audit_trail` upon successful transition.\n2.  The test `test_pipeline_cases.py` (which we can't see but is failing) likely tests an invalid transition or checks for audit records. Since `test_pipeline.py` passes (presumably, as it's not the one in the traceback), the normal flow works if we just add the validation and audit logic.\n\nLet's check the current `transition_pipeline`:\n```python\ndef transition_pipeline(pipeline: PipelineEntity, new_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Transitions pipeline to target state and records audit event.\"\"\"\n    old_state = pipeline.state\n    # Unpatched baseline: does not validate allowed transitions or emit audit tuple\n    pipeline.state = new_state\n```\n\nIt needs to:\n1. Check if `new_state` is in `ALLOWED_TRANSITIONS.get(old_state, set())`.\n2. If not, raise `ServiceError(code=\"ERR_INVALID_TRANSITION\", message=f\"Invalid transition from {old_state} to {new_state}\")`.\n3. If yes, update state and append audit tuple: `(\"STATE_TRANSITION\", pipeline.entity_id, old_state, new_state, actor_id, timestamp_ms)`.\n\nLet's apply the fix.\n\n=== EDIT: pipeline_manager.py ===\n<<<<<<< SEARCH\ndef transition_pipeline(pipeline: PipelineEntity, new_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Transitions pipeline to target state and records audit event.\"\"\"\n    old_state = pipeline.state\n    # Unpatched baseline: does not validate allowed transitions or emit audit tuple\n    pipeline.state = new_state\n=======\ndef transition_pipeline(pipeline: PipelineEntity, new_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Transitions pipeline to target state and records audit event.\"\"\"\n    old_state = pipeline.state\n    if new_state not in ALLOWED_TRANSITIONS.get(old_state, set()):\n        raise ServiceError(\n            code=\"ERR_INVALID_TRANSITION\",\n            message=f\"Invalid transition from {old_state} to {new_state}\"\n        )\n    pipeline.state = new_state\n    pipeline.audit_trail.append((\n        \"STATE_TRANSITION\",\n        pipeline.entity_id,\n        old_state,\n        new_state,\n        actor_id,\n        timestamp_ms\n    ))\n>>>>>>> REPLACE",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-08T06:59:51.015924+00:00"
+}

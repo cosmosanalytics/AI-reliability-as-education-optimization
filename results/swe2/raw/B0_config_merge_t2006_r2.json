@@ -1,0 +1,69 @@
+{
+  "status": "COMPLETED",
+  "arm": "B0",
+  "family": "config_merge",
+  "rule_id": "H03",
+  "task_id": 2006,
+  "run_idx": 2,
+  "order_idx": 28,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "pool.py"
+  ],
+  "tool_calls": [
+    {
+      "phase": "solve",
+      "turn": 1,
+      "tool": "python",
+      "rc": 0
+    }
+  ],
+  "tools_used": [
+    "python"
+  ],
+  "model_turns": 3,
+  "prompt_tokens": 5802,
+  "completion_tokens": 1416,
+  "latency_sec": 876.1,
+  "probe": {
+    "root_cause": "pool.py::configure_pool where the shared dict reference from settings (originating from base_template) is passed directly to ConnectionOptions without copying, causing mutations to leak back to the template and affect subsequent tenants.",
+    "rule": null,
+    "confidence": 0.95,
+    "root_cause_norm": "pool.py::configure_pool",
+    "rule_norm": "none"
+  },
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: pool.py ===\n\"\"\"Database pool manager.\"\"\"\nfrom typing import Dict, Any\nfrom env_loader import merge_env_settings\nfrom options import ConnectionOptions\n\ndef configure_pool(base_template: Dict[str, Any], overrides: Dict[str, Any]) -> ConnectionOptions:\n    \"\"\"Configure connection pool options from template and overrides.\n    Returns ConnectionOptions instance.\n    \"\"\"\n    settings = merge_env_settings(base_template, overrides)\n    dsn = settings.get(\"dsn\", \"sqlite:///:memory:\")\n    opts = ConnectionOptions(dsn=dsn, pool_params=dict(settings.get(\"pool\", {})))\n    _ = opts.summary()\n    return opts\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the issue. The ticket states \"Shared database connection pool defaults corrupted across worker threads following tenant override.\" and the test `test_pool_defaults_isolation` fails with `assert 99 == 2`.\n\nLooking at `pool.py`:\n```python\ndef configure_pool(base_template: Dict[str, Any], overrides: Dict[str, Any]) -> ConnectionOptions:\n    settings = merge_env_settings(base_template, overrides)\n    dsn = settings.get(\"dsn\", \"sqlite:///:memory:\")\n    opts = ConnectionOptions(dsn=dsn, pool_params=settings.get(\"pool\", {}))\n    _ = opts.summary()\n    return opts\n```\n\nAnd `env_loader.py`:\n```python\ndef merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:\n    merged = dict(base_settings)\n    merged.update(override_settings)\n    return merged\n```\n\nThe `merge_env_settings` function creates a shallow copy of `base_settings`. If `base_settings` contains mutable objects (like dicts for `pool_params`), those references are shared. When `overrides` also contains a `pool` dict, `merged.update(overrides)` will replace the `pool` key in `merged` with the reference from `overrides`. This part seems okay for isolation between calls *if* the defaults aren't mutated later.\n\nHowever, look at `ConnectionOptions`:\n```python\n@dataclass\nclass ConnectionOptions:\n    dsn: str\n    pool_params: Dict[str, Any]\n    # ...\n```\n\nThe `pool_params` is a reference to the dict found in `settings`.\n\nLet's look at the failing test trace: `assert 99 == 2`. This suggests that somewhere, a value of `2` (likely a default or initial value) was overwritten by `99` (likely an override from another tenant/thread).\n\nIf `base_template` has `{\"pool\": {\"size\": 2}}` and we call `configure_pool`, it returns options with `pool_params` pointing to that dict. If the system modifies this dict later (e.g., in a thread pool or worker), it modifies the original object if it wasn't deep copied.\n\nWait, look at `merge_env_settings` again.\n```python\n    merged = dict(base_settings)\n    merged.update(override_settings)\n```\nIf `base_settings` is `{\"pool\": {\"size\": 2}}` and `override_settings` is `{}`, `merged` gets a new dict for the top level, but `merged[\"pool\"]` still points to the same dict object as `base_settings[\"pool\"]`.\n\nIf the code elsewhere mutates `opts.pool_params`, it mutates the original base template's pool dict. This causes state leakage between calls/tenants.\n\nThe fix should be to ensure that `pool_params` in the returned `ConnectionOptions` is a copy, not a reference to the shared dictionary. Or, more robustly, deep copy the settings or just the mutable parts.\n\nLet's look at `options.py`. The `ConnectionOptions` class takes `pool_params`.\nIn `pool.py`:\n```python\n    opts = ConnectionOptions(dsn=dsn, pool_params=settings.get(\"pool\", {}))\n```\nIf `settings[\"pool\"]` is a shared dict from `base_template`, this is the leak.\n\nThe standard fix for \"defaults corrupted\" in Python config objects is to copy mutable defaults or ensure the merger creates independent copies of nested dicts.\n\nLet's modify `merge_env_settings` to deep copy, or just handle it in `configure_pool`.\nActually, simply copying the dict returned by `merge_env_settings` isn't enough if we don't deep copy. But looking at the structure, only `pool` is a dict inside.\n\nLet's fix `env_loader.py` to perform a shallow merge but ensure nested dicts are copied? Or just fix `pool.py` to copy the pool_params.\n\nGiven the ticket \"Shared database connection pool defaults corrupted\", it implies the base template's defaults are being mutated.\n\nIf I change `pool.py`:\n```python\n    opts = ConnectionOptions(dsn=dsn, pool_params=dict(settings.get(\"pool\", {})))\n```\nThis creates a new dict for `pool_params`, isolating it from the source. This is a minimal and correct fix for the specific issue of shared state leakage via mutable defaults/overrides in this context.\n\nLet's verify with a test script first to be sure.\n\n=== TOOL: python ===\nimport sys\nsys.path.insert(0, '.')\n\n# Simulate the scenario\nfrom env_loader import merge_env_settings\nfrom options import ConnectionOptions\nfrom pool import configure_pool\n\n# Base template with defaults\nbase = {\"pool\": {\"size\": 2}}\noverride1 = {}\noverride2 = {\"pool\": {\"size\": 99}}\n\n# Tenant 1 config\nopts1 = configure_pool(base, override1)\nprint(f\"Opts1 pool_params id: {id(opts1.pool_params)}\")\nprint(f\"Base pool id: {id(base['pool'])}\")\nprint(f\"Are they same? {opts1.pool_params is base['pool']}\")\n\n# If we modify opts1, does base change?\nopts1.pool_params['size'] = 999\nprint(f\"After mod, base pool: {base['pool']}\") # Should be {'size': 2} if isolated\n\n# Tenant 2 config\nopts2 = configure_pool(base, override2)\nprint(f\"Opts2 pool_params: {opts2.pool_params}\")\nprint(f\"Base pool after tenant 2: {base['pool']}\") # Should still be {'size': 2}\n=== END_TOOL ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "solve_tool_1",
+      "prompt": "=== TOOL_OUTPUT: python (exit code 0) ===\nOpts1 pool_params id: 134179286409856\nBase pool id: 134179286409856\nAre they same? True\nAfter mod, base pool: {'size': 999}\nOpts2 pool_params: {'size': 99}\nBase pool after tenant 2: {'size': 999}\n\n=== END_TOOL_OUTPUT ===\n\nYou have 2 tool turn(s) left. Call more tools, or finish (final edits, no tool blocks).",
+      "response": "The test confirms the issue: `opts1.pool_params` is the same object as `base['pool']`. Modifying it corrupts the base template. Tenant 2 then sees the corrupted value (or rather, in the real failure case, values bleed across).\n\nThe fix is to ensure `pool_params` is a copy. I will modify `pool.py` to copy the pool params dict.\n\n=== EDIT: pool.py ===\n<<<<<<< SEARCH\n    opts = ConnectionOptions(dsn=dsn, pool_params=settings.get(\"pool\", {}))\n=======\n    opts = ConnectionOptions(dsn=dsn, pool_params=dict(settings.get(\"pool\", {})))\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "probe",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: pool.py::configure_pool where the shared dict reference from settings (originating from base_template) is passed directly to ConnectionOptions without copying, causing mutations to leak back to the template and affect subsequent tenants.\nCONFIDENCE: 95",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-07T23:16:10.528986+00:00"
+}

@@ -1,0 +1,73 @@
+{
+  "status": "COMPLETED",
+  "arm": "PLACEBO",
+  "family": "state_transitions",
+  "rule_id": "H15",
+  "task_id": 2079,
+  "run_idx": 1,
+  "order_idx": 154,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "ticket_workflow.py"
+  ],
+  "tool_calls": [
+    {
+      "phase": "solve",
+      "turn": 1,
+      "tool": "pytest",
+      "rc": 4
+    },
+    {
+      "phase": "solve",
+      "turn": 2,
+      "tool": "pytest",
+      "rc": 0
+    }
+  ],
+  "tools_used": [
+    "pytest"
+  ],
+  "model_turns": 3,
+  "prompt_tokens": 5893,
+  "completion_tokens": 948,
+  "latency_sec": 355.9,
+  "retrieved": [
+    "P05",
+    "P07",
+    "P01"
+  ],
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: ticket_workflow.py ===\n\"\"\"Customer support ticket transition workflow.\"\"\"\nfrom typing import Any, Dict, Set\n\nfrom errors import ServiceError\nfrom ticket_models import SupportTicket\n\nTICKET_TRANSITIONS: Dict[str, Set[str]] = {\n    \"CREATED\": {\"ASSIGNED\", \"CLOSED\"},\n    \"ASSIGNED\": {\"IN_PROGRESS\", \"CLOSED\"},\n    \"IN_PROGRESS\": {\"RESOLVED\", \"ASSIGNED\"},\n    \"RESOLVED\": {\"CLOSED\", \"IN_PROGRESS\"},\n    \"CLOSED\": set(),\n}\n\n\ndef transition_ticket(ticket: SupportTicket, next_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Applies status change to support ticket.\"\"\"\n    cur = ticket.state\n    allowed = TICKET_TRANSITIONS.get(cur, set())\n    if next_state not in allowed:\n        raise ServiceError(\n            \"INVALID_TRANSITION\",\n            f\"Cannot transition from {cur} to {next_state}\",\n        )\n    ticket.audit_trail.append((actor_id, timestamp_ms, next_state))\n    ticket.state = next_state\n\n\ndef get_ticket_status(ticket: SupportTicket) -> Dict[str, Any]:\n    return {\"id\": ticket.entity_id, \"state\": ticket.state, \"closed\": ticket.is_closed()}\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the issue. The incident INC-8203 states that the workflow allowed jumping from CREATED to RESOLVED without audit records. Looking at `TICKET_TRANSITIONS` in `ticket_workflow.py`, \"CREATED\" only allows transitions to \"ASSIGNED\" or \"CLOSED\". However, the `transition_ticket` function currently does not validate the transition against this map, nor does it record any audit trail.\n\nThe failing test `test_case_1` likely checks that an invalid transition (like CREATED -> RESOLVED) raises an error or that a valid transition records an audit entry. Given the incident description \"allowed jumping... without audit records\", the fix needs to:\n1. Validate the transition against `TICKET_TRANSITIONS`.\n2. Record an audit tuple in `ticket.audit_trail` upon successful transition.\n3. Follow conventions P07 (error messages), P05 (imports), and P01 (formatting).\n\nLet's first run the tests to see the exact failure.\n\n=== TOOL: pytest ===\ntests/test_ticket_cases.py\n=== END_TOOL ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "solve_tool_1",
+      "prompt": "=== TOOL_OUTPUT: pytest (exit code 4) ===\n\nno tests ran in 0.00s\nERROR: file or directory not found: tests/test_ticket_cases.py\n\n\n=== END_TOOL_OUTPUT ===\n\nYou have 2 tool turn(s) left. Call more tools, or finish (final edits, no tool blocks).",
+      "response": "The test file `tests/test_ticket_cases.py` doesn't exist yet, but the ticket description says it's failing. Let's look at what tests *do* exist and run them to understand the current state, then implement the fix based on the incident description.\n\n=== TOOL: pytest ===\n=== END_TOOL ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "solve_tool_2",
+      "prompt": "=== TOOL_OUTPUT: pytest (exit code 0) ===\n..                                                                       [100%]\n2 passed in 0.01s\n\n=== END_TOOL_OUTPUT ===\n\nYou have 1 tool turn(s) left. Call more tools, or finish (final edits, no tool blocks).",
+      "response": "The existing tests pass. The incident INC-8203 describes a bug where `CREATED` can jump to `RESOLVED` without audit records. The current code doesn't validate transitions at all and doesn't record audits. I need to fix `ticket_workflow.py` to:\n\n1. Validate the transition against `TICKET_TRANSITIONS`.\n2. Record an audit tuple `(actor_id, timestamp_ms, next_state)` in the ticket's `audit_trail`.\n3. Raise a `ServiceError` if the transition is invalid or missing audit data (though the error should be raised *before* state change).\n\nLet's apply the fix to `ticket_workflow.py`.\n\n=== EDIT: ticket_workflow.py ===\n<<<<<<< SEARCH\n\"\"\"Customer support ticket transition workflow.\"\"\"\nfrom typing import Dict, Set, Any\nfrom errors import ServiceError\nfrom ticket_models import SupportTicket\n\nTICKET_TRANSITIONS: Dict[str, Set[str]] = {\n    \"CREATED\": {\"ASSIGNED\", \"CLOSED\"},\n    \"ASSIGNED\": {\"IN_PROGRESS\", \"CLOSED\"},\n    \"IN_PROGRESS\": {\"RESOLVED\", \"ASSIGNED\"},\n    \"RESOLVED\": {\"CLOSED\", \"IN_PROGRESS\"},\n    \"CLOSED\": set(),\n}\n\ndef transition_ticket(ticket: SupportTicket, next_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Applies status change to support ticket.\"\"\"\n    cur = ticket.state\n    # Unpatched baseline: sets state without validation or audit tuple\n    ticket.state = next_state\n\ndef get_ticket_status(ticket: SupportTicket) -> Dict[str, Any]:\n    return {\"id\": ticket.entity_id, \"state\": ticket.state, \"closed\": ticket.is_closed()}\n=======\n\"\"\"Customer support ticket transition workflow.\"\"\"\nfrom typing import Any, Dict, Set\n\nfrom errors import ServiceError\nfrom ticket_models import SupportTicket\n\nTICKET_TRANSITIONS: Dict[str, Set[str]] = {\n    \"CREATED\": {\"ASSIGNED\", \"CLOSED\"},\n    \"ASSIGNED\": {\"IN_PROGRESS\", \"CLOSED\"},\n    \"IN_PROGRESS\": {\"RESOLVED\", \"ASSIGNED\"},\n    \"RESOLVED\": {\"CLOSED\", \"IN_PROGRESS\"},\n    \"CLOSED\": set(),\n}\n\n\ndef transition_ticket(ticket: SupportTicket, next_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Applies status change to support ticket.\"\"\"\n    cur = ticket.state\n    allowed = TICKET_TRANSITIONS.get(cur, set())\n    if next_state not in allowed:\n        raise ServiceError(\n            \"INVALID_TRANSITION\",\n            f\"Cannot transition from {cur} to {next_state}\",\n        )\n    ticket.audit_trail.append((actor_id, timestamp_ms, next_state))\n    ticket.state = next_state\n\n\ndef get_ticket_status(ticket: SupportTicket) -> Dict[str, Any]:\n    return {\"id\": ticket.entity_id, \"state\": ticket.state, \"closed\": ticket.is_closed()}\n>>>>>>> REPLACE",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-09T02:43:53.618023+00:00"
+}

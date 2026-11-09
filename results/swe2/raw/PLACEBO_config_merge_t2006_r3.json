@@ -1,0 +1,45 @@
+{
+  "status": "COMPLETED",
+  "arm": "PLACEBO",
+  "family": "config_merge",
+  "rule_id": "H03",
+  "task_id": 2006,
+  "run_idx": 3,
+  "order_idx": 151,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "env_loader.py"
+  ],
+  "tool_calls": [],
+  "tools_used": [],
+  "model_turns": 1,
+  "prompt_tokens": 1693,
+  "completion_tokens": 1642,
+  "latency_sec": 714.8,
+  "retrieved": [
+    "P05",
+    "P16"
+  ],
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: env_loader.py ===\n\"\"\"Environment settings loader and merger.\"\"\"\nimport copy\nfrom typing import Dict, Any\n\nDEFAULT_CONN_TIMEOUT = 30\n\ndef load_system_env() -> Dict[str, Any]:\n    return {\"timeout\": DEFAULT_CONN_TIMEOUT}\n\ndef merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:\n    merged = copy.deepcopy(base_settings)\n    merged.update(override_settings)\n    return merged\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the problem. The test `test_pool_defaults_isolation` fails with `AssertionError: assert 99 == 2`. This suggests that a default value or state is being mutated across calls, likely due to mutable default arguments or shared mutable state in dictionaries.\n\nLooking at `env_loader.py`:\n```python\ndef merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:\n    merged = dict(base_settings)\n    merged.update(override_settings)\n    return merged\n```\nThis function creates a shallow copy of `base_settings` and updates it. If `base_settings` contains nested mutable objects (like dicts), they are shared.\n\nLooking at `pool.py`:\n```python\ndef configure_pool(base_template: Dict[str, Any], overrides: Dict[str, Any]) -> ConnectionOptions:\n    settings = merge_env_settings(base_template, overrides)\n    dsn = settings.get(\"dsn\", \"sqlite:///:memory:\")\n    opts = ConnectionOptions(dsn=dsn, pool_params=settings.get(\"pool\", {}))\n    _ = opts.summary()\n    return opts\n```\n\nThe test `test_pool_defaults_isolation` is not shown in the file list, but it's failing. The error `99 == 2` suggests that some numeric value expected to be `2` is `99`. This often happens when a mutable default argument or a shared class variable is modified.\n\nHowever, `ConnectionOptions` is a dataclass with no mutable defaults that are shared. The `pool_params` is passed in.\n\nLet's look at `env_loader.py` again.\n```python\nDEFAULT_CONN_TIMEOUT = 30\n```\nThis is an integer, immutable.\n\nThe issue description says \"Shared database connection pool defaults corrupted across worker threads following tenant override.\" This implies that the `base_template` or some default configuration is being mutated by one call and affecting another.\n\nIn `merge_env_settings`, we do `merged = dict(base_settings)`. This is a shallow copy. If `base_settings[\"pool\"]` is a dict, it is shared between `base_settings` and `merged`. Then `merged.update(override_settings)` might not affect the inner dict unless `override_settings` also has a `\"pool\"` key.\n\nIf the caller passes a mutable `base_template` that contains a nested dict like `{\"pool\": {\"min\": 5}}`, and then modifies it, or if multiple calls share the same `base_template` object, mutations to the inner dicts will persist.\n\nHowever, the most common Python pitfall for \"corrupted defaults\" is mutable default arguments in function definitions. Neither `configure_pool` nor `merge_env_settings` has a mutable default argument.\n\nLet's look at the test failure again: `assert 99 == 2`.\nIf we assume the test calls `configure_pool` twice with different overrides, and the second call sees a modified state from the first.\n\nIf `base_template` is shared across calls (e.g., a global constant), and `merge_env_settings` mutates it or returns a structure that shares references with it, subsequent calls might see changes.\n\nIn `merge_env_settings`:\n```python\nmerged = dict(base_settings)\nmerged.update(override_settings)\nreturn merged\n```\nIf `base_settings` is `{\"pool\": {\"min\": 5}}` and `override_settings` is `{\"pool\": {\"max\": 20}}`, then `merged` becomes `{\"pool\": {\"min\": 5, \"max\": 20}}`. The `pool` dict inside `merged` is the SAME object as the `pool` dict in `base_settings`.\n\nIf the code later modifies `opts.pool_params` (which comes from `settings.get(\"pool\", {})`), it will modify the original `base_settings[\"pool\"]`.\n\nIn `pool.py`:\n```python\nopts = ConnectionOptions(dsn=dsn, pool_params=settings.get(\"pool\", {}))\n```\nIf `settings[\"pool\"]` is a reference to the dict inside `base_template`, then `opts.pool_params` refers to that same dict. If any code modifies `opts.pool_params`, it corrupts the original template.\n\nBut where is the corruption happening? The test expects `2` but gets `99`. This looks like a counter or a specific parameter value.\n\nLet's check if there are any other files or if I need to infer the test behavior. The prompt says \"Read the whole ticket and every repository file below.\" The test file `tests/test_pool_cases.py` is not listed, but `tests/test_pool.py` is. The failing test is in `test_pool_cases.py`.\n\nSince I cannot see the test code, I must rely on the error and the conventions.\nConvention P05 (Imports) and P16 (Dependencies) are less relevant to the logic bug.\nThe bug is likely in `env_loader.py` or `pool.py`.\n\nThe standard fix for shallow copy issues with nested mutables is to use `copy.deepcopy`.\n\nLet's modify `merge_env_settings` to deep copy the base settings to ensure isolation.\n\nAlso, let's check P05 (Import grouping).\nIn `pool.py`:\n```python\nfrom typing import Dict, Any\nfrom env_loader import merge_env_settings\nfrom options import ConnectionOptions\n```\nStandard library first (`typing`), then third-party (`env_loader`?? No, `env_loader` is internal), then internal.\nWait, `env_loader` and `options` are internal modules.\nSo the order should be:\n1. Standard library (`typing`)\n2. Third party (none)\n3. Internal (`env_loader`, `options`)\n\nThe current import order in `pool.py`:\n```python\nfrom typing import Dict, Any\nfrom env_loader import merge_env_settings\nfrom options import ConnectionOptions\n```\nThis looks correct for P05 (standard, then internal). Alphabetical within block: `env_loader` vs `options`. 'e' < 'o', so `env_loader` comes before `options`. This is correct.\n\nIn `env_loader.py`:\n```python\nfrom typing import Dict, Any\n```\nCorrect.\n\nIn `options.py`:\n```python\nfrom dataclasses import dataclass\nfrom typing import Dict, Any, Optional\n```\n`dataclasses` and `typing` are stdlib. Correct.\n\nNow back to the bug.\nThe error `99 == 2` strongly suggests a mutable default or shared state issue.\nIf `merge_env_settings` does not deep copy, and the caller reuses `base_template`, mutations to the returned dict's nested structures will affect the original.\n\nLet's apply the fix: Deep copy in `merge_env_settings`.\n\n=== EDIT: env_loader.py ===\n<<<<<<< SEARCH\n\"\"\"Environment settings loader and merger.\"\"\"\nfrom typing import Dict, Any\n\nDEFAULT_CONN_TIMEOUT = 30\n\ndef load_system_env() -> Dict[str, Any]:\n    return {\"timeout\": DEFAULT_CONN_TIMEOUT}\n\ndef merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:\n    merged = dict(base_settings)\n    merged.update(override_settings)\n    return merged\n=======\n\"\"\"Environment settings loader and merger.\"\"\"\nimport copy\nfrom typing import Dict, Any\n\nDEFAULT_CONN_TIMEOUT = 30\n\ndef load_system_env() -> Dict[str, Any]:\n    return {\"timeout\": DEFAULT_CONN_TIMEOUT}\n\ndef merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:\n    merged = copy.deepcopy(base_settings)\n    merged.update(override_settings)\n    return merged\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-09T02:42:21.119582+00:00"
+}

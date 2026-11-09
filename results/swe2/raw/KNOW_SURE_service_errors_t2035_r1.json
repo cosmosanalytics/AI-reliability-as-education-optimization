@@ -1,0 +1,121 @@
+{
+  "status": "COMPLETED",
+  "arm": "KNOW_SURE",
+  "family": "service_errors",
+  "rule_id": "H04",
+  "task_id": 2035,
+  "run_idx": 1,
+  "order_idx": 185,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "quota_tracker.py",
+    "throttle_guard.py"
+  ],
+  "tool_calls": [
+    {
+      "phase": "solve",
+      "turn": 1,
+      "tool": "pytest",
+      "rc": 0
+    }
+  ],
+  "tools_used": [
+    "pytest"
+  ],
+  "model_turns": 7,
+  "prompt_tokens": 25710,
+  "completion_tokens": 3477,
+  "latency_sec": 1766.2,
+  "retrieved": [
+    "H16",
+    "H04",
+    "H08"
+  ],
+  "sure": {
+    "diagnoses": [
+      {
+        "root_cause": "throttle_guard.py::enforce_burst_capacity raises OverflowError instead of ServiceError with code ERR_RATE_LIMIT_EXCEEDED as required by H04.",
+        "rule": "H04, H16",
+        "confidence": 0.95,
+        "root_cause_norm": "throttle_guard.py::enforce_burst_capacity",
+        "rule_norm": "H04"
+      },
+      {
+        "root_cause": "throttle_guard.py::enforce_burst_capacity where OverflowError is raised instead of ServiceError",
+        "rule": "H04",
+        "confidence": 0.95,
+        "root_cause_norm": "throttle_guard.py::enforce_burst_capacity",
+        "rule_norm": "H04"
+      },
+      {
+        "root_cause": "throttle_guard.py::enforce_burst_capacity where OverflowError is raised instead of ServiceError",
+        "rule": "H04",
+        "confidence": 0.95,
+        "root_cause_norm": "throttle_guard.py::enforce_burst_capacity",
+        "rule_norm": "H04"
+      }
+    ],
+    "stated": 0.9499999999999998,
+    "calibrated": 0.3469387755102041,
+    "conflict": false
+  },
+  "revised": true,
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: quota_tracker.py ===\n\"\"\"Burst quota tracker records.\"\"\"\nimport math\nfrom dataclasses import dataclass\nfrom typing import Dict, Any\n\n@dataclass\nclass BurstBucket:\n    stream_id: str\n    burst_limit: int\n    current_tokens: int = 0\n\n    def record_token_burst(self, tokens: int) -> bool:\n        if self.current_tokens + tokens > self.burst_limit:\n            return False\n        self.current_tokens = math.floor(self.current_tokens + tokens)\n        return True\n\n    def reset(self) -> None:\n        self.current_tokens = 0\n\n    def remaining_capacity(self) -> int:\n        return max(0, self.burst_limit - self.current_tokens)\n=== END ===\n=== FILE: throttle_guard.py ===\n\"\"\"Stream burst throttling guard.\"\"\"\nfrom errors import ServiceError\nfrom quota_tracker import BurstBucket\n\ndef enforce_burst_capacity(bucket: BurstBucket, incoming_tokens: int) -> bool:\n    \"\"\"Enforce burst quota for streaming client.\n    \n    Raises an error when consumed tokens exceed maximum burst capacity.\n    \"\"\"\n    if not bucket.record_token_burst(incoming_tokens):\n        raise ServiceError(\n            code=\"ERR_RATE_LIMIT_EXCEEDED\",\n            message=f\"Burst quota exhausted for stream {bucket.stream_id}\"\n        )\n    return True\n\ndef admit_stream_tokens(bucket: BurstBucket, tokens: int) -> str:\n    enforce_burst_capacity(bucket, tokens)\n    return \"ADMITTED\"\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the ticket and conventions.\n\n1.  **Ticket**: `STREAM-302` - Unhandled `OverflowError` when burst rate quota exceeded. The test `test_service_execution` (which likely maps to `test_throttle_cases.py` or similar, but here we see `tests/test_throttle_guard.py`) is failing.\n2.  **Convention H16**: Token bucket integer truncation requires `math.floor(current_tokens)`. It prohibits consuming fractional tokens.\n3.  **Convention H04**: Structured service exception hierarchy. Prohibits generic exceptions like `OverflowError`, `ValueError`, etc. Requires using `ServiceError` with specific codes. Specifically, `ERR_RATE_LIMIT_EXCEEDED` is the code for quota and burst budget exhaustion.\n4.  **Current Code Issues**:\n    *   `throttle_guard.py` raises `OverflowError`. This violates H04 (prohibits generic exceptions) and doesn't use the required error code `ERR_RATE_LIMIT_EXCEEDED`.\n    *   `quota_tracker.py` uses integer arithmetic for `current_tokens`. H16 requires `math.floor(current_tokens)`. While the current implementation is integer-based, if `incoming_tokens` were fractional or calculated fractions were involved, we'd need flooring. More importantly, H16 says \"available token balance floored to integer units\". The `record_token_burst` method checks `self.current_tokens + tokens > self.burst_limit`. If `tokens` can be float, this is okay, but the *balance* should be floored. Let's look closer at H16: \"requires -> Behavior: available token balance floored to integer units\". This implies that after an operation, the balance might need flooring, or incoming tokens are floored. Given `incoming_tokens` in the test is int, let's ensure strict adherence.\n    *   The primary fix is replacing the `OverflowError` with a `ServiceError` using code `ERR_RATE_LIMIT_EXCEEDED`.\n\nLet's check if there are other files. We have `errors.py`, `quota_tracker.py`, `throttle_guard.py`, and tests.\n\n**Plan:**\n1.  Update `throttle_guard.py`:\n    *   Import `math` (for H16 compliance if needed, though current args are int).\n    *   Replace `raise OverflowError(...)` with `raise ServiceError(code=\"ERR_RATE_LIMIT_EXCEEDED\", message=...)`.\n2.  Update `quota_tracker.py`:\n    *   Apply H16: Ensure `current_tokens` is floored to integer after updates. `self.current_tokens = math.floor(self.current_tokens + tokens)`. Although the test uses ints, this enforces the convention strictly against fractional drift if floats were introduced elsewhere.\n\nLet's verify the error code in H04: \"error code for quota and burst budget exhaustion = `ERR_RATE_LIMIT_EXCEEDED`\".\n\n**Step 1: Fix `throttle_guard.py`**\nChange the exception to `ServiceError`.\n\n**Step 2: Fix `quota_tracker.py`**\nAdd `import math` and floor the token balance.\n\nLet's execute the tests first to confirm the failure mode.\n\n=== TOOL: pytest ===\ntests/test_throttle_guard.py\n=== END_TOOL ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "solve_tool_1",
+      "prompt": "=== TOOL_OUTPUT: pytest (exit code 0) ===\n.                                                                        [100%]\n1 passed in 0.01s\n\n=== END_TOOL_OUTPUT ===\n\nYou have 2 tool turn(s) left. Call more tools, or finish (final edits, no tool blocks).",
+      "response": "The test `test_throttle_guard.py` passes, but the ticket mentions a failing test `tests/test_throttle_cases.py::test_service_execution`. This file doesn't exist in the provided repository list yet, or it's implied by the ticket description. The traceback says `AssertionError: assert False is True`, which suggests a logic failure or an unexpected exception type causing a test assertion to fail (e.g., catching the wrong exception).\n\nHowever, looking at the conventions:\n*   **H04** prohibits generic exceptions (`OverflowError`). It mandates `ServiceError(code=\"ERR_RATE_LIMIT_EXCEEDED\", ...)`.\n*   **H16** requires token balance floored to integer.\n\nThe current code raises `OverflowError`, which is a violation of H04. Even if the provided test passes, the code violates house conventions. The \"failing test\" in the ticket description likely refers to a broader integration test or a test that expects `ServiceError` but gets `OverflowError`.\n\nI will apply the fixes to comply with H04 and H16.\n\n1.  **`throttle_guard.py`**: Replace `OverflowError` with `ServiceError(code=\"ERR_RATE_LIMIT_EXCEEDED\", ...)`.\n2.  **`quota_tracker.py`**: Apply `math.floor` to `current_tokens` as per H16.\n\n=== EDIT: throttle_guard.py ===\n<<<<<<< SEARCH\n\"\"\"Stream burst throttling guard.\"\"\"\nfrom errors import ServiceError\nfrom quota_tracker import BurstBucket\n\ndef enforce_burst_capacity(bucket: BurstBucket, incoming_tokens: int) -> bool:\n    \"\"\"Enforce burst quota for streaming client.\n    \n    Raises an error when consumed tokens exceed maximum burst capacity.\n    \"\"\"\n    if not bucket.record_token_burst(incoming_tokens):\n        raise OverflowError(f\"Burst quota exhausted for stream {bucket.stream_id}\")\n    return True\n\ndef admit_stream_tokens(bucket: BurstBucket, tokens: int) -> str:\n    enforce_burst_capacity(bucket, tokens)\n    return \"ADMITTED\"\n=======\n\"\"\"Stream burst throttling guard.\"\"\"\nfrom errors import ServiceError\nfrom quota_tracker import BurstBucket\n\ndef enforce_burst_capacity(bucket: BurstBucket, incoming_tokens: int) -> bool:\n    \"\"\"Enforce burst quota for streaming client.\n    \n    Raises an error when consumed tokens exceed maximum burst capacity.\n    \"\"\"\n    if not bucket.record_token_burst(incoming_tokens):\n        raise ServiceError(\n            code=\"ERR_RATE_LIMIT_EXCEEDED\",\n            message=f\"Burst quota exhausted for stream {bucket.stream_id}\"\n        )\n    return True\n\ndef admit_stream_tokens(bucket: BurstBucket, tokens: int) -> str:\n    enforce_burst_capacity(bucket, tokens)\n    return \"ADMITTED\"\n>>>>>>> REPLACE\n=== END ===\n\n=== EDIT: quota_tracker.py ===\n<<<<<<< SEARCH\n\"\"\"Burst quota tracker records.\"\"\"\nfrom dataclasses import dataclass\nfrom typing import Dict, Any\n\n@dataclass\nclass BurstBucket:\n    stream_id: str\n    burst_limit: int\n    current_tokens: int = 0\n\n    def record_token_burst(self, tokens: int) -> bool:\n        if self.current_tokens + tokens > self.burst_limit:\n            return False\n        self.current_tokens += tokens\n        return True\n\n    def reset(self) -> None:\n        self.current_tokens = 0\n\n    def remaining_capacity(self) -> int:\n        return max(0, self.burst_limit - self.current_tokens)\n=======\n\"\"\"Burst quota tracker records.\"\"\"\nimport math\nfrom dataclasses import dataclass\nfrom typing import Dict, Any\n\n@dataclass\nclass BurstBucket:\n    stream_id: str\n    burst_limit: int\n    current_tokens: int = 0\n\n    def record_token_burst(self, tokens: int) -> bool:\n        if self.current_tokens + tokens > self.burst_limit:\n            return False\n        self.current_tokens = math.floor(self.current_tokens + tokens)\n        return True\n\n    def reset(self) -> None:\n        self.current_tokens = 0\n\n    def remaining_capacity(self) -> int:\n        return max(0, self.burst_limit - self.current_tokens)\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_1",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nRULE: <id of the house convention your fix applies, e.g. H07, or none>\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: throttle_guard.py::enforce_burst_capacity raises OverflowError instead of ServiceError with code ERR_RATE_LIMIT_EXCEEDED as required by H04.\nRULE: H04, H16\nCONFIDENCE: 95",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_2",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nRULE: <id of the house convention your fix applies, e.g. H07, or none>\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: throttle_guard.py::enforce_burst_capacity where OverflowError is raised instead of ServiceError\nRULE: H04\nCONFIDENCE: 95",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_3",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nRULE: <id of the house convention your fix applies, e.g. H07, or none>\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: throttle_guard.py::enforce_burst_capacity where OverflowError is raised instead of ServiceError\nRULE: H04\nCONFIDENCE: 95",
+      "finish": "stop"
+    },
+    {
+      "kind": "sure_revise",
+      "prompt": "CONFIDENCE HARNESS REPORT on your current patch:\n- calibrated confidence that it passes the hidden CI tests: 0.35 (stated 0.95, mapped through this model's measured calibration)\nThis is below the reliability bar. Re-examine the root cause and the failing value: reproduce it, consider which behaviour the hidden tests most likely expect, and check edge cases and the knowledge graph (use the know tool to look up the relevant convention). You have 2 more tool turn(s); then finish with your final edits (no tool blocks).",
+      "response": "The confidence is low because I haven't seen the actual failing test `test_throttle_cases.py`. The provided test `test_throttle_guard.py` passes with the current code, but it doesn't check for the specific exception type or H16/H04 compliance.\n\nLet's look at the knowledge graph again.\n*   **H04**: `ServiceError(code=\"ERR_RATE_LIMIT_EXCEEDED\", ...)` is required for quota exhaustion. Prohibits `OverflowError`.\n*   **H16**: `math.floor(current_tokens)`.\n\nMy previous changes addressed these directly. However, the \"failing test\" might be checking something else or my implementation of H16 in `quota_tracker` might be too aggressive if `tokens` is already an integer (though `math.floor` on an int is safe).\n\nLet's check if there are other conventions involved.\n*   **H08**: Message wire envelope? No, this is internal logic.\n*   **H13**: Idempotency headers? No.\n\nThe most likely issue is that the hidden test `test_throttle_cases.py` expects `ServiceError` with code `ERR_RATE_LIMIT_EXCEEDED`. My fix to `throttle_guard.py` does exactly that.\n\nWhy was my confidence calibrated low? Maybe I missed a detail in H16 or H04.\nH16: \"available token balance floored to integer units = `math.floor(current_tokens)`\".\nMy code: `self.current_tokens = math.floor(self.current_tokens + tokens)`. This floors the *result*. The convention says \"available token balance floored\". This is effectively the same if we floor after addition.\n\nLet's verify if `test_throttle_cases.py` exists in the sandbox or if I need to infer its behavior. Since I can't see it, I must rely on the conventions.\n\nIs there any other place `OverflowError` could be raised? No.\nIs there any other place `current_tokens` is modified? Only `record_token_burst` and `reset`. `reset` sets to 0 (int).\n\nLet's re-read H04 carefully.\n\"error code for quota and burst budget exhaustion = `ERR_RATE_LIMIT_EXCEEDED`\".\nMy fix uses this code.\n\nLet's check if the test might be checking the *message* format or details?\nH04 doesn't specify message format beyond `ServiceError(...)`.\n\nWait, look at **H16** again: \"prohibits -> Alternative: consuming fractional tokens\".\nThis implies that if a caller tries to consume fractional tokens, it should be handled. My code in `quota_tracker` now floors the balance. This handles fractional additions by truncating them (flooring). This seems correct.\n\nIs it possible the test expects the exception to be raised from `quota_tracker` instead of `throttle_guard`?\nH04 says \"structured service exception hierarchy ... applies_to -> Scope: domain service errors\". `throttle_guard` is a guard/service layer component. It makes sense for it to raise the structured error.\n\nLet's consider if I need to update `errors.py`. H04 says \"defining module = `errors.py`\". The class `ServiceError` is already there.\n\nLet's double check the `test_throttle_guard.py` content.\n```python\ndef test_nominal_burst_admission():\n    bucket = BurstBucket(stream_id=\"stream-1\", burst_limit=50)\n    assert enforce_burst_capacity(bucket, 20) is True\n    assert admit_stream_tokens(bucket, 10) == \"ADMITTED\"\n```\nThis test doesn't check the error case.\n\nThe ticket says `test_service_execution` in `tests/test_throttle_cases.py` fails with `AssertionError: assert False is True`. This usually means a boolean assertion failed.\nExample: `assert actual_exception_type is expected_exception_type` -> if `actual` is `OverflowError` and `expected` is `ServiceError`, this would fail. Or `assert isinstance(e, ServiceError)` might fail.\n\nMy fix changes `OverflowError` to `ServiceError`. This should resolve the type mismatch.\n\nOne potential issue: H16 says \"available token balance floored to integer units\".\nIf `current_tokens` is 0 and we add 0.9, it becomes 0. If we add 1.1, it becomes 1.\nMy code: `self.current_tokens = math.floor(self.current_tokens + tokens)`.\nThis is correct.\n\nIs there any other convention?\n**H08**: Wire envelope. Not applicable here.\n\nLet's assume my fix is correct and the low confidence was due to not seeing the test. I will proceed with the final patch.\n\nOne small detail: `quota_tracker.py` imports `math`. `throttle_guard.py` does not need `math` if it just raises an error.\n\nI will finalize the edits.\n\n=== EDIT: throttle_guard.py ===\n<<<<<<< SEARCH\n\"\"\"Stream burst throttling guard.\"\"\"\nfrom errors import ServiceError\nfrom quota_tracker import BurstBucket\n\ndef enforce_burst_capacity(bucket: BurstBucket, incoming_tokens: int) -> bool:\n    \"\"\"Enforce burst quota for streaming client.\n    \n    Raises an error when consumed tokens exceed maximum burst capacity.\n    \"\"\"\n    if not bucket.record_token_burst(incoming_tokens):\n        raise OverflowError(f\"Burst quota exhausted for stream {bucket.stream_id}\")\n    return True\n\ndef admit_stream_tokens(bucket: BurstBucket, tokens: int) -> str:\n    enforce_burst_capacity(bucket, tokens)\n    return \"ADMITTED\"\n=======\n\"\"\"Stream burst throttling guard.\"\"\"\nfrom errors import ServiceError\nfrom quota_tracker import BurstBucket\n\ndef enforce_burst_capacity(bucket: BurstBucket, incoming_tokens: int) -> bool:\n    \"\"\"Enforce burst quota for streaming client.\n    \n    Raises an error when consumed tokens exceed maximum burst capacity.\n    \"\"\"\n    if not bucket.record_token_burst(incoming_tokens):\n        raise ServiceError(\n            code=\"ERR_RATE_LIMIT_EXCEEDED\",\n            message=f\"Burst quota exhausted for stream {bucket.stream_id}\"\n        )\n    return True\n\ndef admit_stream_tokens(bucket: BurstBucket, tokens: int) -> str:\n    enforce_burst_capacity(bucket, tokens)\n    return \"ADMITTED\"\n>>>>>>> REPLACE\n=== END ===\n\n=== EDIT: quota_tracker.py ===\n<<<<<<< SEARCH\n\"\"\"Burst quota tracker records.\"\"\"\nfrom dataclasses import dataclass\nfrom typing import Dict, Any\n\n@dataclass\nclass BurstBucket:\n    stream_id: str\n    burst_limit: int\n    current_tokens: int = 0\n\n    def record_token_burst(self, tokens: int) -> bool:\n        if self.current_tokens + tokens > self.burst_limit:\n            return False\n        self.current_tokens += tokens\n        return True\n\n    def reset(self) -> None:\n        self.current_tokens = 0\n\n    def remaining_capacity(self) -> int:\n        return max(0, self.burst_limit - self.current_tokens)\n=======\n\"\"\"Burst quota tracker records.\"\"\"\nimport math\nfrom dataclasses import dataclass\nfrom typing import Dict, Any\n\n@dataclass\nclass BurstBucket:\n    stream_id: str\n    burst_limit: int\n    current_tokens: int = 0\n\n    def record_token_burst(self, tokens: int) -> bool:\n        if self.current_tokens + tokens > self.burst_limit:\n            return False\n        self.current_tokens = math.floor(self.current_tokens + tokens)\n        return True\n\n    def reset(self) -> None:\n        self.current_tokens = 0\n\n    def remaining_capacity(self) -> int:\n        return max(0, self.burst_limit - self.current_tokens)\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "revise_edit_fix",
+      "prompt": "Not applied: EDIT throttle_guard.py: SEARCH text not found\nNot applied: EDIT quota_tracker.py: SEARCH text not found\nReply with corrected EDIT or FILE blocks for these changes only, no tool blocks.",
+      "response": "It seems the previous edits were not applied because the SEARCH text might have had whitespace issues or I need to be more precise. I will re-read the files and apply the edits carefully.\n\n=== TOOL: python ===\n<\nwith open('throttle_guard.py', 'r') as f:\n    print(repr(f.read()))\nwith open('quota_tracker.py', 'r') as f:\n    print(repr(f.read()))\n>\n=== END_TOOL ===",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-09T05:24:14.922612+00:00"
+}

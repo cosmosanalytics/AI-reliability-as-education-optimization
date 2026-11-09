@@ -1,0 +1,47 @@
+{
+  "status": "COMPLETED",
+  "arm": "KNOW",
+  "family": "service_errors",
+  "rule_id": "H04",
+  "task_id": 2035,
+  "run_idx": 1,
+  "order_idx": 175,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "quota_tracker.py",
+    "throttle_guard.py"
+  ],
+  "tool_calls": [],
+  "tools_used": [],
+  "model_turns": 1,
+  "prompt_tokens": 2051,
+  "completion_tokens": 1507,
+  "latency_sec": 777.4,
+  "retrieved": [
+    "H16",
+    "H04",
+    "H08"
+  ],
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: quota_tracker.py ===\n\"\"\"Burst quota tracker records.\"\"\"\nimport math\nfrom dataclasses import dataclass\nfrom typing import Dict, Any\n\n@dataclass\nclass BurstBucket:\n    stream_id: str\n    burst_limit: int\n    current_tokens: int = 0\n\n    def record_token_burst(self, tokens: float) -> bool:\n        consumed = math.floor(tokens)\n        if self.current_tokens + consumed > self.burst_limit:\n            return False\n        self.current_tokens += consumed\n        return True\n\n    def reset(self) -> None:\n        self.current_tokens = 0\n\n    def remaining_capacity(self) -> int:\n        return max(0, self.burst_limit - self.current_tokens)\n=== END ===\n=== FILE: throttle_guard.py ===\n\"\"\"Stream burst throttling guard.\"\"\"\nfrom errors import ServiceError\nfrom quota_tracker import BurstBucket\n\ndef enforce_burst_capacity(bucket: BurstBucket, incoming_tokens: int) -> bool:\n    \"\"\"Enforce burst quota for streaming client.\n    \n    Raises an error when consumed tokens exceed maximum burst capacity.\n    \"\"\"\n    if not bucket.record_token_burst(incoming_tokens):\n        raise ServiceError(\n            code=\"ERR_RATE_LIMIT_EXCEEDED\",\n            message=f\"Burst quota exhausted for stream {bucket.stream_id}\"\n        )\n    return True\n\ndef admit_stream_tokens(bucket: BurstBucket, tokens: int) -> str:\n    enforce_burst_capacity(bucket, tokens)\n    return \"ADMITTED\"\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the ticket and conventions.\n\n1.  **Issue**: `OverflowError` raised when burst rate quota exceeded.\n2.  **Convention H16**: Token bucket integer truncation requires `available token balance floored to integer units = math.floor(current_tokens)` and prohibits consuming fractional tokens. The `BurstBucket` in `quota_tracker.py` uses integers, so this might be less relevant unless `incoming_tokens` can be float, but the main issue is the exception type.\n3.  **Convention H04**: Structured service exception hierarchy requires using `ServiceError` with specific codes like `ERR_RATE_LIMIT_EXCEEDED` for quota and burst budget exhaustion. It prohibits generic exceptions like `OverflowError`, `ValueError`, etc.\n\nThe failing test `test_service_execution` (not shown in full, but implied by the traceback) likely tests a scenario where the burst limit is exceeded. Currently, `enforce_burst_capacity` raises a raw `OverflowError`. This violates H04.\n\nI need to:\n1.  Modify `throttle_guard.py` to raise `ServiceError(code=\"ERR_RATE_LIMIT_EXCEEDED\", ...)` instead of `OverflowError`.\n2.  Ensure `errors.py` is correctly defined (it looks fine, already has `ServiceError`).\n3.  Check if `quota_tracker.py` needs changes. H16 mentions flooring tokens. If `incoming_tokens` can be float, we should floor it or check against floored limit? The convention says \"available token balance floored to integer units\". This usually implies the *balance* is tracked as integers. The current implementation uses integers. If `incoming_tokens` is passed as a float, adding it to an int might cause issues or precision problems. However, the primary error is the exception type. Let's look at H16 again: \"prohibits consuming fractional tokens\". This suggests we should probably floor the incoming tokens or reject them if fractional? Or just ensure the math uses `math.floor`. Given the simple integer logic in `BurstBucket`, and the convention \"floored to integer units\", it's safest to ensure `current_tokens` remains an integer. If `incoming_tokens` is float, `self.current_tokens += tokens` might make it float. Let's add `import math` and use `math.floor` for the balance update or check. But wait, `BurstBucket` is in `quota_tracker.py`. The ticket is about `throttle_guard.py` raising the wrong error.\n\nLet's fix `throttle_guard.py` first to raise the correct exception.\nAlso, H16 says \"prohibits consuming fractional tokens\". If `incoming_tokens` is 1.5, should we consume 1? Or reject? \"floored to integer units = math.floor(current_tokens)\" suggests the balance is floored. It doesn't explicitly say how to handle incoming fractional tokens, but \"prohibits consuming fractional tokens\" implies we shouldn't add fractions. I will floor the incoming tokens in `enforce_burst_capacity` or inside `record_token_burst`. Since `quota_tracker.py` is a data record, maybe the guard should sanitize input? Or the tracker should enforce integer balance. Let's make `BurstBucket.record_token_burst` handle flooring to be safe and compliant with H16.\n\nWait, if I change `quota_tracker.py`, I need to import `math`.\nLet's check the test failure again. \"Unhandled OverflowError\". This confirms the exception type is the main bug.\n\nPlan:\n1.  Update `throttle_guard.py`: Import `ServiceError` (already done). Raise `ServiceError(code=\"ERR_RATE_LIMIT_EXCEEDED\", ...)` instead of `OverflowError`.\n2.  Update `quota_tracker.py`: Import `math`. Ensure `current_tokens` is floored after addition to comply with H16 (\"floored to integer units\"). This handles any potential float inputs from callers, preventing fractional tokens.\n\nLet's refine the `BurstBucket` change.\nCurrent:\n```python\n    def record_token_burst(self, tokens: int) -> bool:\n        if self.current_tokens + tokens > self.burst_limit:\n            return False\n        self.current_tokens += tokens\n        return True\n```\nIf `tokens` is float, `self.current_tokens` becomes float. H16 says \"prohibits consuming fractional tokens\". This likely means we should floor the *added* amount or the result. \"available token balance floored to integer units\" suggests the state variable should be int. I'll floor the update.\n\n```python\n    def record_token_burst(self, tokens: float) -> bool: # Allow float input, but process as int\n        if self.current_tokens + math.floor(tokens) > self.burst_limit:\n            return False\n        self.current_tokens += math.floor(tokens)\n        return True\n```\nThis ensures integer balance and prohibits fractional consumption.\n\nLet's apply edits.\n\n=== EDIT: throttle_guard.py ===\n<<<<<<< SEARCH\n\"\"\"Stream burst throttling guard.\"\"\"\nfrom errors import ServiceError\nfrom quota_tracker import BurstBucket\n\ndef enforce_burst_capacity(bucket: BurstBucket, incoming_tokens: int) -> bool:\n    \"\"\"Enforce burst quota for streaming client.\n    \n    Raises an error when consumed tokens exceed maximum burst capacity.\n    \"\"\"\n    if not bucket.record_token_burst(incoming_tokens):\n        raise OverflowError(f\"Burst quota exhausted for stream {bucket.stream_id}\")\n    return True\n=======\n\"\"\"Stream burst throttling guard.\"\"\"\nfrom errors import ServiceError\nfrom quota_tracker import BurstBucket\n\ndef enforce_burst_capacity(bucket: BurstBucket, incoming_tokens: int) -> bool:\n    \"\"\"Enforce burst quota for streaming client.\n    \n    Raises an error when consumed tokens exceed maximum burst capacity.\n    \"\"\"\n    if not bucket.record_token_burst(incoming_tokens):\n        raise ServiceError(\n            code=\"ERR_RATE_LIMIT_EXCEEDED\",\n            message=f\"Burst quota exhausted for stream {bucket.stream_id}\"\n        )\n    return True\n>>>>>>> REPLACE\n=== END ===\n\n=== EDIT: quota_tracker.py ===\n<<<<<<< SEARCH\n\"\"\"Burst quota tracker records.\"\"\"\nfrom dataclasses import dataclass\nfrom typing import Dict, Any\n\n@dataclass\nclass BurstBucket:\n    stream_id: str\n    burst_limit: int\n    current_tokens: int = 0\n\n    def record_token_burst(self, tokens: int) -> bool:\n        if self.current_tokens + tokens > self.burst_limit:\n            return False\n        self.current_tokens += tokens\n        return True\n=======\n\"\"\"Burst quota tracker records.\"\"\"\nimport math\nfrom dataclasses import dataclass\nfrom typing import Dict, Any\n\n@dataclass\nclass BurstBucket:\n    stream_id: str\n    burst_limit: int\n    current_tokens: int = 0\n\n    def record_token_burst(self, tokens: float) -> bool:\n        consumed = math.floor(tokens)\n        if self.current_tokens + consumed > self.burst_limit:\n            return False\n        self.current_tokens += consumed\n        return True\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-09T04:16:19.734702+00:00"
+}

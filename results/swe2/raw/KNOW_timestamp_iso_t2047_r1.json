@@ -1,0 +1,46 @@
+{
+  "status": "COMPLETED",
+  "arm": "KNOW",
+  "family": "timestamp_iso",
+  "rule_id": "H09",
+  "task_id": 2047,
+  "run_idx": 1,
+  "order_idx": 62,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "webhook_sender.py"
+  ],
+  "tool_calls": [],
+  "tools_used": [],
+  "model_turns": 1,
+  "prompt_tokens": 2236,
+  "completion_tokens": 229,
+  "latency_sec": 212.4,
+  "retrieved": [
+    "H09",
+    "H04",
+    "H08"
+  ],
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: webhook_sender.py ===\n\"\"\"Webhook delivery payload construction.\"\"\"\nfrom datetime import datetime, timezone\nfrom typing import Dict, Any\nfrom envelope_schema import WebhookEnvelope\nfrom signature_utils import generate_delivery_headers\n\ndef build_webhook_payload(topic: str, data: Dict[str, Any], dt: datetime) -> WebhookEnvelope:\n    hdrs = generate_delivery_headers(topic)\n    ts = dt.strftime(\"%Y-%m-%dT%H:%M:%S.\") + f\"{dt.microsecond // 1000:03d}Z\"\n    env = WebhookEnvelope(topic=topic, body=data, sent_at=ts, headers=hdrs)\n    if not env.is_dispatched():\n        raise ValueError(\"Invalid envelope state\")\n    return env\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "The failing test shows that the timestamp format includes microseconds (`%f` produces 6 digits, e.g., `000000`) while the convention H09 requires exactly 3 digits for milliseconds (`sss`). The current code uses `dt.strftime(\"%Y-%m-%dT%H:%M:%S.%fZ\")`, which results in `2026-10-25T10:00:00.000000Z`. It should produce `2026-10-25T10:00:00.000Z`.\n\nI will fix `webhook_sender.py` to truncate the fractional seconds to 3 digits.\n\n=== EDIT: webhook_sender.py ===\n<<<<<<< SEARCH\n    ts = dt.strftime(\"%Y-%m-%dT%H:%M:%S.%fZ\")\n=======\n    ts = dt.strftime(\"%Y-%m-%dT%H:%M:%S.\") + f\"{dt.microsecond // 1000:03d}Z\"\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-08T10:06:20.252120+00:00"
+}

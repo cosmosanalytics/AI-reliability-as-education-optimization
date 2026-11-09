@@ -1,0 +1,145 @@
+{
+  "status": "COMPLETED",
+  "arm": "KNOW_SURE",
+  "family": "service_errors",
+  "rule_id": "H04",
+  "task_id": 2031,
+  "run_idx": 1,
+  "order_idx": 84,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "payload_validator.py"
+  ],
+  "tool_calls": [
+    {
+      "phase": "solve",
+      "turn": 1,
+      "tool": "know",
+      "rc": 0
+    },
+    {
+      "phase": "revise",
+      "turn": 1,
+      "tool": "pytest",
+      "rc": 0
+    },
+    {
+      "phase": "revise",
+      "turn": 2,
+      "tool": "pytest",
+      "rc": 0
+    }
+  ],
+  "tools_used": [
+    "know",
+    "pytest"
+  ],
+  "model_turns": 9,
+  "prompt_tokens": 24224,
+  "completion_tokens": 672,
+  "latency_sec": 1220.7,
+  "retrieved": [
+    "H04",
+    "H08",
+    "H03"
+  ],
+  "sure": {
+    "diagnoses": [
+      {
+        "root_cause": "payload_validator.py::validate_metric_payload where raw KeyError is raised instead of ServiceError",
+        "rule": "H04",
+        "confidence": 1.0,
+        "root_cause_norm": "payload_validator.py::validate_metric_payload",
+        "rule_norm": "H04"
+      },
+      {
+        "root_cause": "payload_validator.py::validate_metric_payload where KeyError is raised instead of ServiceError",
+        "rule": "H04",
+        "confidence": 1.0,
+        "root_cause_norm": "payload_validator.py::validate_metric_payload",
+        "rule_norm": "H04"
+      },
+      {
+        "root_cause": "payload_validator.py::validate_metric_payload raises raw KeyError instead of ServiceError",
+        "rule": "H04",
+        "confidence": 1.0,
+        "root_cause_norm": "payload_validator.py::validate_metric_payload",
+        "rule_norm": "H04"
+      }
+    ],
+    "stated": 1.0,
+    "calibrated": 0.3469387755102041,
+    "conflict": false
+  },
+  "revised": true,
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: payload_validator.py ===\n\"\"\"Inbound payload structure validator.\"\"\"\nfrom errors import ServiceError\nfrom schema_specs import REQUIRED_METRIC_FIELDS, check_missing_attributes, extract_metric_context\nfrom typing import Dict, Any\n\ndef validate_metric_payload(payload: Dict[str, Any]) -> bool:\n    \"\"\"Validate inbound JSON dictionary against required fields.\n    \n    Raises an exception if required fields are missing or empty.\n    \"\"\"\n    missing = check_missing_attributes(payload, REQUIRED_METRIC_FIELDS)\n    if missing:\n        raise ServiceError(code=\"ERR_PAYLOAD_SCHEMA_INVALID\", message=f\"Missing attributes: {missing}\")\n    return True\n\ndef process_metric_entry(payload: Dict[str, Any]) -> str:\n    validate_metric_payload(payload)\n    _ = extract_metric_context(payload)\n    return \"PROCESSED\"\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the issue. The ticket states that missing payload fields are raising an unhandled `KeyError`, which terminates the ingestion worker. Looking at `payload_validator.py`, the `validate_metric_payload` function raises a raw `KeyError`. According to convention [H04], we must use structured service exceptions (`ServiceError`) with specific error codes like `ERR_PAYLOAD_SCHEMA_INVALID` or `ERR_VALIDATION_FAILED` instead of generic exceptions like `ValueError`, `KeyError`, or `raw Exception`.\n\nI will modify `payload_validator.py` to raise `ServiceError` with the appropriate code.\n\n=== TOOL: know ===\nH04\n=== END_TOOL ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "solve_tool_1",
+      "prompt": "=== TOOL_OUTPUT: know (exit code 0) ===\n[H04] Convention: structured service exception hierarchy\n  uses_literal -> Literal: exception class = `ServiceError(code=\"ERR_<CATEGORY>_<DETAIL>\", message=\"...\")`\n    uses_literal -> Literal: defining module = `errors.py`\n  applies_to -> Scope: domain service errors, permission failures, schema validations\n  prohibits -> Alternative: generic exceptions = `ValueError, KeyError, or raw Exception`\n  uses_literal -> Literal: error code for unauthorized access or missing scope = `ERR_AUTH_SCOPE_DENIED`\n  uses_literal -> Literal: error code for missing or malformed request payload attributes and schema verification failures = `ERR_PAYLOAD_SCHEMA_INVALID`\n  uses_literal -> Literal: error code for missing or malformed request payload attributes and schema verification failures = `ERR_VALIDATION_FAILED`\n  uses_literal -> Literal: error code for concurrent modification conflicts = `ERR_RESOURCE_LOCKED`\n  uses_literal -> Literal: error code for quota and burst budget exhaustion = `ERR_RATE_LIMIT_EXCEEDED`\n=== END_TOOL_OUTPUT ===\n\nYou have 2 tool turn(s) left. Call more tools, or finish (final edits, no tool blocks).",
+      "response": "I will now fix `payload_validator.py` to use `ServiceError` with code `ERR_PAYLOAD_SCHEMA_INVALID` as specified in [H04] for schema verification failures.\n\n=== EDIT: payload_validator.py ===\n<<<<<<< SEARCH\n    missing = check_missing_attributes(payload, REQUIRED_METRIC_FIELDS)\n    if missing:\n        raise KeyError(f\"Missing attributes: {missing}\")\n=======\n    missing = check_missing_attributes(payload, REQUIRED_METRIC_FIELDS)\n    if missing:\n        raise ServiceError(code=\"ERR_PAYLOAD_SCHEMA_INVALID\", message=f\"Missing attributes: {missing}\")\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_1",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nRULE: <id of the house convention your fix applies, e.g. H07, or none>\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: payload_validator.py::validate_metric_payload where raw KeyError is raised instead of ServiceError\nRULE: H04\nCONFIDENCE: 100",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_2",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nRULE: <id of the house convention your fix applies, e.g. H07, or none>\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: payload_validator.py::validate_metric_payload where KeyError is raised instead of ServiceError\nRULE: H04\nCONFIDENCE: 100",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_3",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nRULE: <id of the house convention your fix applies, e.g. H07, or none>\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: payload_validator.py::validate_metric_payload raises raw KeyError instead of ServiceError\nRULE: H04\nCONFIDENCE: 100",
+      "finish": "stop"
+    },
+    {
+      "kind": "sure_revise",
+      "prompt": "CONFIDENCE HARNESS REPORT on your current patch:\n- calibrated confidence that it passes the hidden CI tests: 0.35 (stated 1.0, mapped through this model's measured calibration)\nThis is below the reliability bar. Re-examine the root cause and the failing value: reproduce it, consider which behaviour the hidden tests most likely expect, and check edge cases and the knowledge graph (use the know tool to look up the relevant convention). You have 2 more tool turn(s); then finish with your final edits (no tool blocks).",
+      "response": "Let me run the tests to see what's happening.\n\n=== TOOL: pytest ===\ntests/test_payload_validator.py\n=== END_TOOL ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "revise_tool_1",
+      "prompt": "=== TOOL_OUTPUT: pytest (exit code 0) ===\n.                                                                        [100%]\n1 passed in 0.02s\n\n=== END_TOOL_OUTPUT ===\n\nYou have 1 tool turn(s) left. Call more tools, or finish (final edits, no tool blocks).",
+      "response": "The test passes now. Let me also check if there are other tests that might be affected.\n\n=== TOOL: pytest ===\ntests/\n=== END_TOOL ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "revise_tool_2",
+      "prompt": "=== TOOL_OUTPUT: pytest (exit code 0) ===\n.                                                                        [100%]\n1 passed in 0.02s\n\n=== END_TOOL_OUTPUT ===\n\nNo tool turns left. Finish: reply with your final edits (if any), no tool blocks.",
+      "response": "The fix is complete. The `KeyError` raised in `payload_validator.py` has been replaced with a structured `ServiceError` using the code `ERR_PAYLOAD_SCHEMA_INVALID` as required by convention [H04] for schema verification failures. All tests pass.\n\n=== EDIT: payload_validator.py ===\n<<<<<<< SEARCH\n    missing = check_missing_attributes(payload, REQUIRED_METRIC_FIELDS)\n    if missing:\n        raise KeyError(f\"Missing attributes: {missing}\")\n=======\n    missing = check_missing_attributes(payload, REQUIRED_METRIC_FIELDS)\n    if missing:\n        raise ServiceError(code=\"ERR_PAYLOAD_SCHEMA_INVALID\", message=f\"Missing attributes: {missing}\")\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "revise_edit_fix",
+      "prompt": "Not applied: EDIT payload_validator.py: SEARCH text not found\nReply with corrected EDIT or FILE blocks for these changes only, no tool blocks.",
+      "response": "=== EDIT: payload_validator.py ===\n<<<<<<< SEARCH\n    missing = check_missing_attributes(payload, REQUIRED_METRIC_FIELDS)\n    if missing:\n        raise KeyError(f\"Missing attributes: {missing}\")\n=======\n    missing = check_missing_attributes(payload, REQUIRED_METRIC_FIELDS)\n    if missing:\n        raise ServiceError(code=\"ERR_PAYLOAD_SCHEMA_INVALID\", message=f\"Missing attributes: {missing}\")\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-08T15:28:06.428125+00:00"
+}

@@ -1,0 +1,115 @@
+{
+  "status": "COMPLETED",
+  "arm": "SURE",
+  "family": "wire_envelope",
+  "rule_id": "H08",
+  "task_id": 2038,
+  "run_idx": 1,
+  "order_idx": 100,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "billing_emitter.py"
+  ],
+  "tool_calls": [
+    {
+      "phase": "revise",
+      "turn": 1,
+      "tool": "pytest",
+      "rc": 0
+    }
+  ],
+  "tools_used": [
+    "pytest"
+  ],
+  "model_turns": 7,
+  "prompt_tokens": 24618,
+  "completion_tokens": 3729,
+  "latency_sec": 5094.2,
+  "sure": {
+    "diagnoses": [
+      {
+        "root_cause": "billing_emitter.py::emit_billing_record",
+        "rule": null,
+        "confidence": 0.95,
+        "root_cause_norm": "billing_emitter.py::emit_billing_record",
+        "rule_norm": "none"
+      },
+      {
+        "root_cause": "billing_emitter.py::emit_billing_record",
+        "rule": null,
+        "confidence": 0.95,
+        "root_cause_norm": "billing_emitter.py::emit_billing_record",
+        "rule_norm": "none"
+      },
+      {
+        "root_cause": "billing_emitter.py::emit_billing_record produces a raw dictionary instead of an enveloped payload, causing downstream validation to fail when expecting envelope fields like `_v`.",
+        "rule": null,
+        "confidence": 0.9,
+        "root_cause_norm": "billing_emitter.py::emit_billing_record",
+        "rule_norm": "none"
+      }
+    ],
+    "stated": 0.9333333333333332,
+    "calibrated": 0.3469387755102041,
+    "conflict": false
+  },
+  "revised": true,
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: billing_emitter.py ===\n\"\"\"Billing transaction message emitter.\"\"\"\nfrom key_normalizer import normalize_dict_keys, extract_normalized_keys\nfrom wire_envelope import build_envelope, is_valid_envelope, extract_payload\nfrom typing import Dict, Any\n\ndef emit_billing_record(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    \"\"\"Emit billing transaction message for downstream consumers.\"\"\"\n    normalized = normalize_dict_keys(data)\n    return build_envelope(\"billing\", epoch_ms, normalized)\n\ndef broadcast_billing_event(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    record = emit_billing_record(data, epoch_ms)\n    _ = is_valid_envelope(record)\n    _ = extract_normalized_keys(data)\n    return record\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the issue. The ticket states: \"Ledger message bus rejected un-enveloped billing payload.\" This implies that `broadcast_billing_event` should return an enveloped message, not just the raw record.\n\nLooking at `billing_emitter.py`:\n1. `emit_billing_record` currently just returns a copy of `data`.\n2. `broadcast_billing_event` calls `emit_billing_record`, checks validity (which will fail for non-enveloped data), extracts keys (unused), and returns the raw record.\n\nThe test `test_nominal_billing_emit` asserts that `broadcast_billing_event(raw, 500) == res` where `res = emit_billing_record(raw, 500)`. This test seems to expect them to be equal currently, but the failing test trace says `FAILED tests/test_billing_cases.py::test_service_execution - AssertionError: assert None == 2`.\n\nWait, I don't have `tests/test_billing_cases.py` content. But the error `assert None == 2` suggests that something is returning `None` when it should return `2`. Looking at `wire_envelope.py`, `is_valid_envelope` returns a boolean. `extract_payload` returns the payload or `None`.\n\nIf the \"Ledger message bus\" (which likely calls these functions) expects an envelope, and currently gets a raw dict, it might be trying to extract fields that don't exist.\n\nHowever, the specific instruction is to fix the code so the billing payload is enveloped. The function `broadcast_billing_event` seems to be the entry point for broadcasting events. It should probably return the result of `build_envelope`.\n\nLet's look at `emit_billing_record`. It normalizes keys? No, it doesn't call `normalize_dict_keys`. But `extract_normalized_keys` is called in `broadcast_billing_event` and the result is discarded.\n\nIf the downstream system expects an envelope, `broadcast_billing_event` should return the envelope built by `build_envelope`.\n\nLet's refine `billing_emitter.py`:\n1. `emit_billing_record` should probably normalize the keys (since `key_normalizer` is imported) and potentially build the envelope? Or maybe `emit` is for simple emission and `broadcast` is for enveloped?\n2. The ticket says \"rejected un-enveloped billing payload\". This implies the payload sent was not enveloped.\n3. `broadcast_billing_event` currently returns `record` which is `dict(data)`. It should return an envelope.\n\nLet's modify `broadcast_billing_event` to use `build_envelope`.\n\nAlso, `emit_billing_record` might need to normalize keys if that's part of the \"billing record\" preparation. The import of `normalize_dict_keys` suggests it should be used. Let's assume `emit_billing_record` normalizes the data, and `broadcast_billing_event` wraps it in an envelope.\n\nCurrent `emit_billing_record`:\n```python\ndef emit_billing_record(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    return dict(data)\n```\n\nProposed `emit_billing_record`:\n```python\ndef emit_billing_record(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    return normalize_dict_keys(data)\n```\n\nCurrent `broadcast_billing_event`:\n```python\ndef broadcast_billing_event(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    record = emit_billing_record(data, epoch_ms)\n    _ = is_valid_envelope(record)\n    _ = extract_normalized_keys(data)\n    return record\n```\n\nProposed `broadcast_billing_event`:\nIt should return an envelope. The envelope builder needs `service_name`. This isn't passed in. Maybe we use a default or derive it? Or maybe the `data` contains it? No, data is arbitrary.\nWait, if I look at `test_nominal_billing_emit`:\n```python\n    assert broadcast_billing_event(raw, 500) == res\n```\nIf I change `broadcast_billing_event` to return an envelope, this test will fail because `res` is just the normalized dict.\nBUT the instructions say: \"Do not modify files in tests/ or any test files.\"\nAnd the failing test is `tests/test_billing_cases.py`, NOT `tests/test_billing_emitter.py`.\nThe traceback is for `test_service_execution` in `test_billing_cases.py`.\n\nSo I must fix the production code to satisfy the external requirement (enveloped payload) without breaking the existing unit test in `test_billing_emitter.py` if possible, or rather, the existing unit test might be testing the *wrong* behavior (unit test vs integration test). But usually, \"Do not modify tests\" means the fix must pass the existing tests.\n\nLet's re-read `test_nominal_billing_emit`:\n```python\ndef test_nominal_billing_emit():\n    raw = {\"tx\": \"123\"}\n    res = emit_billing_record(raw, 500)\n    assert isinstance(res, dict)\n    assert broadcast_billing_event(raw, 500) == res\n```\nIf `broadcast` returns an envelope, it will NOT equal `res` (which is the record). So this test would fail.\nDoes `test_billing_emitter.py` pass currently?\nCurrent code:\n`emit_billing_record` returns `{\"tx\": \"123\"}`.\n`broadcast_billing_event` returns `{\"tx\": \"123\"}`.\nThey are equal. Test passes.\n\nIf I change `broadcast` to return an envelope, the test fails.\nHowever, the ticket says the *message bus rejected* the payload. This implies the current behavior is wrong for the production use case. The unit test might be flawed or testing a different contract. But I cannot modify tests.\n\nIs there another interpretation?\nMaybe `emit_billing_record` should return the envelope?\nAnd `broadcast_billing_event` calls it and returns it?\n\nIf `emit_billing_record` returns an envelope:\n```python\ndef emit_billing_record(data, epoch_ms):\n    # needs service_name\n    pass\n```\n\nLet's look at the failing test assertion again: `assert None == 2`.\nThis looks like a comparison where one side is `None` and the other is `2`.\nIn `wire_envelope.py`, `_v` is `2`.\nIf someone did `extract_payload(...).get(\"_v\")` on a non-enveloped message, it would be `None`.\n\nThe fix must ensure that what is returned from the billing emitter functions is a valid envelope.\n\nIf I change `emit_billing_record` to build an envelope, I need a service name.\nMaybe the `data` dict contains `_src`? Unlikely for raw input.\nMaybe we hardcode it or use a constant?\n\nLet's look at the imports in `billing_emitter.py`.\n`from wire_envelope import build_envelope ...`\n\nIf I modify `emit_billing_record` to return an envelope, `broadcast_billing_event` will also return an envelope (since it returns `record`).\nThis would break `test_nominal_billing_emit` which asserts equality between the two.\n\nIs it possible that `emit_billing_record` is supposed to normalize keys, and `broadcast_billing_event` is supposed to wrap them?\nIf I do that:\n1. `emit_billing_record` -> normalized dict.\n2. `broadcast_billing_event` -> envelope containing normalized dict.\n\nThen `broadcast_billing_event(...) == res` fails because one is an envelope and one is a dict.\n\nHowever, often \"Do not modify tests\" implies the tests are correct and define the contract. But here the ticket explicitly says the current behavior (un-enveloped) is rejected by the ledger. This is a contradiction if the test expects un-enveloped data to be returned from `broadcast`.\n\nLet's look closely at `test_nominal_billing_emit`.\n`res = emit_billing_record(raw, 500)`\n`assert broadcast_billing_event(raw, 500) == res`\n\nIf the requirement is that `broadcast` returns an envelope, this test is testing incorrect behavior. But I can't change it.\n\nWait! What if `emit_billing_record` *also* builds the envelope?\nAnd `broadcast_billing_event` just calls it and returns it?\nThen they are equal.\nBut `emit_billing_record` needs a service name.\n\nLet's assume the service name is derived or constant. Or maybe the `data` has it? No.\n\nLet's try to run the failing test first to see the context. I don't have the file content, but I can infer.\nThe error `assert None == 2` suggests that the code expected a value of `2` (likely `_v`) but got `None`. This happens if `extract_payload` is called on a non-envelope, or `msg.get(\"_v\")` is checked and it's missing.\n\nIf I make `emit_billing_record` return an envelope, `broadcast` returns an envelope. They are equal. The test passes.\nThe only issue is getting the `service_name`.\n\nLet's assume a default service name like \"billing\" or \"ledger\".\n\nRevised Plan:\n1. Update `emit_billing_record` to normalize keys AND build an envelope.\n2. Update `broadcast_billing_event` to just return the result of `emit_billing_record` (or keep its logic but ensure it returns the envelope).\n\nActually, if `emit_billing_record` returns an envelope, then `is_valid_envelope(record)` in `broadcast` will be True.\n\nLet's write the code for `billing_emitter.py`.\n\n```python\ndef emit_billing_record(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    normalized = normalize_dict_keys(data)\n    return build_envelope(\"billing\", epoch_ms, normalized)\n\ndef broadcast_billing_event(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    record = emit_billing_record(data, epoch_ms)\n    # The original code checked validity and extracted keys. \n    # If we return the envelope, it is valid.\n    return record\n```\n\nThis makes `emit` and `broadcast` return the same thing (the envelope).\nThe test `assert broadcast_billing_event(raw, 500) == res` will pass because both are the same envelope dict.\nThe \"un-enveloped\" issue is fixed because the returned payload IS enveloped.\n\nOne detail: `build_envelope` takes `service_name`. I'll use a sensible default like `\"billing-emitter\"` or just `\"billing\"`. Since it's not specified, any string is better than crashing or using None if the validator was stricter (though validator only checks existence).\n\nLet's verify `key_normalizer.py` and `wire_envelope.py` don't need changes.\n`wire_envelope.py`: `build_envelope` looks good. `is_valid_envelope` checks for `_v==2`.\n`key_normalizer.py`: Looks good.\n\nI will modify `billing_emitter.py`.\n\n=== EDIT: billing_emitter.py ===\n<<<<<<< SEARCH\ndef emit_billing_record(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    \"\"\"Emit billing transaction message for downstream consumers.\"\"\"\n    return dict(data)\n\ndef broadcast_billing_event(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    record = emit_billing_record(data, epoch_ms)\n    _ = is_valid_envelope(record)\n    _ = extract_normalized_keys(data)\n    return record\n=======\ndef emit_billing_record(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    \"\"\"Emit billing transaction message for downstream consumers.\"\"\"\n    normalized = normalize_dict_keys(data)\n    return build_envelope(\"billing\", epoch_ms, normalized)\n\ndef broadcast_billing_event(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    record = emit_billing_record(data, epoch_ms)\n    _ = is_valid_envelope(record)\n    _ = extract_normalized_keys(data)\n    return record\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_1",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: billing_emitter.py::emit_billing_record\nCONFIDENCE: 95",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_2",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: billing_emitter.py::emit_billing_record\nCONFIDENCE: 95",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_3",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: billing_emitter.py::emit_billing_record produces a raw dictionary instead of an enveloped payload, causing downstream validation to fail when expecting envelope fields like `_v`.\nCONFIDENCE: 90",
+      "finish": "stop"
+    },
+    {
+      "kind": "sure_revise",
+      "prompt": "CONFIDENCE HARNESS REPORT on your current patch:\n- calibrated confidence that it passes the hidden CI tests: 0.35 (stated 0.93, mapped through this model's measured calibration)\nThis is below the reliability bar. Re-examine the root cause and the failing value: reproduce it, consider which behaviour the hidden tests most likely expect, and check edge cases. You have 2 more tool turn(s); then finish with your final edits (no tool blocks).",
+      "response": "Let's double-check the logic.\nThe test `test_nominal_billing_emit` expects `broadcast` to equal `emit`.\nMy patch makes both return an envelope. So they are equal.\nThe ticket requires enveloped payloads.\nThis seems correct.\n\nWhy low confidence?\nMaybe `emit_billing_record` is *not* supposed to build the envelope, but only normalize?\nIf `emit` normalizes and `broadcast` wraps:\n`res = emit(...)` -> normalized dict.\n`broadcast(...)` -> envelope.\nThey are NOT equal. Test fails.\n\nSo for the test to pass, either:\n1. Both return the same thing (my current patch).\n2. Neither returns an envelope (violates ticket).\n\nTherefore, my current patch is the only way to satisfy both \"return enveloped data\" and \"test passes\".\n\nIs there any other file? `key_normalizer` or `wire_envelope`?\n`wire_envelope.is_valid_envelope` checks `_v == 2`.\n`build_envelope` sets `_v = 2`.\n\nOne potential issue: `extract_normalized_keys(data)` in `broadcast_billing_event` uses original `data`, not normalized. This is likely a bug in the original code (using raw keys on raw data when we might want to check normalized context?), but it's unused (`_ =`). It doesn't affect the return value.\n\nI'll stick with the patch. I will run the tests to confirm no local failures.\n\n=== TOOL: pytest ===\n=== END_TOOL ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "revise_tool_1",
+      "prompt": "=== TOOL_OUTPUT: pytest (exit code 0) ===\n.                                                                        [100%]\n1 passed in 0.01s\n\n=== END_TOOL_OUTPUT ===\n\nYou have 1 tool turn(s) left. Call more tools, or finish (final edits, no tool blocks).",
+      "response": "The local test passes. The patch ensures that `emit_billing_record` returns a properly enveloped message (fixing the \"un-enveloped billing payload\" rejection) and maintains compatibility with `broadcast_billing_event` returning the same value, satisfying the existing unit test.\n\n=== EDIT: billing_emitter.py ===\n<<<<<<< SEARCH\ndef emit_billing_record(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    \"\"\"Emit billing transaction message for downstream consumers.\"\"\"\n    return dict(data)\n\ndef broadcast_billing_event(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    record = emit_billing_record(data, epoch_ms)\n    _ = is_valid_envelope(record)\n    _ = extract_normalized_keys(data)\n    return record\n=======\ndef emit_billing_record(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    \"\"\"Emit billing transaction message for downstream consumers.\"\"\"\n    normalized = normalize_dict_keys(data)\n    return build_envelope(\"billing\", epoch_ms, normalized)\n\ndef broadcast_billing_event(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    record = emit_billing_record(data, epoch_ms)\n    _ = is_valid_envelope(record)\n    _ = extract_normalized_keys(data)\n    return record\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "revise_edit_fix",
+      "prompt": "Not applied: EDIT billing_emitter.py: SEARCH text not found\nReply with corrected EDIT or FILE blocks for these changes only, no tool blocks.",
+      "response": "The previous SEARCH block failed because the sandbox state might have already been updated or the indentation/context didn't match exactly in the second attempt. I will re-read the file content conceptually and apply the edit again with exact matching. Since I cannot re-read, I will assume the standard structure from the initial prompt but ensure the SEARCH block is robust.\n\nWait, if the previous tool turn was just a \"finish\" command that *didn't* apply the patch (because I said \"Call more tools, or finish\"), and then I got an error \"Not applied\", it means my final edit in the previous turn was not applied.\n\nLet's look at the original file content again from the first prompt:\n```python\ndef emit_billing_record(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    \"\"\"Emit billing transaction message for downstream consumers.\"\"\"\n    return dict(data)\n```\n\nI will provide the EDIT block again.\n\n=== EDIT: billing_emitter.py ===\n<<<<<<< SEARCH\ndef emit_billing_record(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    \"\"\"Emit billing transaction message for downstream consumers.\"\"\"\n    return dict(data)\n\ndef broadcast_billing_event(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    record = emit_billing_record(data, epoch_ms)\n    _ = is_valid_envelope(record)\n    _ = extract_normalized_keys(data)\n    return record\n=======\ndef emit_billing_record(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    \"\"\"Emit billing transaction message for downstream consumers.\"\"\"\n    normalized = normalize_dict_keys(data)\n    return build_envelope(\"billing\", epoch_ms, normalized)\n\ndef broadcast_billing_event(data: Dict[str, Any], epoch_ms: int) -> Dict[str, Any]:\n    record = emit_billing_record(data, epoch_ms)\n    _ = is_valid_envelope(record)\n    _ = extract_normalized_keys(data)\n    return record\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-08T18:59:54.545154+00:00"
+}

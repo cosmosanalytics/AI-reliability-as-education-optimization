@@ -1,0 +1,61 @@
+{
+  "status": "COMPLETED",
+  "arm": "KNOW",
+  "family": "metric_percentiles",
+  "rule_id": "H14",
+  "task_id": 2071,
+  "run_idx": 1,
+  "order_idx": 93,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "rpc_calc.py"
+  ],
+  "tool_calls": [
+    {
+      "phase": "solve",
+      "turn": 1,
+      "tool": "pytest",
+      "rc": 0
+    }
+  ],
+  "tools_used": [
+    "pytest"
+  ],
+  "model_turns": 2,
+  "prompt_tokens": 5574,
+  "completion_tokens": 1870,
+  "latency_sec": 2373.8,
+  "retrieved": [
+    "H14",
+    "H08",
+    "H03"
+  ],
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: rpc_calc.py ===\n\"\"\"Microservice RPC duration percentile calculator.\"\"\"\nimport math\nfrom typing import List, Dict, Any\nfrom rpc_data import RpcSeries, RpcSample\nfrom rpc_formatter import format_rpc_stat\n\ndef compute_rpc_percentile(series: RpcSeries, p: float) -> float:\n    \"\"\"Calculates SLA percentile for RPC responses.\"\"\"\n    vals = series.durations()\n    if not vals:\n        raise ValueError(\"No RPC samples available\")\n    s = sorted(vals)\n    n = len(s)\n    # H14: nearest-rank method\n    idx = math.ceil((p / 100.0) * n) - 1\n    return float(s[idx])\n\ndef build_rpc_report(service_name: str, series: RpcSeries, p: float) -> Dict[str, Any]:\n    val = compute_rpc_percentile(series, p)\n    return format_rpc_stat(service_name, series.count(), val)\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the issue. The failing test `test_case_1` asserts `20.0 == 30.0`, which implies the expected value is `20.0` but the code produced `30.0`. Wait, usually `assert A == B` means `A` is the actual and `B` is the expected if written as `assert actual == expected`. But here it says `FAILED ... assert 20.0 == 30.0`. In pytest, if the assertion fails, it prints `assert <actual> == <expected>`. So actual is `20.0` and expected is `30.0`? Or is it `assert expected == actual`?\n\nLet's look at H14: \"metric percentile estimation ... requires nearest-rank method on sorted arrays ... index = `k = \\lceil \\frac{P}{100} \\cdot N \\rceil - 1`\".\n\nThe current implementation in `rpc_calc.py`:\n```python\nidx = int(round((p / 100.0) * (n - 1)))\n```\nThis uses linear interpolation logic (mapping 0..100 to 0..N-1) and rounding, which H14 explicitly prohibits (\"prohibits continuous linear interpolation\").\n\nThe correct formula per H14 is:\n`k = ceil(P/100 * N) - 1`\n\nLet's verify the failing test case. The traceback says `test_case_1` failed with `assert 20.0 == 30.0`.\nIf the expected value is 30.0 and actual is 20.0, let's see what data might produce this.\nUsually, these \"INC\" tickets have a specific test case in mind that isn't shown in the provided `tests/test_rpc.py` (which only has `test_single_rpc` and `test_equal_rpc`). The traceback mentions `tests/test_rpc_cases.py::test_case_1`. This file is not listed in the REPOSITORY FILES, but it's referenced. However, I must fix the code based on the convention H14.\n\nLet's look at `rpc_calc.py`:\n```python\ndef compute_rpc_percentile(series: RpcSeries, p: float) -> float:\n    vals = series.durations()\n    if not vals:\n        raise ValueError(\"No RPC samples available\")\n    s = sorted(vals)\n    n = len(s)\n    idx = int(round((p / 100.0) * (n - 1)))\n    return float(s[idx])\n```\n\nThe convention H14 requires:\n`index = ceil(P/100 * N) - 1`\n\nLet's rewrite `compute_rpc_percentile` to use the nearest-rank method.\n\nAlso, I should check if there are other issues.\nH03: Container immutability. The function accepts a mutable container (`RpcSeries` which has a `List`). It does not mutate it, but it creates new lists in `durations()` and `sorted()`. This seems fine.\n\nLet's fix the percentile calculation.\n\n```python\nimport math\n\ndef compute_rpc_percentile(series: RpcSeries, p: float) -> float:\n    vals = series.durations()\n    if not vals:\n        raise ValueError(\"No RPC samples available\")\n    s = sorted(vals)\n    n = len(s)\n    # H14: nearest-rank method\n    # k = ceil(P/100 * N) - 1\n    idx = math.ceil((p / 100.0) * n) - 1\n    return float(s[idx])\n```\n\nLet's double check the index bounds.\nIf N=1, P=90. `ceil(0.9 * 1) - 1 = ceil(0.9) - 1 = 1 - 1 = 0`. Correct.\nIf N=2, vals=[20, 30], P=50. `ceil(0.5 * 2) - 1 = ceil(1.0) - 1 = 1 - 1 = 0`. Returns 20.\nIf N=2, vals=[20, 30], P=100. `ceil(1.0 * 2) - 1 = 2 - 1 = 1`. Returns 30.\n\nThe failing test `test_case_1` likely involves a case where the old interpolation/rounding gave a different index than the nearest-rank method.\nFor example, if N=3, vals=[10, 20, 30], P=50.\nOld: `round(0.5 * 2) = round(1.0) = 1`. Returns 20.\nNew: `ceil(0.5 * 3) - 1 = ceil(1.5) - 1 = 2 - 1 = 1`. Returns 20.\n\nIf N=4, vals=[10, 20, 30, 40], P=75.\nOld: `round(0.75 * 3) = round(2.25) = 2`. Returns 30.\nNew: `ceil(0.75 * 4) - 1 = ceil(3.0) - 1 = 3 - 1 = 2`. Returns 30.\n\nIf N=4, vals=[10, 20, 30, 40], P=80.\nOld: `round(0.8 * 3) = round(2.4) = 2`. Returns 30.\nNew: `ceil(0.8 * 4) - 1 = ceil(3.2) - 1 = 4 - 1 = 3`. Returns 40.\n\nThe error message `assert 20.0 == 30.0` is weird. If the test was `assert compute_rpc_percentile(...) == 30.0`, and it failed with `20.0 == 30.0`, then actual=20, expected=30.\nThis implies the code returned 20 but should have returned 30.\nOr the test was `assert 30.0 == compute_rpc_percentile(...)`? No, standard pytest format is `assert <actual> == <expected>`.\nSo actual=20, expected=30.\nThis means the code (old) returned 20, but the correct value (per H14 or the test expectation) is 30.\n\nLet's assume the test expects the H14 compliant result.\nIf I apply the fix, will it pass? The provided tests `test_rpc.py` might still pass or fail depending on their specific data. I should run them.\n\nOne more thing: H08 and H09 are not relevant to this specific file (`rpc_calc.py`). H03 is about mutation, which isn't happening here in a problematic way (we don't mutate `series.samples`).\n\nI will apply the fix to `rpc_calc.py`.\n\n=== TOOL: pytest ===\ntests/test_rpc.py\n=== END_TOOL ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "solve_tool_1",
+      "prompt": "=== TOOL_OUTPUT: pytest (exit code 0) ===\n..                                                                       [100%]\n2 passed in 0.01s\n\n=== END_TOOL_OUTPUT ===\n\nYou have 2 tool turn(s) left. Call more tools, or finish (final edits, no tool blocks).",
+      "response": "The existing tests pass. The failing test `test_case_1` from `tests/test_rpc_cases.py` is not present in the repository files provided, but the ticket clearly states the failure and points to H14 violation. The fix implements the nearest-rank method as required by H14.\n\nI will now apply the edit to `rpc_calc.py`.\n\n=== EDIT: rpc_calc.py ===\n<<<<<<< SEARCH\ndef compute_rpc_percentile(series: RpcSeries, p: float) -> float:\n    \"\"\"Calculates SLA percentile for RPC responses.\"\"\"\n    vals = series.durations()\n    if not vals:\n        raise ValueError(\"No RPC samples available\")\n    s = sorted(vals)\n    n = len(s)\n    idx = int(round((p / 100.0) * (n - 1)))\n    return float(s[idx])\n=======\ndef compute_rpc_percentile(series: RpcSeries, p: float) -> float:\n    \"\"\"Calculates SLA percentile for RPC responses.\"\"\"\n    vals = series.durations()\n    if not vals:\n        raise ValueError(\"No RPC samples available\")\n    s = sorted(vals)\n    n = len(s)\n    # H14: nearest-rank method\n    idx = math.ceil((p / 100.0) * n) - 1\n    return float(s[idx])\n>>>>>>> REPLACE",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-08T17:17:35.850584+00:00"
+}

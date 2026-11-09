@@ -1,0 +1,46 @@
+{
+  "status": "COMPLETED",
+  "arm": "KNOW",
+  "family": "metric_percentiles",
+  "rule_id": "H14",
+  "task_id": 2070,
+  "run_idx": 1,
+  "order_idx": 39,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "query_percentile.py"
+  ],
+  "tool_calls": [],
+  "tools_used": [],
+  "model_turns": 1,
+  "prompt_tokens": 1829,
+  "completion_tokens": 2473,
+  "latency_sec": 1968.5,
+  "retrieved": [
+    "H14",
+    "H03",
+    "H02"
+  ],
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: query_percentile.py ===\n\"\"\"Percentile estimation engine for database telemetry.\"\"\"\nimport math\nfrom typing import List\n\ndef calculate_percentile(values: List[float], p: float) -> float:\n    \"\"\"Calculates percentile across sample values using nearest-rank method.\"\"\"\n    if not values:\n        raise ValueError(\"Empty values\")\n    s = sorted(values)\n    n = len(s)\n    # H14: Nearest-rank method\n    k = math.ceil((p / 100.0) * n) - 1\n    return float(s[k])\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the issue.\n\n1.  **Ticket**: INC-7102 - Telemetry query latency SLA calculation anomaly.\n2.  **Failure**: `test_case_1` in `tests/test_query_cases.py` fails with `AssertionError: assert 45.0 == 40.0`. Note that this test file is not listed in the repository files provided, but it exists and is failing. The assertion suggests a percentile value of 45.0 was returned instead of 40.0.\n3.  **Convention H14**: Metric percentile estimation requires the **nearest-rank method** on sorted arrays using index `k = \\lceil \\frac{P}{100} \\cdot N \\rceil - 1`. It prohibits continuous linear interpolation.\n4.  **Current Code (`query_percentile.py`)**: Uses linear interpolation:\n    ```python\n    idx = (p / 100.0) * (n - 1)\n    low = int(math.floor(idx))\n    high = int(math.ceil(idx))\n    frac = idx - low\n    return float(s[low] + frac * (s[high] - s[low]))\n    ```\n    This violates H14.\n\n5.  **Hypothesis for Failure**:\n    The failing test `test_case_1` likely involves a specific dataset where linear interpolation yields 45.0 but nearest-rank yields 40.0.\n    Let's reverse-engineer the test case from the error `assert 45.0 == 40.0`. This implies the function returned 45.0, but expected 40.0.\n    \n    If we use Nearest-Rank: $k = \\lceil \\frac{P}{100} N \\rceil - 1$.\n    \n    Common simple cases:\n    If $N=1$, $k = \\lceil P/100 \\rceil - 1$. For any $P > 0$, $\\lceil P/100 \\rceil = 1$ (assuming $P \\le 100$), so $k=0$. Result is the single element.\n    \n    Let's look at `tests/test_query_monitor.py`. It has `test_empty_breach` and `test_over_threshold`. These don't seem to check specific percentile values like 40.0 vs 45.0 directly in assertions, they check boolean breaches or total counts. The failing test is `tests/test_query_cases.py::test_case_1`.\n\n    Let's assume a standard case often used to demonstrate interpolation vs nearest rank:\n    Values: `[10, 20, 30, 40, 50]` ($N=5$).\n    $P=80$.\n    Nearest Rank: $k = \\lceil 0.8 \\times 5 \\rceil - 1 = \\lceil 4 \\rceil - 1 = 3$. Value at index 3 is **40**.\n    Linear Interpolation: $idx = 0.8 \\times (5-1) = 3.2$. Low=3, High=4. Frac=0.2.\n    $Val = s[3] + 0.2(s[4]-s[3]) = 40 + 0.2(10) = 42$. Not 45.\n\n    Let's try Values: `[10, 20, 30, 40, 50, 60]` ($N=6$).\n    $P=75$.\n    Nearest Rank: $k = \\lceil 0.75 \\times 6 \\rceil - 1 = \\lceil 4.5 \\rceil - 1 = 5 - 1 = 4$. Value at index 4 is **50**.\n    Linear: $idx = 0.75 \\times 5 = 3.75$. Low=3, High=4. Frac=0.75.\n    $Val = 40 + 0.75(10) = 47.5$. Not 45.\n\n    Let's try Values: `[20, 40]` ($N=2$).\n    $P=75$.\n    Nearest Rank: $k = \\lceil 0.75 \\times 2 \\rceil - 1 = \\lceil 1.5 \\rceil - 1 = 2 - 1 = 1$. Value is **40**.\n    Linear: $idx = 0.75 \\times 1 = 0.75$. Low=0, High=1. Frac=0.75.\n    $Val = 20 + 0.75(20) = 35$. Not 45.\n\n    Let's try Values: `[0, 60]` ($N=2$).\n    $P=75$.\n    Nearest Rank: Index 1 -> **60**.\n    Linear: $0 + 0.75(60) = 45$.\n    \n    If the test expects 40.0, maybe the values are different or P is different.\n    \n    Consider Values: `[20, 30, 40, 50]` ($N=4$).\n    $P=75$.\n    Nearest Rank: $k = \\lceil 0.75 \\times 4 \\rceil - 1 = \\lceil 3 \\rceil - 1 = 2$. Value at index 2 is **40**.\n    Linear: $idx = 0.75 \\times 3 = 2.25$. Low=2, High=3. Frac=0.25.\n    $Val = 40 + 0.25(10) = 42.5$.\n\n    Consider Values: `[10, 20, 30, 40, 50, 60, 70]` ($N=7$).\n    $P=71.4...$? No.\n\n    Let's look at the error `assert 45.0 == 40.0`. The code returned 45.0.\n    \n    Try Values: `[20, 50]` ($N=2$).\n    $P=80$.\n    Nearest Rank: $k = \\lceil 1.6 \\rceil - 1 = 1$. Value **50**.\n    Linear: $idx = 0.8$. $20 + 0.8(30) = 44$.\n\n    Try Values: `[10, 40]` ($N=2$).\n    $P=75$.\n    Nearest Rank: Index 1 -> **40**.\n    Linear: $idx = 0.75$. $10 + 0.75(30) = 10 + 22.5 = 32.5$.\n\n    Try Values: `[20, 80]` ($N=2$).\n    $P=62.5$.\n    Nearest Rank: $k = \\lceil 1.25 \\rceil - 1 = 1$. Value **80**.\n    Linear: $idx = 0.625$. $20 + 0.625(60) = 20 + 37.5 = 57.5$.\n\n    Let's try a larger set where interpolation lands exactly on 45 and Nearest Rank lands on 40.\n    \n    If Result=45 (Linear) and Expected=40 (Nearest).\n    \n    Maybe the input is `[10, 20, 30, 40, 50]` and $P=90$?\n    Nearest: $k = \\lceil 4.5 \\rceil - 1 = 4$. Value **50**.\n    Linear: $idx = 0.9 * 4 = 3.6$. $40 + 0.6(10) = 46$.\n\n    Maybe the input is `[0, 10, 20, 30, 40, 50]` ($N=6$)?\n    \n    Actually, I don't need to perfectly reverse engineer the hidden test case `test_query_cases.py` as long as I fix the algorithm according to H14. The failure confirms that linear interpolation is producing wrong results for the SLA metric which requires Nearest-Rank.\n\n    **Plan**:\n    1. Update `query_percentile.py` to implement the Nearest-Rank method: `k = ceil(P/100 * N) - 1`.\n    2. Ensure edge cases are handled (e.g., empty list, though already handled).\n\n    Formula:\n    $N = len(s)$\n    $k = \\lceil \\frac{P}{100} \\times N \\rceil - 1$\n    \n    In Python:\n    `import math`\n    `k = math.ceil((p / 100.0) * n) - 1`\n    \n    Wait, if $P=100$, $N=1$. $k = \\lceil 1 \\rceil - 1 = 0$. Correct.\n    If $P=50$, $N=1$. $k = \\lceil 0.5 \\rceil - 1 = 1 - 1 = 0$. Correct.\n    \n    One detail: H14 says `index = k = \\lceil \\frac{P}{100} \\cdot N \\rceil - 1`.\n    \n    Let's write the fix.\n\n=== EDIT: query_percentile.py ===\n<<<<<<< SEARCH\n\"\"\"Percentile estimation engine for database telemetry.\"\"\"\nimport math\nfrom typing import List\n\ndef calculate_percentile(values: List[float], p: float) -> float:\n    \"\"\"Calculates percentile across sample values.\"\"\"\n    if not values:\n        raise ValueError(\"Empty values\")\n    s = sorted(values)\n    n = len(s)\n    idx = (p / 100.0) * (n - 1)\n    low = int(math.floor(idx))\n    high = int(math.ceil(idx))\n    frac = idx - low\n    return float(s[low] + frac * (s[high] - s[low]))\n=======\n\"\"\"Percentile estimation engine for database telemetry.\"\"\"\nimport math\nfrom typing import List\n\ndef calculate_percentile(values: List[float], p: float) -> float:\n    \"\"\"Calculates percentile across sample values using nearest-rank method.\"\"\"\n    if not values:\n        raise ValueError(\"Empty values\")\n    s = sorted(values)\n    n = len(s)\n    # H14: Nearest-rank method\n    k = math.ceil((p / 100.0) * n) - 1\n    return float(s[k])\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-08T07:19:43.526933+00:00"
+}

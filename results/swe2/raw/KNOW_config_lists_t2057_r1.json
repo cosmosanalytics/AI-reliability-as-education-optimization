@@ -1,0 +1,46 @@
+{
+  "status": "COMPLETED",
+  "arm": "KNOW",
+  "family": "config_lists",
+  "rule_id": "H12",
+  "task_id": 2057,
+  "run_idx": 1,
+  "order_idx": 131,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "gate_combiner.py"
+  ],
+  "tool_calls": [],
+  "tools_used": [],
+  "model_turns": 1,
+  "prompt_tokens": 1758,
+  "completion_tokens": 1734,
+  "latency_sec": 2482.7,
+  "retrieved": [
+    "H03",
+    "H11",
+    "H12"
+  ],
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: gate_combiner.py ===\n\"\"\"Feature gate dictionary combiner.\"\"\"\nfrom typing import Dict, Any, List\n\ndef combine_gate_dicts(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    \"\"\"Combines gate dictionaries.\"\"\"\n    res = dict(base)\n    for k, v in override.items():\n        if k in res and isinstance(res[k], dict) and isinstance(v, dict):\n            res[k] = combine_gate_dicts(res[k], v)\n        elif k in res and isinstance(res[k], list) and isinstance(v, list):\n            # H12: Concatenate base then override, remove duplicates preserving first-seen order\n            combined = res[k] + v\n            seen = set()\n            unique_combined = []\n            for item in combined:\n                if item not in seen:\n                    seen.add(item)\n                    unique_combined.append(item)\n            res[k] = unique_combined\n        else:\n            res[k] = v\n    return res\n\ndef is_valid_gate_key(key: str) -> bool:\n    return bool(key and isinstance(key, str))\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the ticket and the codebase.\n\n1.  **Issue**: Tenant lost base permission roles when custom billing admin roles were assigned.\n2.  **Failing Test**: `test_case_1` expects `['viewer', 'editor', 'billing_admin']` but got `['editor', 'billing_admin']`. Wait, the traceback says `assert ['editor', 'billing_admin'] == ['viewer', 'editor', 'billing_admin']`. This implies the test *expected* the full list including 'viewer', but the code produced a list missing 'viewer'. Or rather, the assertion is `assert actual == expected`. If `actual` is `['editor', 'billing_admin']` and `expected` is `['viewer', 'editor', 'billing_admin']`, then the test failed because 'viewer' was dropped.\n3.  **Root Cause Analysis**: The `combine_gate_dicts` function in `gate_combiner.py` simply overwrites keys: `res[k] = v`. If `default_gates` has `{\"roles\": [\"viewer\", \"editor\"]}` and `tenant_gates` has `{\"roles\": [\"billing_admin\"]}`, the result is `{\"roles\": [\"billing_admin\"]}`. The base roles are lost.\n4.  **Convention Application**:\n    *   **[H12] Configuration merge with list concatenation**: \"merging hierarchical configuration dictionaries... list values concatenated base then override, duplicates removed preserving first-seen order\".\n    *   This convention governs the `combine_gate_dicts` function which merges `default_gates` (base) and `tenant_gates` (override).\n    *   The current implementation violates H12 by replacing list values instead of concatenating them.\n\n**Plan**:\nModify `gate_combiner.py` to implement the logic described in H12 for lists: concatenate base items + override items, remove duplicates preserving first-seen order. For other types, keep the existing overwrite behavior (or recursive dict merge).\n\nLet's verify the exact expectation of H12: `[base_items + override_items]` with duplicates removed preserving first-seen order. This effectively means a union where base elements take precedence in case of conflicts? No, \"first-seen order\" in `base + override` means if an item is in both, the one from `base` appears first and the duplicate from `override` is skipped.\n\nLet's refine the merge logic:\n- If both are dicts: recurse.\n- If both are lists: concatenate base + override, deduplicate keeping first occurrence.\n- Else: override wins (standard dict update).\n\nWait, looking at the failing test trace again: `assert ['editor', 'billing_admin'] == ['viewer', 'editor', 'billing_admin']`.\nThe code produced `['editor', 'billing_admin']`. The expected was `['viewer', 'editor', 'billing_admin']`.\nThis suggests the input might have been:\nBase: `{\"roles\": [\"viewer\", \"editor\"]}`\nOverride: `{\"roles\": [\"billing_admin\"]}`\nCurrent Code Result: `[\"billing_admin\"]` (just the override).\nBut the error says it got `['editor', 'billing_admin']`. This is strange. Let's look at the test file `tests/test_gate_cases.py` which is not provided but implied to exist or be the source of the failure. The provided test file is `tests/test_gate.py`. The traceback mentions `tests/test_gate_cases.py::test_case_1`. I don't have `test_gate_cases.py`.\n\nHowever, the incident description says \"Tenant lost base permission roles\".\nIf Base = `[\"viewer\", \"editor\"]` and Override = `[\"billing_admin\"]`, standard overwrite gives `[\"billing_admin\"]`.\nIf the code produced `['editor', 'billing_admin']`, maybe the base was `[\"admin\"]` and override was `[\"editor\", \"billing_admin\"]`? No, that doesn't fit \"lost base\".\n\nLet's assume the standard H12 behavior is required. The current `combine_gate_dicts` does simple overwrite. It needs to handle lists specifically by concatenating and deduplicating.\n\nLet's write the fix for `gate_combiner.py`.\n\n```python\ndef combine_gate_dicts(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    \"\"\"Combines gate dictionaries.\"\"\"\n    res = dict(base)\n    for k, v in override.items():\n        if k in res and isinstance(res[k], dict) and isinstance(v, dict):\n            res[k] = combine_gate_dicts(res[k], v)\n        elif k in res and isinstance(res[k], list) and isinstance(v, list):\n            # H12: List values concatenated base then override, duplicates removed preserving first-seen order\n            combined = res[k] + v\n            seen = set()\n            unique_combined = []\n            for item in combined:\n                if item not in seen:\n                    seen.add(item)\n                    unique_combined.append(item)\n            res[k] = unique_combined\n        else:\n            res[k] = v\n    return res\n```\n\nLet's double check if I need to create `tests/test_gate_cases.py`? No, \"Do not modify files in tests/\". The test failure is given as context. I just need to fix the source code so that the behavior matches the convention and likely passes the hidden test case which expects base roles to be preserved.\n\nOne detail: H12 says \"list values concatenated base then override... `[base_items + override_items]`\".\nIf base is `['viewer', 'editor']` and override is `['billing_admin']`, result is `['viewer', 'editor', 'billing_admin']`. This matches the expected output in the traceback.\n\nIf base was `['admin']` and override `['editor', 'billing_admin']`, result `['admin', 'editor', 'billing_admin']`.\nThe error message `assert ['editor', 'billing_admin'] == ['viewer', 'editor', 'billing_admin']` is slightly confusing because the *actual* value `['editor', 'billing_admin']` doesn't look like a simple overwrite of `['viewer', 'editor']` by `['billing_admin']`.\nHowever, perhaps the test case inputs were:\nBase: `{\"roles\": [\"viewer\", \"editor\"]}`\nOverride: `{\"roles\": [\"billing_admin\"]}`\nAnd maybe there's some other mutation? Or maybe the traceback in the prompt is just illustrative of the *type* of error (missing base items).\nRegardless, H12 is clear. I will implement list concatenation with deduplication.\n\nI will apply the edit to `gate_combiner.py`.\n\n=== EDIT: gate_combiner.py ===\n<<<<<<< SEARCH\ndef combine_gate_dicts(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    \"\"\"Combines gate dictionaries.\"\"\"\n    res = dict(base)\n    for k, v in override.items():\n        if k in res and isinstance(res[k], dict) and isinstance(v, dict):\n            res[k] = combine_gate_dicts(res[k], v)\n        else:\n            res[k] = v\n    return res\n=======\ndef combine_gate_dicts(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    \"\"\"Combines gate dictionaries.\"\"\"\n    res = dict(base)\n    for k, v in override.items():\n        if k in res and isinstance(res[k], dict) and isinstance(v, dict):\n            res[k] = combine_gate_dicts(res[k], v)\n        elif k in res and isinstance(res[k], list) and isinstance(v, list):\n            # H12: Concatenate base then override, remove duplicates preserving first-seen order\n            combined = res[k] + v\n            seen = set()\n            unique_combined = []\n            for item in combined:\n                if item not in seen:\n                    seen.add(item)\n                    unique_combined.append(item)\n            res[k] = unique_combined\n        else:\n            res[k] = v\n    return res\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-09T00:01:03.555522+00:00"
+}

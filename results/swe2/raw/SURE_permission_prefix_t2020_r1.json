@@ -1,0 +1,128 @@
+{
+  "status": "COMPLETED",
+  "arm": "SURE",
+  "family": "permission_prefix",
+  "rule_id": "H06",
+  "task_id": 2020,
+  "run_idx": 1,
+  "order_idx": 73,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "prefix_validator.py"
+  ],
+  "tool_calls": [
+    {
+      "phase": "solve",
+      "turn": 1,
+      "tool": "pytest",
+      "rc": 4
+    },
+    {
+      "phase": "revise",
+      "turn": 1,
+      "tool": "python",
+      "rc": 0
+    }
+  ],
+  "tools_used": [
+    "pytest",
+    "python"
+  ],
+  "model_turns": 8,
+  "prompt_tokens": 26032,
+  "completion_tokens": 3443,
+  "latency_sec": 4660.0,
+  "sure": {
+    "diagnoses": [
+      {
+        "root_cause": "prefix_validator::is_topic_subscribed where the wrong value is produced",
+        "rule": null,
+        "confidence": 0.95,
+        "root_cause_norm": "prefix_validator::is_topic_subscribed",
+        "rule_norm": "none"
+      },
+      {
+        "root_cause": "prefix_validator::is_topic_subscribed where the wrong value is produced",
+        "rule": null,
+        "confidence": 0.95,
+        "root_cause_norm": "prefix_validator::is_topic_subscribed",
+        "rule_norm": "none"
+      },
+      {
+        "root_cause": "prefix_validator::is_topic_subscribed where the wrong value is produced",
+        "rule": null,
+        "confidence": 0.95,
+        "root_cause_norm": "prefix_validator::is_topic_subscribed",
+        "rule_norm": "none"
+      }
+    ],
+    "stated": 0.9499999999999998,
+    "calibrated": 0.3469387755102041,
+    "conflict": false
+  },
+  "revised": true,
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: prefix_validator.py ===\n\"\"\"Topic path subscription matcher.\"\"\"\ndef is_topic_subscribed(subscribed_pattern: str, event_topic: str) -> bool:\n    if not event_topic.startswith(subscribed_pattern):\n        return False\n    \n    # If exact match, it's a valid subscription\n    if len(event_topic) == len(subscribed_pattern):\n        return True\n    \n    # Check for segment boundary to prevent prefix leaks (e.g., 'orders' matching 'orders_admin')\n    next_char = event_topic[len(subscribed_pattern)]\n    \n    # If the subscription pattern already ends with a delimiter, any following character is valid\n    if subscribed_pattern and subscribed_pattern[-1] in (\":\", \"/\", \".\"):\n        return True\n        \n    # Otherwise, the next character must be a delimiter to ensure we're at a topic boundary\n    return next_char in (\":\", \"/\", \".\")\n\ndef clean_topic_segment(topic: str) -> str:\n    return topic.strip().lower()\n\ndef is_wildcard_subscription(pattern: str) -> bool:\n    return pattern.strip() in (\"*\", \"**\")\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== TOOL: pytest ===\ntests/test_scope_cases.py\n=== END_TOOL ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "solve_tool_1",
+      "prompt": "=== TOOL_OUTPUT: pytest (exit code 4) ===\n\nno tests ran in 0.00s\nERROR: file or directory not found: tests/test_scope_cases.py\n\n\n=== END_TOOL_OUTPUT ===\n\nYou have 2 tool turn(s) left. Call more tools, or finish (final edits, no tool blocks).",
+      "response": "The test file `tests/test_scope_cases.py` does not exist yet, but the ticket describes a failure in it. The issue is that `orders_admin` events are being dispatched to consumers subscribed to `orders`. This happens because `is_topic_subscribed` uses `startswith`, so `\"orders_admin\".startswith(\"orders\")` is `True`.\n\nThe fix needs to ensure that a subscription to `orders` does not match `orders_admin`. The standard way to handle topic hierarchies (like MQTT or Kafka) is to use delimiters. The `WebhookEvent` class already has a `topic_root` method that splits on `::`, but the subscription pattern here seems to be a simple string like \"orders\".\n\nLooking at `prefix_validator.py`, the `is_topic_subscribed` function simply checks if the event topic starts with the subscribed pattern. This is too loose. We need to ensure that the match respects topic boundaries. Since the topics use `::` as a separator (e.g., `orders::created`), we should probably check if the event topic matches the subscription exactly or has the next segment starting after the subscription prefix followed by a delimiter.\n\nHowever, looking at `test_scope.py`, it tests `should_dispatch_webhook(\"orders\", evt)` where `evt.topic_path` is `\"orders::created\"`. This returns `True` because `\"orders::created\".startswith(\"orders\")`. This seems correct for hierarchical topics if we assume `orders` means \"all orders events\".\n\nThe bug is specifically that `orders_admin` is also matched.\n`\"orders_admin::something\".startswith(\"orders\")` is True.\n`\"orders::created\".startswith(\"orders\")` is True.\n\nTo distinguish between `orders` and `orders_admin`, we need to check the character immediately following the subscription prefix in the event topic. If there is a character, it must be a delimiter (like `::` or `/`).\n\nLet's look at the `topic_root` method in `WebhookEvent`. It splits by `::`. This suggests `::` is the hierarchy separator.\nIf a user subscribes to `orders`, they should get `orders::created` but not `orders_admin::something`.\n\nThe fix should be in `prefix_validator.py`'s `is_topic_subscribed`.\nCurrent: `event_topic.startswith(subscribed_pattern)`\nFixed: The event topic must start with the pattern, AND (the pattern is longer than or equal to the event topic OR the next character in the event topic is a delimiter).\n\nWait, if I subscribe to `orders::`, do I get `orders::created`? Yes.\nIf I subscribe to `orders`, do I get `orders::created`? The existing test `test_scope.py` expects this to be True.\nSo `orders` is a prefix for `orders::...`.\n\nThe problem is `orders_admin`.\n`orders_admin` starts with `orders`. But the next char is `_`.\n`orders::created` starts with `orders`. The next chars are `::`.\n\nSo we need to ensure that if the event topic is longer than the subscription pattern, the character at index `len(subscribed_pattern)` must be a delimiter. What constitutes a delimiter? In `topic_root`, it's `::`. But simple subscriptions might just be `orders`.\n\nLet's assume the hierarchy separator is `::` or potentially `/` or `.`. But looking at the code, only `::` is used in examples. However, to be safe, let's look at common patterns. Often `*` or `+` are wildcards, but here we have simple prefix matching.\n\nA robust fix for \"prefix matching with namespace isolation\" is:\n1. Check if `event_topic` starts with `subscribed_pattern`.\n2. If so, check if the event topic is exactly equal to the pattern OR the next character in the event topic is a path separator.\n\nWhat are the separators? In the `WebhookEvent`, `topic_path` uses `::`. It's reasonable to assume `::` is the primary separator. But what if someone subscribes to `orders::`?\nIf subscribed_pattern is `orders`, and event is `orders::created`:\n`len(\"orders\")` is 6. `event_topic[6]` is `:`. This is part of `::`.\n\nLet's refine: The subscription `orders` should match `orders::...`. It should NOT match `orders_admin::...`.\nThe difference is after `orders`, we have `::` vs `_admin`.\n\nSo, the condition should be:\n`event_topic.startswith(subscribed_pattern)` AND (`len(event_topic) == len(subscribed_pattern)` OR `event_topic[len(subscribed_pattern):len(subscribed_pattern)+1]` is a delimiter).\n\nWhat are valid delimiters? The code uses `::`. It's possible other separators exist in broader systems, but based on this repo, `::` is the key. However, often `/` is also used. Let's look at `clean_topic_segment`. It doesn't help much.\n\nLet's assume standard topic separators: `/`, `.`, `::`.\nActually, if I subscribe to `orders`, I likely mean the root of that namespace.\nIf I subscribe to `orders::`, I explicitly mean events under orders.\n\nLet's look at the failing test description: \"Consumer subscribed to 'orders' topic received internal administrative events from 'orders_admin'.\"\n\nThis implies the subscription is literally `\"orders\"`.\nThe event is likely `\"orders_admin::...\"` or similar.\n\nFix in `prefix_validator.py`:\n\n```python\ndef is_topic_subscribed(subscribed_pattern: str, event_topic: str) -> bool:\n    if not event_topic.startswith(subscribed_pattern):\n        return False\n    \n    # If they are equal, it's a match\n    if len(event_topic) == len(subscribed_pattern):\n        return True\n    \n    # Check if the next character is a delimiter to prevent matching prefixes like 'orders' against 'orders_admin'\n    next_char = event_topic[len(subscribed_pattern)]\n    delimiters = (\":\", \"/\", \".\") # Assuming :: starts with :, or / and . are common\n    # Wait, :: starts with :. So checking if next_char is ':' might work for ::\n    # But what if the separator is just '/'?\n    \n    # Let's look at topic_root: split(\"::\"). This implies :: is the segment separator.\n    # If I subscribe to \"orders\", and event is \"orders::created\", next char is ':'.\n    # If I subscribe to \"orders\", and event is \"orders_admin\", next char is '_'.\n    \n    return next_char in (\":\", \"/\", \".\")\n```\n\nWait, if the delimiter is `::`, the first character is `:`.\nIs it possible the subscription includes the delimiter? e.g. `\"orders::\"`.\nIf subscribed_pattern is `\"orders::\"`, and event is `\"orders::created\"`, next char is `c`. This would fail with the above logic if we only check delimiters.\n\nSo the logic should be:\n1. Match prefix.\n2. If prefix ends, it's a match.\n3. If not, the character immediately following the subscription pattern must be a delimiter.\n\nBut what if the subscription pattern itself ends with a delimiter?\nIf I subscribe to `orders::`, and event is `orders::created`.\n`event_topic.startswith(\"orders::\")` is True.\n`len(event_topic)` > `len(subscribed_pattern)`.\nNext char is `c`.\nThis should be a match.\n\nSo, we need to strip trailing delimiters from the subscription pattern? Or handle them in the check.\n\nAlternative approach:\nSplit both by delimiters and compare segments.\nBut `is_topic_subscribed` is likely used for prefix matching which is faster than splitting.\n\nLet's look at `topic_root`. It splits by `::`.\nIf we normalize the subscription to include a trailing delimiter if it doesn't have one?\nNo, that changes semantics.\n\nLet's try this:\nThe subscription `orders` should match `orders`, `orders::created`, `orders::sub::event`.\nIt should NOT match `orders_admin`.\n\nThe key is that `orders` and `orders_admin` are siblings in the namespace if we consider `::` or `/` as separators.\nActually, `orders_admin` looks like a sibling of `orders` if the root is empty? No.\nIf topics are `orders::created` and `orders_admin::updated`, they are distinct roots if we split by `_`? No.\n\nThe most standard fix for this \"leak\" in prefix matching is to require that the match ends at a segment boundary.\nA segment boundary is defined by a delimiter.\n\n```python\ndef is_topic_subscribed(subscribed_pattern: str, event_topic: str) -> bool:\n    if not event_topic.startswith(subscribed_pattern):\n        return False\n    \n    # If exact match\n    if len(event_topic) == len(subscribed_pattern):\n        return True\n    \n    # Check if the next character is a delimiter\n    # Common delimiters in messaging systems are /, :, .\n    # Since the code uses ::, : is a likely delimiter start.\n    next_char = event_topic[len(subscribed_pattern)]\n    \n    # If the subscription pattern already ends with a delimiter, \n    # then any character is fine (it's already scoped).\n    if subscribed_pattern and subscribed_pattern[-1] in (\":\", \"/\", \".\"):\n        return True\n        \n    return next_char in (\":\", \"/\", \".\")\n```\n\nLet's trace:\n1. Sub: `orders`, Event: `orders::created`.\n   - Starts with? Yes.\n   - Len equal? No.\n   - Sub ends with delimiter? No (`s`).\n   - Next char in event? `:`. Is it in delimiters? Yes. -> True. Correct.\n\n2. Sub: `orders`, Event: `orders_admin::updated`.\n   - Starts with? Yes.\n   - Len equal? No.\n   - Sub ends with delimiter? No.\n   - Next char in event? `_`. Is it in delimiters? No. -> False. Correct.\n\n3. Sub: `orders::`, Event: `orders::created`.\n   - Starts with? Yes.\n   - Len equal? No.\n   - Sub ends with delimiter? Yes (`:`). -> True. Correct.\n\n4. Sub: `orders::`, Event: `orders_admin::updated`.\n   - Starts with? No (`orders::` != `orders_a`). -> False. Correct.\n\n5. Sub: `orders`, Event: `orders`.\n   - Starts with? Yes.\n   - Len equal? Yes. -> True. Correct.\n\nThis looks robust.\n\n=== EDIT: prefix_validator.py ===\n<<<<<<< SEARCH\ndef is_topic_subscribed(subscribed_pattern: str, event_topic: str) -> bool:\n    return event_topic.startswith(subscribed_pattern)\n=======\ndef is_topic_subscribed(subscribed_pattern: str, event_topic: str) -> bool:\n    if not event_topic.startswith(subscribed_pattern):\n        return False\n    \n    # If exact match, it's a valid subscription\n    if len(event_topic) == len(subscribed_pattern):\n        return True\n    \n    # Check for segment boundary to prevent prefix leaks (e.g., 'orders' matching 'orders_admin')\n    next_char = event_topic[len(subscribed_pattern)]\n    \n    # If the subscription pattern already ends with a delimiter, any following character is valid\n    if subscribed_pattern and subscribed_pattern[-1] in (\":\", \"/\", \".\"):\n        return True\n        \n    # Otherwise, the next character must be a delimiter to ensure we're at a topic boundary\n    return next_char in (\":\", \"/\", \".\")\n>>>>>>> REPLACE",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_1",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: prefix_validator::is_topic_subscribed where the wrong value is produced\nCONFIDENCE: 95",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_2",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: prefix_validator::is_topic_subscribed where the wrong value is produced\nCONFIDENCE: 95",
+      "finish": "stop"
+    },
+    {
+      "kind": "diag_3",
+      "prompt": "CONFIDENCE CHECK (do not output a patch now). Reply with exactly these lines:\nROOT_CAUSE: <file>::<function> where the wrong value is produced\nCONFIDENCE: <integer 0-100, the probability that your patch passes the hidden CI test suite>",
+      "response": "ROOT_CAUSE: prefix_validator::is_topic_subscribed where the wrong value is produced\nCONFIDENCE: 95",
+      "finish": "stop"
+    },
+    {
+      "kind": "sure_revise",
+      "prompt": "CONFIDENCE HARNESS REPORT on your current patch:\n- calibrated confidence that it passes the hidden CI tests: 0.35 (stated 0.95, mapped through this model's measured calibration)\nThis is below the reliability bar. Re-examine the root cause and the failing value: reproduce it, consider which behaviour the hidden tests most likely expect, and check edge cases. You have 2 more tool turn(s); then finish with your final edits (no tool blocks).",
+      "response": "Let's verify the fix with a quick script to ensure no regressions on existing test cases and that it fixes the leak.\n\n=== TOOL: python ===\nfrom webhook import WebhookEvent\nfrom prefix_validator import is_topic_subscribed\n\n# Test 1: Nominal case from test_scope.py\nevt1 = WebhookEvent(\"orders::created\", \"{'id': 1}\")\nassert is_topic_subscribed(\"orders\", evt1.topic_path) == True, \"Failed nominal\"\nprint(\"Test 1 passed: orders matches orders::created\")\n\n# Test 2: Negative case from test_scope.py\nassert is_topic_subscribed(\"billing\", evt1.topic_path) == False, \"Failed negative\"\nprint(\"Test 2 passed: billing does not match orders::created\")\n\n# Test 3: The leak case - orders_admin should NOT match orders subscription\nevt2 = WebhookEvent(\"orders_admin::update\", \"{'id': 2}\")\nresult = is_topic_subscribed(\"orders\", evt2.topic_path)\nassert result == False, f\"Failed leak check: orders matched orders_admin (got {result})\"\nprint(\"Test 3 passed: orders does not match orders_admin\")\n\n# Test 4: Exact match\nevt3 = WebhookEvent(\"orders\", \"payload\")\nassert is_topic_subscribed(\"orders\", evt3.topic_path) == True, \"Failed exact match\"\nprint(\"Test 4 passed: orders matches orders\")\n\n# Test 5: Subscription with delimiter\nassert is_topic_subscribed(\"orders::\", \"orders::created\") == True, \"Failed sub with delim\"\nprint(\"Test 5 passed: orders:: matches orders::created\")\n\n# Test 6: Deep hierarchy\nevt4 = WebhookEvent(\"orders::sub::event\", \"payload\")\nassert is_topic_subscribed(\"orders\", evt4.topic_path) == True, \"Failed deep match\"\nprint(\"Test 6 passed: orders matches orders::sub::event\")\n\n# Test 7: Another leak case with different separator if any?\n# Assuming :: is main, but let's check / just in case\nassert is_topic_subscribed(\"orders\", \"orders/created\") == True, \"Failed slash match\"\nprint(\"Test 7 passed: orders matches orders/created\")\n\nassert is_topic_subscribed(\"orders\", \"orders-admin::event\") == False, \"Failed dash leak\"\nprint(\"Test 8 passed: orders does not match orders-admin\")\n\nprint(\"All manual tests passed!\")\n=== END_TOOL ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "revise_tool_1",
+      "prompt": "=== TOOL_OUTPUT: python (exit code 0) ===\nTest 1 passed: orders matches orders::created\nTest 2 passed: billing does not match orders::created\nTest 3 passed: orders does not match orders_admin\nTest 4 passed: orders matches orders\nTest 5 passed: orders:: matches orders::created\nTest 6 passed: orders matches orders::sub::event\nTest 7 passed: orders matches orders/created\nTest 8 passed: orders does not match orders-admin\nAll manual tests passed!\n\n=== END_TOOL_OUTPUT ===\n\nYou have 1 tool turn(s) left. Call more tools, or finish (final edits, no tool blocks).",
+      "response": "The manual tests pass and cover the core issue (prefix leak) as well as nominal cases. The fix correctly enforces topic boundaries using delimiters `:`, `/`, and `.`. This aligns with standard messaging patterns and the specific `::` separator used in the codebase.\n\n=== EDIT: prefix_validator.py ===\n<<<<<<< SEARCH\ndef is_topic_subscribed(subscribed_pattern: str, event_topic: str) -> bool:\n    return event_topic.startswith(subscribed_pattern)\n=======\ndef is_topic_subscribed(subscribed_pattern: str, event_topic: str) -> bool:\n    if not event_topic.startswith(subscribed_pattern):\n        return False\n    \n    # If exact match, it's a valid subscription\n    if len(event_topic) == len(subscribed_pattern):\n        return True\n    \n    # Check for segment boundary to prevent prefix leaks (e.g., 'orders' matching 'orders_admin')\n    next_char = event_topic[len(subscribed_pattern)]\n    \n    # If the subscription pattern already ends with a delimiter, any following character is valid\n    if subscribed_pattern and subscribed_pattern[-1] in (\":\", \"/\", \".\"):\n        return True\n        \n    # Otherwise, the next character must be a delimiter to ensure we're at a topic boundary\n    return next_char in (\":\", \"/\", \".\")\n>>>>>>> REPLACE",
+      "finish": "stop"
+    },
+    {
+      "kind": "revise_edit_fix",
+      "prompt": "Not applied: EDIT prefix_validator.py: SEARCH text not found\nReply with corrected EDIT or FILE blocks for these changes only, no tool blocks.",
+      "response": "=== TOOL: python ===\ncat -n prefix_validator.py\n=== END_TOOL ===",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-08T13:01:41.688069+00:00"
+}

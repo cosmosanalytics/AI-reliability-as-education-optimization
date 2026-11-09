@@ -1,0 +1,61 @@
+{
+  "status": "COMPLETED",
+  "arm": "KNOW",
+  "family": "config_merge",
+  "rule_id": "H03",
+  "task_id": 2006,
+  "run_idx": 3,
+  "order_idx": 157,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "env_loader.py"
+  ],
+  "tool_calls": [
+    {
+      "phase": "solve",
+      "turn": 1,
+      "tool": "know",
+      "rc": 0
+    }
+  ],
+  "tools_used": [
+    "know"
+  ],
+  "model_turns": 2,
+  "prompt_tokens": 4679,
+  "completion_tokens": 1813,
+  "latency_sec": 525.8,
+  "retrieved": [
+    "H03",
+    "H12",
+    "H11"
+  ],
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: env_loader.py ===\n\"\"\"Environment settings loader and merger.\"\"\"\nfrom typing import Dict, Any\nimport copy\n\nDEFAULT_CONN_TIMEOUT = 30\n\ndef load_system_env() -> Dict[str, Any]:\n    return {\"timeout\": DEFAULT_CONN_TIMEOUT}\n\ndef _merge_dicts(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    \"\"\"Recursively merge override into base, following H12.\"\"\"\n    result = copy.deepcopy(base)\n    for key, value in override.items():\n        if key in result and isinstance(result[key], dict) and isinstance(value, dict):\n            result[key] = _merge_dicts(result[key], value)\n        elif key in result and isinstance(result[key], list) and isinstance(value, list):\n            # H12: list values concatenated base then override, duplicates removed preserving first-seen order\n            seen = set()\n            new_list = []\n            for item in result[key] + value:\n                # Use a string representation or the item itself if hashable; \n                # assuming simple types for config lists. If not hashable, this might need adjustment,\n                # but typically config lists are strings/ints.\n                try:\n                    key_item = item if isinstance(item, (str, int, float, bool)) else str(item)\n                except TypeError:\n                    key_item = str(item)\n                \n                if key_item not in seen:\n                    seen.add(key_item)\n                    new_list.append(item)\n            result[key] = new_list\n        else:\n            result[key] = copy.deepcopy(value)\n    return result\n\ndef merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:\n    \"\"\"Merge environment settings with defensive copying and recursive merging.\"\"\"\n    return _merge_dicts(base_settings, override_settings)\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the problem.\n\n1.  **Ticket**: SEC-402 describes \"Shared database connection pool defaults corrupted across worker threads following tenant override.\" This suggests that state is being shared or mutated incorrectly when merging configurations for different tenants/threads.\n2.  **Test Failure**: `test_pool_defaults_isolation` fails with `AssertionError: assert 99 == 2`. This implies one test's configuration (likely setting a value like `max_connections` to 99) is leaking into another test's expectation (expecting 2).\n3.  **Code Analysis**:\n    *   `env_loader.py`: `merge_env_settings` does `merged = dict(base_settings)` followed by `merged.update(override_settings)`.\n        *   `dict(base_settings)` creates a shallow copy of the top-level dictionary.\n        *   If `base_settings` contains nested mutable objects (like lists or dicts under keys like `\"pool\"`), those nested objects are *shared* references between the original `base_settings` and the new `merged` dict.\n        *   If `override_settings` also shares these nested objects (e.g., if `base_template` is reused across calls without deep copying), mutations to the nested structures will affect shared state.\n    *   `pool.py`: `configure_pool` calls `merge_env_settings`. It passes `base_template` and `overrides`.\n    *   **Convention H03**: \"container immutability / defensive allocation\". Prohibits mutating caller-supplied arguments in place. Requires defensive deep copies or new collection instances before modification.\n    *   The `merge_env_settings` function performs a shallow copy. If the callers (or the test harness) pass mutable dictionaries that are reused, and if the merge logic mutates nested structures (which `.update()` doesn't do for top-level keys, but subsequent code might mutate the resulting dict's nested values), we have a problem.\n    *   However, looking closer at `merge_env_settings`: it returns a new dict, but the values inside are references to the original dicts/lists. If `override_settings` has a `\"pool\"` key which is a dict, and `base_settings` also has a `\"pool\"` key which is a dict, `merged.update(override_settings)` will replace the top-level reference to `\"pool\"`. This seems safe *unless* the intention is to merge nested dicts recursively (like H12 suggests for config merging, though H12 specifically mentions list concatenation).\n    *   Let's look at the test failure again. `assert 99 == 2`.\n    *   The provided `tests/test_pool.py` only has `test_basic_pool_config`. The failing test is `tests/test_pool_cases.py::test_pool_defaults_isolation`. I don't see the content of `test_pool_cases.py`.\n    *   However, the ticket says \"Shared database connection pool defaults corrupted across worker threads\". This strongly implies that `merge_env_settings` is not performing a **deep copy**, so if the `base_template` or `overrides` dictionaries contain mutable nested structures (like lists for config items or dicts for pool params), and these are reused or mutated, they corrupt shared state.\n    *   Convention H03 explicitly requires \"defensive deep copies\". The current implementation only does a shallow copy (`dict(base_settings)`).\n\nLet's verify if `merge_env_settings` is the culprit. If `base_settings` is `{\"pool\": {\"min\": 5}}` and `override_settings` is `{\"pool\": {\"max\": 20}}`, `merged` becomes `{\"pool\": {\"max\": 20}}`. The inner dict is from `override_settings`. If `override_settings` is reused or mutated later, it affects the result. But more importantly, if `base_settings` is a global constant or shared template, and we modify the returned `merged` dict's nested values (e.g., `merged['pool']['min'] = 100`), does it affect `base_settings`? No, because `update` replaced the key.\nBUT, if the merge logic was supposed to *merge* nested dicts (H12 style: \"nested dictionaries merged recursively\"), then the current code fails that too. The ticket mentions \"tenant override\", which often implies merging a global default with a tenant-specific override. If we just `update`, we lose keys in `base` that aren't in `override`.\n\nLet's look at H12: \"configuration merge with list concatenation... nested dictionaries merged recursively\".\nThe current `merge_env_settings` does NOT merge nested dicts recursively. It replaces them.\nIf the test expects isolation, it likely creates two configs, merges them, and checks that one doesn't affect the other.\n\nLet's assume the standard issue with shallow copies in config merging:\n1.  We need to deep copy `base_settings`.\n2.  We should recursively merge nested dictionaries (per H12).\n\nLet's fix `env_loader.py` to:\n1.  Deep copy `base_settings`.\n2.  Recursively update/merge with `override_settings`.\n\nWait, H12 says \"list values concatenated... duplicates removed preserving first-seen order\". It doesn't explicitly say dicts are merged recursively for *all* cases, but \"nested dictionaries merged recursively\" is listed under `requires -> Behavior` for H12.\nSo, `merge_env_settings` should:\n- Deep copy base.\n- Recursively merge override into the copy.\n\nLet's write a recursive merge helper.\n\n=== TOOL: know ===\nH12\n=== END_TOOL ===",
+      "finish": "stop"
+    },
+    {
+      "kind": "solve_tool_1",
+      "prompt": "=== TOOL_OUTPUT: know (exit code 0) ===\n[H12] Convention: configuration merge with list concatenation\n  applies_to -> Scope: merging hierarchical configuration dictionaries\n  requires -> Behavior: nested dictionaries merged recursively\n  requires -> Behavior: list values concatenated base then override, duplicates removed preserving first-seen order = `[base_items + override_items]`\n  prohibits -> Alternative: replacing list values with the override list\n=== END_TOOL_OUTPUT ===\n\nYou have 2 tool turn(s) left. Call more tools, or finish (final edits, no tool blocks).",
+      "response": "I need to fix `env_loader.py` to implement recursive merging and defensive copying per H12 and H03. The current shallow copy and simple update is causing state corruption because nested dicts are shared/replaced instead of merged, and mutable containers aren't defensively copied.\n\nHere is the plan:\n1.  Replace `merge_env_settings` in `env_loader.py` with a version that:\n    *   Deep copies the base settings (H03).\n    *   Recursively merges override settings into the copy (H12).\n    *   Handles list concatenation for lists (H12).\n\n=== EDIT: env_loader.py ===\n<<<<<<< SEARCH\n\"\"\"Environment settings loader and merger.\"\"\"\nfrom typing import Dict, Any\n\nDEFAULT_CONN_TIMEOUT = 30\n\ndef load_system_env() -> Dict[str, Any]:\n    return {\"timeout\": DEFAULT_CONN_TIMEOUT}\n\ndef merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:\n    merged = dict(base_settings)\n    merged.update(override_settings)\n    return merged\n=======\n\"\"\"Environment settings loader and merger.\"\"\"\nfrom typing import Dict, Any\nimport copy\n\nDEFAULT_CONN_TIMEOUT = 30\n\ndef load_system_env() -> Dict[str, Any]:\n    return {\"timeout\": DEFAULT_CONN_TIMEOUT}\n\ndef _merge_dicts(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    \"\"\"Recursively merge override into base, following H12.\"\"\"\n    result = copy.deepcopy(base)\n    for key, value in override.items():\n        if key in result and isinstance(result[key], dict) and isinstance(value, dict):\n            result[key] = _merge_dicts(result[key], value)\n        elif key in result and isinstance(result[key], list) and isinstance(value, list):\n            # H12: list values concatenated base then override, duplicates removed preserving first-seen order\n            seen = set()\n            new_list = []\n            for item in result[key] + value:\n                # Use a string representation or the item itself if hashable; \n                # assuming simple types for config lists. If not hashable, this might need adjustment,\n                # but typically config lists are strings/ints.\n                try:\n                    key_item = item if isinstance(item, (str, int, float, bool)) else str(item)\n                except TypeError:\n                    key_item = str(item)\n                \n                if key_item not in seen:\n                    seen.add(key_item)\n                    new_list.append(item)\n            result[key] = new_list\n        else:\n            result[key] = copy.deepcopy(value)\n    return result\n\ndef merge_env_settings(base_settings: Dict[str, Any], override_settings: Dict[str, Any]) -> Dict[str, Any]:\n    \"\"\"Merge environment settings with defensive copying and recursive merging.\"\"\"\n    return _merge_dicts(base_settings, override_settings)\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-09T02:55:33.292830+00:00"
+}

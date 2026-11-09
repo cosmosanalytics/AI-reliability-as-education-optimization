@@ -1,0 +1,46 @@
+{
+  "status": "COMPLETED",
+  "arm": "KNOW",
+  "family": "state_transitions",
+  "rule_id": "H15",
+  "task_id": 2078,
+  "run_idx": 1,
+  "order_idx": 60,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "escrow_engine.py"
+  ],
+  "tool_calls": [],
+  "tools_used": [],
+  "model_turns": 1,
+  "prompt_tokens": 2018,
+  "completion_tokens": 1701,
+  "latency_sec": 1392.2,
+  "retrieved": [
+    "H15",
+    "H03",
+    "H04"
+  ],
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: escrow_engine.py ===\n\"\"\"Escrow transaction schemas and transition validator.\"\"\"\nfrom dataclasses import dataclass, field\nfrom typing import List, Tuple, Any, Dict, Set\nfrom errors import ServiceError\n\n@dataclass\nclass EscrowAccount:\n    entity_id: str\n    amount_cents: int\n    state: str = \"INITIAL\"\n    audit_trail: List[Tuple[Any, ...]] = field(default_factory=list)\n\n    def is_finalized(self) -> bool:\n        return self.state in {\"RELEASED\", \"REFUNDED\"}\n\nESCROW_TRANSITIONS: Dict[str, Set[str]] = {\n    \"INITIAL\": {\"HELD\"},\n    \"HELD\": {\"RELEASED\", \"REFUNDED\", \"DISPUTED\"},\n    \"DISPUTED\": {\"RELEASED\", \"REFUNDED\"},\n    \"RELEASED\": set(),\n    \"REFUNDED\": set(),\n}\n\ndef execute_escrow_transition(escrow: EscrowAccount, target_state: str, actor_id: str, timestamp_ms: int) -> None:\n    \"\"\"Validates and executes escrow state change.\"\"\"\n    cur = escrow.state\n    allowed = ESCROW_TRANSITIONS.get(cur, set())\n    if target_state not in allowed:\n        raise ServiceError(code=\"ERR_INVALID_TRANSITION\", message=f\"Cannot transition from {cur} to {target_state}\")\n    \n    escrow.audit_trail.append((\"STATE_TRANSITION\", escrow.entity_id, cur, target_state, actor_id, timestamp_ms))\n    escrow.state = target_state\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the ticket and the code.\n\n1.  **Issue**: The test `test_case_1` in `tests/test_escrow_cases.py` is failing with `AssertionError: assert 0 == 1`. This implies a test is expecting a specific outcome (likely an exception or a state change) that isn't happening, or the error code is wrong.\n2.  **Convention H15**: State machine transition validation requires:\n    *   Validate allowed transitions.\n    *   Audit tuple format: `(\"STATE_TRANSITION\", entity_id, old_state, new_state, actor_id, timestamp_ms)`.\n    *   Error literal for invalid transitions: `ServiceError(code=\"ERR_INVALID_TRANSITION\", ...)`.\n3.  **Current Code (`escrow_engine.py`)**:\n    *   Raises `ServiceError(code=\"ERR_ESCROW_INVALID_STATE\", message=\"Bad state\")` on invalid transition. This violates H15's literal requirement (`ERR_INVALID_TRANSITION`).\n    *   Does not record the audit tuple in `escrow.audit_trail`. This violates H15's format requirement.\n4.  **Convention H04**: Structured service exception hierarchy. It defines `ServiceError` usage but H15 is more specific about the error code and audit behavior for state transitions.\n\nThe test file mentioned in the traceback is `tests/test_escrow_cases.py`, but only `tests/test_escrow.py` is provided in the repository files list. However, the failing test name `test_case_1` suggests a parameterized or specific case test. The assertion `assert 0 == 1` usually means one side is an actual value (0) and the other is expected (1). If the code raises an exception, it might crash before returning. If it doesn't raise when it should, or returns wrong data, that could cause it.\n\nGiven H15, the fix in `escrow_engine.py` must:\n1.  Change the error code to `\"ERR_INVALID_TRANSITION\"`.\n2.  Add the audit tuple to `escrow.audit_trail` *before* raising the error (or on successful transition? The convention says \"audit tuple\", usually implying recording the attempt or the change. Standard practice is to record valid transitions, but often invalid attempts are also logged for security. Let's look at H15 again: \"audit tuple = ...\". It doesn't explicitly say *only* valid ones, but typically audit trails record what happened. However, if an exception is raised, the state doesn't change. Let's assume we should log the attempt even if invalid, or just fix the error code and add logging for valid transitions?\n    *   Re-reading H15: \"requires -> Behavior: validate allowed transitions\". \"has_format -> Format: audit tuple...\". It doesn't explicitly say \"log on failure\". But usually, \"audit\" implies recording state changes. If the transition is invalid, no state change occurs. However, the incident is about \"non-standard error codes\". The primary fix is likely the error code.\n    *   Let's check if the test expects an audit trail entry. Without the test file content, I have to infer. The traceback `FAILED tests/test_escrow_cases.py::test_case_1 - AssertionError: assert 0 == 1` is weird for an exception. If an exception was raised, pytest would show `E Exception: ...`. An assertion error suggests code continued execution.\n    *   Hypothesis: The test expects a valid transition to succeed and perhaps checks the audit trail or the return value? Or maybe the test expects an invalid transition to raise `ERR_INVALID_TRANSITION` but it raises `ERR_ESCROW_INVALID_STATE`, and the test is catching the exception and checking the code? If it catches `ServiceError` and checks `.code == \"ERR_INVALID_TRANSITION\"`, then getting `\"ERR_ESCROW_INVALID_STATE\"` would fail. But that would be an AssertionError on the string comparison, not `0 == 1`.\n    *   Another Hypothesis: The test `test_case_1` might be checking if a transition is *invalid* and expects it to *fail*. If the code *doesn't* raise (bug), then the state doesn't change.\n    *   Let's look at `ESCROW_TRANSITIONS`. `\"INITIAL\": {\"HELD\"}`. If test calls `update_escrow(e, \"RELEASED\", ...)` from INITIAL, it should fail.\n    *   If the test is `test_escrow_cases.py`, it likely has multiple cases.\n    *   Let's focus on the explicit H15 violations: Wrong Error Code and Missing Audit Log.\n\nI will fix `escrow_engine.py` to:\n1.  Use `code=\"ERR_INVALID_TRANSITION\"`.\n2.  Append the audit tuple to `escrow.audit_trail` upon successful transition (standard auditing) OR on every attempt? H15 says \"audit tuple = ...\". It's ambiguous if it applies to failures. However, \"incident... raised non-standard error codes\" points strongly to the error code. The missing audit log is also a violation of \"requires... audit\". I will add the audit log for successful transitions as that is standard, and potentially for failed ones if it helps debugging, but H15 format includes `new_state`. If transition fails, `new_state` is what was *requested*. I'll record the attempt in the audit trail for both success and failure to be safe and compliant with \"audit\", using the requested `target_state` as `new_state` in the tuple even if it failed? Or only on success?\n    *   Let's look at the dataclass: `audit_trail: List[Tuple[Any, ...]] = field(default_factory=list)`.\n    *   I'll add the audit record for successful transitions. If the test checks for audit records, this is needed. If it checks for error codes, that's also needed.\n\nLet's refine the fix for `escrow_engine.py`:\n*   Change error code to `ERR_INVALID_TRANSITION`.\n*   Add audit logging. I will add it on *successful* transitions first. If the test fails because of missing logs on failure, I might need to adjust, but standard state machine auditing usually logs the transition that actually happened. However, H15 doesn't specify \"only successful\". It just says \"audit tuple\". I'll log on success.\n\nWait, if the test is `test_case_1` and it asserts `0 == 1`, maybe it's checking `len(audit_trail)`? If no audit happens, len is 0. If expected is 1. This fits!\nSo, I must add the audit tuple to `escrow.audit_trail`.\n\nPlan:\n1.  Edit `escrow_engine.py`:\n    *   Update error code to `\"ERR_INVALID_TRANSITION\"`.\n    *   Add `escrow.audit_trail.append((\"STATE_TRANSITION\", escrow.entity_id, cur, target_state, actor_id, timestamp_ms))` on successful transition.\n\nLet's verify the tuple format from H15: `(\"STATE_TRANSITION\", entity_id, old_state, new_state, actor_id, timestamp_ms)`.\nMy code: `cur` is `old_state`, `target_state` is `new_state`. This matches.\n\n=== EDIT: escrow_engine.py ===\n<<<<<<< SEARCH\n    if target_state not in allowed:\n        # Erroneous error code and missing audit tuple in unpatched code\n        raise ServiceError(code=\"ERR_ESCROW_INVALID_STATE\", message=\"Bad state\")\n    escrow.state = target_state\n=======\n    if target_state not in allowed:\n        raise ServiceError(code=\"ERR_INVALID_TRANSITION\", message=f\"Cannot transition from {cur} to {target_state}\")\n    \n    escrow.audit_trail.append((\"STATE_TRANSITION\", escrow.entity_id, cur, target_state, actor_id, timestamp_ms))\n    escrow.state = target_state\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-08T10:10:14.077146+00:00"
+}

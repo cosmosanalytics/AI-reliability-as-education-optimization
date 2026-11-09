@@ -1,0 +1,46 @@
+{
+  "status": "COMPLETED",
+  "arm": "KNOW",
+  "family": "config_lists",
+  "rule_id": "H12",
+  "task_id": 2059,
+  "run_idx": 1,
+  "order_idx": 174,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "matcher_utils.py"
+  ],
+  "tool_calls": [],
+  "tools_used": [],
+  "model_turns": 1,
+  "prompt_tokens": 1802,
+  "completion_tokens": 816,
+  "latency_sec": 396.9,
+  "retrieved": [
+    "H12",
+    "H03",
+    "H06"
+  ],
+  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M",
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5
+  },
+  "final_patch": "=== FILE: matcher_utils.py ===\n\"\"\"Route path matching and dictionary consolidation.\"\"\"\nfrom typing import Dict, Any, List\n\ndef deep_merge_matchers(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    res = dict(base)\n    for k, v in override.items():\n        if k in res and isinstance(res[k], dict) and isinstance(v, dict):\n            res[k] = deep_merge_matchers(res[k], v)\n        elif k in res and isinstance(res[k], list) and isinstance(v, list):\n            # H12: List values concatenated base then override, duplicates removed preserving first-seen order\n            seen = set()\n            merged_list = []\n            for item in res[k] + v:\n                if item not in seen:\n                    seen.add(item)\n                    merged_list.append(item)\n            res[k] = merged_list\n        else:\n            res[k] = v\n    return res\n\ndef normalize_prefix(path: str) -> str:\n    return \"/\" + path.strip(\"/\")\n=== END ===\n",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "Let's analyze the issue.\n\n1.  **Ticket**: INC-9206 - Authentication proxy rejected calls because header matchers were truncated by environment override.\n2.  **Traceback**: `FAILED tests/test_mesh_cases.py::test_case_1 - AssertionError: assert ['Authorization', 'X-Trace-Id'] == ['X-Tenant-Id', 'Authorization', 'X-Trace-Id']`\n    *   The test expects `['X-Tenant-Id', 'Authorization', 'X-Trace-Id']`.\n    *   The actual result was `['Authorization', 'X-Trace-Id']`.\n    *   This implies a list (likely headers or matchers) is being replaced by the override instead of concatenated/merged.\n3.  **Conventions**:\n    *   **H12** (`configuration merge with list concatenation`): When merging hierarchical configuration dictionaries, list values should be concatenated `base_items + override_items`, removing duplicates while preserving first-seen order. It prohibits replacing list values with the override list.\n    *   **H03** (`container immutability / defensive allocation`): Functions accepting mutable containers should not mutate them in place; they should return newly allocated structures.\n\n4.  **Current Code Analysis**:\n    *   `matcher_utils.py`: `deep_merge_matchers` currently replaces lists entirely if the key exists in both base and override (`res[k] = v`). It only recurses for nested dicts.\n    *   This violates H12. Lists should be merged (concatenated + deduped).\n\n5.  **Fix Plan**:\n    *   Modify `deep_merge_matchers` in `matcher_utils.py` to handle lists according to H12: if both base and override have lists for a key, concatenate them (`base_list + override_list`) and remove duplicates while preserving the order of first appearance.\n\nLet's verify the test file mentioned in the traceback `tests/test_mesh_cases.py`. It doesn't exist in the provided file list, but `tests/test_mesh.py` does. The traceback mentions `test_case_1`. I should check if there are other test files or if the traceback refers to a file not listed but present in the repo structure implied by the context. However, the instructions say \"Read the whole ticket and every repository file below.\" The provided files are limited. The error message gives strong clues: list truncation.\n\nThe fix is in `matcher_utils.py`.\n\n=== EDIT: matcher_utils.py ===\n<<<<<<< SEARCH\ndef deep_merge_matchers(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    res = dict(base)\n    for k, v in override.items():\n        if k in res and isinstance(res[k], dict) and isinstance(v, dict):\n            res[k] = deep_merge_matchers(res[k], v)\n        else:\n            res[k] = v\n    return res\n=======\ndef deep_merge_matchers(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    res = dict(base)\n    for k, v in override.items():\n        if k in res and isinstance(res[k], dict) and isinstance(v, dict):\n            res[k] = deep_merge_matchers(res[k], v)\n        elif k in res and isinstance(res[k], list) and isinstance(v, list):\n            # H12: List values concatenated base then override, duplicates removed preserving first-seen order\n            seen = set()\n            merged_list = []\n            for item in res[k] + v:\n                if item not in seen:\n                    seen.add(item)\n                    merged_list.append(item)\n            res[k] = merged_list\n        else:\n            res[k] = v\n    return res\n>>>>>>> REPLACE\n=== END ===",
+      "finish": "stop"
+    }
+  ],
+  "timestamp": "2026-11-09T04:06:44.997434+00:00"
+}
