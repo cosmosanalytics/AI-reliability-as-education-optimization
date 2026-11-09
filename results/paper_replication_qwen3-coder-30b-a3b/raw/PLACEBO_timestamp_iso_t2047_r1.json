@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "PLACEBO",
+  "dimension": "Books (control)",
+  "family": "timestamp_iso",
+  "rule_id": "H09",
+  "task_id": 2047,
+  "run_idx": 1,
+  "stage": "extremes",
+  "order_idx": 34,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "webhook_sender.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2207,
+  "candidate_tokens": 178,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen3-coder-30b-a3b-instruct-q4_k_m",
+  "cfg_model_id": "qwen3-coder-30b-a3b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: webhook_sender.py ===\n\"\"\"Webhook delivery payload construction.\"\"\"\nfrom datetime import datetime, timezone\nfrom typing import Dict, Any\nfrom envelope_schema import WebhookEnvelope\nfrom signature_utils import generate_delivery_headers\n\ndef build_webhook_payload(topic: str, data: Dict[str, Any], dt: datetime) -> WebhookEnvelope:\n    hdrs = generate_delivery_headers(topic)\n    ts = dt.strftime(\"%Y-%m-%dT%H:%M:%S.%fZ\")\n    # Truncate microseconds to 3 decimal places for compatibility\n    ts = ts[:-1] if ts.endswith('000Z') else ts\n    env = WebhookEnvelope(topic=topic, body=data, sent_at=ts, headers=hdrs)\n    if not env.is_dispatched():\n        raise ValueError(\"Invalid envelope state\")\n    return env\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: webhook_sender.py ===\n\"\"\"Webhook delivery payload construction.\"\"\"\nfrom datetime import datetime, timezone\nfrom typing import Dict, Any\nfrom envelope_schema import WebhookEnvelope\nfrom signature_utils import generate_delivery_headers\n\ndef build_webhook_payload(topic: str, data: Dict[str, Any], dt: datetime) -> WebhookEnvelope:\n    hdrs = generate_delivery_headers(topic)\n    ts = dt.strftime(\"%Y-%m-%dT%H:%M:%S.%fZ\")\n    # Truncate microseconds to 3 decimal places for compatibility\n    ts = ts[:-1] if ts.endswith('000Z') else ts\n    env = WebhookEnvelope(topic=topic, body=data, sent_at=ts, headers=hdrs)\n    if not env.is_dispatched():\n        raise ValueError(\"Invalid envelope state\")\n    return env\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-11-08T01:15:50.867029+00:00"
+}

@@ -1,0 +1,41 @@
+{
+  "status": "COMPLETED",
+  "arm": "PLACEBO",
+  "dimension": "Books (control)",
+  "family": "event_ordering",
+  "rule_id": "H07",
+  "task_id": 2024,
+  "run_idx": 3,
+  "stage": "extremes",
+  "order_idx": 2,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "sequencer.py",
+    "tests/test_sequencer_cases.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2114,
+  "candidate_tokens": 532,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen3-coder-30b-a3b-instruct-q4_k_m",
+  "cfg_model_id": "qwen3-coder-30b-a3b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: sort_helper.py ===\n\"\"\"Internal stream sorting helper.\"\"\"\nfrom typing import List\nfrom event_packet import EventPacket\n\ndef order_packets(packets: List[EventPacket]) -> List[EventPacket]:\n    return sorted(packets, key=lambda p: (-p.severity, p.stream_id))\n\ndef get_max_severity(packets: List[EventPacket]) -> int:\n    return max((p.severity for p in packets), default=0)\n\ndef count_critical_packets(packets: List[EventPacket]) -> int:\n    return sum(1 for p in packets if p.is_critical())\n=== END ===\n=== FILE: sequencer.py ===\n\"\"\"Stream event sequencer.\"\"\"\nfrom typing import List\nfrom sort_helper import order_packets, get_max_severity\nfrom event_packet import EventPacket\n\ndef sequence_stream_batch(packets: List[EventPacket]) -> List[EventPacket]:\n    \"\"\"Sequence event packets by severity.\n    \n    For packets with equal severity, sort by stream_id to ensure\n    deterministic ordering and prevent out-of-order stream tiebreaker\n    issues that can cause state replication desync.\n    \"\"\"\n    return order_packets(packets)\n\ndef get_highest_priority_packet(packets: List[EventPacket]):\n    ordered = sequence_stream_batch(packets)\n    return ordered[0] if ordered else None\n\ndef get_batch_severity_peak(packets: List[EventPacket]) -> int:\n    return get_max_severity(packets)\n=== END ===\n=== FILE: tests/test_sequencer_cases.py ===\nimport pytest\nfrom event_packet import EventPacket\nfrom sequencer import sequence_stream_batch, get_highest_priority_packet\n\ndef test_stream_sequencing():\n    \"\"\"Test that packets with same severity are ordered by stream_id to avoid desync.\"\"\"\n    p1 = EventPacket(\"s2\", 5, \"high\")\n    p2 = EventPacket(\"s1\", 5, \"high\")\n    res = sequence_stream_batch([p1, p2])\n    # Should be ordered by stream_id when severity is equal\n    assert res[0].stream_id == \"s1\"\n    assert res[1].stream_id == \"s2\"\n\ndef test_highest_priority_packet():\n    \"\"\"Test getting the highest priority packet.\"\"\"\n    p1 = EventPacket(\"s1\", 1, \"low\")\n    p2 = EventPacket(\"s2\", 5, \"high\")\n    result = get_highest_priority_packet([p1, p2])\n    assert result.stream_id == \"s2\"\n    assert result.severity == 5\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: sort_helper.py ===\n\"\"\"Internal stream sorting helper.\"\"\"\nfrom typing import List\nfrom event_packet import EventPacket\n\ndef order_packets(packets: List[EventPacket]) -> List[EventPacket]:\n    return sorted(packets, key=lambda p: (-p.severity, p.stream_id))\n\ndef get_max_severity(packets: List[EventPacket]) -> int:\n    return max((p.severity for p in packets), default=0)\n\ndef count_critical_packets(packets: List[EventPacket]) -> int:\n    return sum(1 for p in packets if p.is_critical())\n=== END ===\n=== FILE: sequencer.py ===\n\"\"\"Stream event sequencer.\"\"\"\nfrom typing import List\nfrom sort_helper import order_packets, get_max_severity\nfrom event_packet import EventPacket\n\ndef sequence_stream_batch(packets: List[EventPacket]) -> List[EventPacket]:\n    \"\"\"Sequence event packets by severity.\n    \n    For packets with equal severity, sort by stream_id to ensure\n    deterministic ordering and prevent out-of-order stream tiebreaker\n    issues that can cause state replication desync.\n    \"\"\"\n    return order_packets(packets)\n\ndef get_highest_priority_packet(packets: List[EventPacket]):\n    ordered = sequence_stream_batch(packets)\n    return ordered[0] if ordered else None\n\ndef get_batch_severity_peak(packets: List[EventPacket]) -> int:\n    return get_max_severity(packets)\n=== END ===\n=== FILE: tests/test_sequencer_cases.py ===\nimport pytest\nfrom event_packet import EventPacket\nfrom sequencer import sequence_stream_batch, get_highest_priority_packet\n\ndef test_stream_sequencing():\n    \"\"\"Test that packets with same severity are ordered by stream_id to avoid desync.\"\"\"\n    p1 = EventPacket(\"s2\", 5, \"high\")\n    p2 = EventPacket(\"s1\", 5, \"high\")\n    res = sequence_stream_batch([p1, p2])\n    # Should be ordered by stream_id when severity is equal\n    assert res[0].stream_id == \"s1\"\n    assert res[1].stream_id == \"s2\"\n\ndef test_highest_priority_packet():\n    \"\"\"Test getting the highest priority packet.\"\"\"\n    p1 = EventPacket(\"s1\", 1, \"low\")\n    p2 = EventPacket(\"s2\", 5, \"high\")\n    result = get_highest_priority_packet([p1, p2])\n    assert result.stream_id == \"s2\"\n    assert result.severity == 5\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-11-08T00:39:32.707739+00:00"
+}

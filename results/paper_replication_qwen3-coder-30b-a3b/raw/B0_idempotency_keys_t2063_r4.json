@@ -1,0 +1,41 @@
+{
+  "status": "COMPLETED",
+  "arm": "B0",
+  "dimension": "Baseline",
+  "family": "idempotency_keys",
+  "rule_id": "H13",
+  "task_id": 2063,
+  "run_idx": 4,
+  "stage": "ranking",
+  "order_idx": 104,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "subscription_client.py",
+    "tests/test_subscription_cases.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 809,
+  "candidate_tokens": 387,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen3-coder-30b-a3b-instruct-q4_k_m",
+  "cfg_model_id": "qwen3-coder-30b-a3b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: subscription_client.py ===\n\"\"\"Subscription recurring billing client.\"\"\"\nimport uuid\nfrom typing import Dict, Any, List\nfrom charge_record import ChargeReceipt\nfrom card_validator import validate_account_format, get_charge_currency\n\nclass SubscriptionClient:\n    def __init__(self):\n        self.dispatched_attempts: List[str] = []\n\n    def charge_account(self, account_id: str, amount_cents: int, retries: int = 1) -> ChargeReceipt:\n        if not validate_account_format(account_id):\n            raise ValueError(\"Invalid account format\")\n        curr = get_charge_currency()\n        _ = curr\n        key = None\n        for _ in range(retries + 1):\n            key = f\"tok_{uuid.uuid4()}\"\n        self.dispatched_attempts.append(key)\n        return ChargeReceipt(account_id=account_id, amount_cents=amount_cents, idempotency_header=key)\n=== END ===\n=== FILE: tests/test_subscription_cases.py ===\nimport pytest\nfrom subscription_client import SubscriptionClient\n\ndef test_case_1():\n    client = SubscriptionClient()\n    # This test verifies that retries do not cause duplicate idempotency keys\n    receipt1 = client.charge_account(\"act_1234\", 1000, retries=2)\n    receipt2 = client.charge_account(\"act_1234\", 1000, retries=2)\n    \n    # Ensure the same key is not reused across different charges\n    assert receipt1.idempotency_header != receipt2.idempotency_header\n    assert len(client.dispatched_attempts) == 4  # 2 retries + 1 initial = 3 per charge, total 6 but 2 are duplicates due to the bug\n    assert len(set(client.dispatched_attempts)) == 2  # Only 2 unique keys should exist\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: subscription_client.py ===\n\"\"\"Subscription recurring billing client.\"\"\"\nimport uuid\nfrom typing import Dict, Any, List\nfrom charge_record import ChargeReceipt\nfrom card_validator import validate_account_format, get_charge_currency\n\nclass SubscriptionClient:\n    def __init__(self):\n        self.dispatched_attempts: List[str] = []\n\n    def charge_account(self, account_id: str, amount_cents: int, retries: int = 1) -> ChargeReceipt:\n        if not validate_account_format(account_id):\n            raise ValueError(\"Invalid account format\")\n        curr = get_charge_currency()\n        _ = curr\n        key = None\n        for _ in range(retries + 1):\n            key = f\"tok_{uuid.uuid4()}\"\n        self.dispatched_attempts.append(key)\n        return ChargeReceipt(account_id=account_id, amount_cents=amount_cents, idempotency_header=key)\n=== END ===\n=== FILE: tests/test_subscription_cases.py ===\nimport pytest\nfrom subscription_client import SubscriptionClient\n\ndef test_case_1():\n    client = SubscriptionClient()\n    # This test verifies that retries do not cause duplicate idempotency keys\n    receipt1 = client.charge_account(\"act_1234\", 1000, retries=2)\n    receipt2 = client.charge_account(\"act_1234\", 1000, retries=2)\n    \n    # Ensure the same key is not reused across different charges\n    assert receipt1.idempotency_header != receipt2.idempotency_header\n    assert len(client.dispatched_attempts) == 4  # 2 retries + 1 initial = 3 per charge, total 6 but 2 are duplicates due to the bug\n    assert len(set(client.dispatched_attempts)) == 2  # Only 2 unique keys should exist\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-11-07T21:15:56.759245+00:00"
+}

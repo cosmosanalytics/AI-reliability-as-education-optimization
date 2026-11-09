@@ -1,0 +1,41 @@
+{
+  "status": "COMPLETED",
+  "arm": "RULE",
+  "dimension": "Books",
+  "family": "service_errors",
+  "rule_id": "H04",
+  "task_id": 2033,
+  "run_idx": 3,
+  "stage": "middle",
+  "order_idx": 88,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "lock_manager.py",
+    "tests/test_lock_cases.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 944,
+  "candidate_tokens": 405,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen3-coder-30b-a3b-instruct-q4_k_m",
+  "cfg_model_id": "qwen3-coder-30b-a3b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: lock_manager.py ===\n\"\"\"Concurrent resource lock manager.\"\"\"\nfrom errors import ServiceError\nfrom lock_record import LockEntry\nfrom typing import Dict, Optional\n\nclass ResourceLockManager:\n    def __init__(self):\n        self._locks: Dict[str, LockEntry] = {}\n\n    def acquire_lock(self, resource_id: str, owner_id: str) -> LockEntry:\n        \"\"\"Acquire exclusive lock on resource.\n        \n        Raises an error if resource is currently held by another worker.\n        \"\"\"\n        existing = self._locks.get(resource_id)\n        if existing and existing.is_active and existing.owner_id != owner_id:\n            raise ServiceError(\n                code=\"ERR_RESOURCE_LOCKED\",\n                message=f\"Resource {resource_id} is locked by {existing.owner_id}\"\n            )\n        entry = LockEntry(resource_id=resource_id, owner_id=owner_id, is_active=True)\n        self._locks[resource_id] = entry\n        return entry\n\n    def release_lock(self, resource_id: str, owner_id: str) -> bool:\n        existing = self._locks.get(resource_id)\n        if existing and existing.owner_id == owner_id:\n            existing.is_active = False\n            return True\n        return False\n=== END ===\n=== FILE: tests/test_lock_cases.py ===\nimport pytest\nfrom lock_manager import ResourceLockManager\nfrom errors import ServiceError\n\ndef test_service_execution():\n    mgr = ResourceLockManager()\n    # Acquire lock first\n    mgr.acquire_lock(\"doc-1\", \"worker-a\")\n    # Try to acquire same lock with different owner - should raise ServiceError\n    with pytest.raises(ServiceError) as exc_info:\n        mgr.acquire_lock(\"doc-1\", \"worker-b\")\n    assert exc_info.value.code == \"ERR_RESOURCE_LOCKED\"\n    assert \"locked by worker-a\" in exc_info.value.message\n    assert exc_info.value.message == \"Resource doc-1 is locked by worker-a\"\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: lock_manager.py ===\n\"\"\"Concurrent resource lock manager.\"\"\"\nfrom errors import ServiceError\nfrom lock_record import LockEntry\nfrom typing import Dict, Optional\n\nclass ResourceLockManager:\n    def __init__(self):\n        self._locks: Dict[str, LockEntry] = {}\n\n    def acquire_lock(self, resource_id: str, owner_id: str) -> LockEntry:\n        \"\"\"Acquire exclusive lock on resource.\n        \n        Raises an error if resource is currently held by another worker.\n        \"\"\"\n        existing = self._locks.get(resource_id)\n        if existing and existing.is_active and existing.owner_id != owner_id:\n            raise ServiceError(\n                code=\"ERR_RESOURCE_LOCKED\",\n                message=f\"Resource {resource_id} is locked by {existing.owner_id}\"\n            )\n        entry = LockEntry(resource_id=resource_id, owner_id=owner_id, is_active=True)\n        self._locks[resource_id] = entry\n        return entry\n\n    def release_lock(self, resource_id: str, owner_id: str) -> bool:\n        existing = self._locks.get(resource_id)\n        if existing and existing.owner_id == owner_id:\n            existing.is_active = False\n            return True\n        return False\n=== END ===\n=== FILE: tests/test_lock_cases.py ===\nimport pytest\nfrom lock_manager import ResourceLockManager\nfrom errors import ServiceError\n\ndef test_service_execution():\n    mgr = ResourceLockManager()\n    # Acquire lock first\n    mgr.acquire_lock(\"doc-1\", \"worker-a\")\n    # Try to acquire same lock with different owner - should raise ServiceError\n    with pytest.raises(ServiceError) as exc_info:\n        mgr.acquire_lock(\"doc-1\", \"worker-b\")\n    assert exc_info.value.code == \"ERR_RESOURCE_LOCKED\"\n    assert \"locked by worker-a\" in exc_info.value.message\n    assert exc_info.value.message == \"Resource doc-1 is locked by worker-a\"\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-11-08T18:44:14.957599+00:00"
+}

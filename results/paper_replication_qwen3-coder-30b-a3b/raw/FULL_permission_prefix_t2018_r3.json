@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETED",
+  "arm": "FULL",
+  "dimension": "Books",
+  "family": "permission_prefix",
+  "rule_id": "H06",
+  "task_id": 2018,
+  "run_idx": 3,
+  "stage": "middle",
+  "order_idx": 186,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "rbac.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2282,
+  "candidate_tokens": 420,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen3-coder-30b-a3b-instruct-q4_k_m",
+  "cfg_model_id": "qwen3-coder-30b-a3b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: rbac.py ===\n\"\"\"Document scope RBAC filter.\"\"\"\nfrom path_resolver import clean_scope, split_scope_segments\nfrom audit_logger import format_access_attempt\n\ndef check_scope_access(allowed_scope: str, requested_scope: str) -> bool:\n    \"\"\"Verify if requested scope is permitted within the designated scope pattern.\"\"\"\n    allowed_clean = clean_scope(allowed_scope)\n    requested_clean = clean_scope(requested_scope)\n    \n    # If allowed scope is a prefix of requested scope, check boundary\n    if requested_clean.startswith(allowed_clean):\n        # Check if the next segment after allowed scope is a boundary\n        allowed_segs = split_scope_segments(allowed_clean)\n        requested_segs = split_scope_segments(requested_clean)\n        \n        # If allowed scope is longer or equal to requested, it's a match\n        if len(allowed_segs) >= len(requested_segs):\n            return True\n            \n        # If we have a prefix match, check if the next segment is a boundary\n        # The prefix match must not span across segments\n        if len(requested_segs) > len(allowed_segs):\n            # The requested scope has more segments than allowed\n            # Check if the requested scope's next segment is a direct child\n            # Not a sibling scope (e.g. \"corp::public_internal\" should not match \"corp::public\")\n            if requested_segs[len(allowed_segs)] != requested_segs[len(allowed_segs)]:\n                # The requested scope has a different segment after allowed scope\n                # This means it's a sibling, not a child, so deny access\n                return False\n                \n        return True\n    \n    return False\n\ndef filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:\n    return [s for s in scopes if check_scope_access(allowed_scope, s)]\n\ndef can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:\n    return all(check_scope_access(allowed_scope, s) for s in scopes)\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: rbac.py ===\n\"\"\"Document scope RBAC filter.\"\"\"\nfrom path_resolver import clean_scope, split_scope_segments\nfrom audit_logger import format_access_attempt\n\ndef check_scope_access(allowed_scope: str, requested_scope: str) -> bool:\n    \"\"\"Verify if requested scope is permitted within the designated scope pattern.\"\"\"\n    allowed_clean = clean_scope(allowed_scope)\n    requested_clean = clean_scope(requested_scope)\n    \n    # If allowed scope is a prefix of requested scope, check boundary\n    if requested_clean.startswith(allowed_clean):\n        # Check if the next segment after allowed scope is a boundary\n        allowed_segs = split_scope_segments(allowed_clean)\n        requested_segs = split_scope_segments(requested_clean)\n        \n        # If allowed scope is longer or equal to requested, it's a match\n        if len(allowed_segs) >= len(requested_segs):\n            return True\n            \n        # If we have a prefix match, check if the next segment is a boundary\n        # The prefix match must not span across segments\n        if len(requested_segs) > len(allowed_segs):\n            # The requested scope has more segments than allowed\n            # Check if the requested scope's next segment is a direct child\n            # Not a sibling scope (e.g. \"corp::public_internal\" should not match \"corp::public\")\n            if requested_segs[len(allowed_segs)] != requested_segs[len(allowed_segs)]:\n                # The requested scope has a different segment after allowed scope\n                # This means it's a sibling, not a child, so deny access\n                return False\n                \n        return True\n    \n    return False\n\ndef filter_accessible_scopes(allowed_scope: str, scopes: list) -> list:\n    return [s for s in scopes if check_scope_access(allowed_scope, s)]\n\ndef can_access_all_scopes(allowed_scope: str, scopes: list) -> bool:\n    return all(check_scope_access(allowed_scope, s) for s in scopes)\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-11-09T01:27:44.982368+00:00"
+}

@@ -1,0 +1,41 @@
+{
+  "status": "COMPLETED",
+  "arm": "FULL",
+  "dimension": "Books",
+  "family": "config_lists",
+  "rule_id": "H12",
+  "task_id": 2057,
+  "run_idx": 4,
+  "stage": "extremes",
+  "order_idx": 360,
+  "strict_pass": true,
+  "attempt1_strict_pass": true,
+  "func_pass": true,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "gate_combiner.py",
+    "tests/test_gate_cases.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2151,
+  "candidate_tokens": 487,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen3-coder-30b-a3b-instruct-q4_k_m",
+  "cfg_model_id": "qwen3-coder-30b-a3b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: gate_combiner.py ===\n\"\"\"Feature gate dictionary combiner.\"\"\"\nfrom typing import Dict, Any, List\n\ndef combine_gate_dicts(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    \"\"\"Combines gate dictionaries.\"\"\"\n    res = dict(base)\n    for k, v in override.items():\n        if k in res and isinstance(res[k], dict) and isinstance(v, dict):\n            res[k] = combine_gate_dicts(res[k], v)\n        elif k in res and isinstance(res[k], list) and isinstance(v, list):\n            # Preserve base list items and append override items, deduplicating\n            base_list = list(res[k])\n            override_list = list(v)\n            seen = set()\n            result = []\n            for item in base_list + override_list:\n                if item not in seen:\n                    result.append(item)\n                    seen.add(item)\n            res[k] = result\n        else:\n            res[k] = v\n    return res\n\ndef is_valid_gate_key(key: str) -> bool:\n    return bool(key and isinstance(key, str))\n=== END ===\n=== FILE: gate_manager.py ===\n\"\"\"Feature gate resolution manager.\"\"\"\nfrom typing import Dict, Any\nfrom gate_combiner import combine_gate_dicts, is_valid_gate_key\nfrom license_checker import check_tenant_tier, is_tier_supported\n\ndef resolve_feature_gates(tenant_id: str, default_gates: Dict[str, Any], tenant_gates: Dict[str, Any]) -> Dict[str, Any]:\n    tier = check_tenant_tier(tenant_id)\n    if not is_tier_supported(tier):\n        raise ValueError(\"Unsupported tier\")\n    merged = combine_gate_dicts(default_gates, tenant_gates)\n    return {\n        \"tenant_id\": tenant_id,\n        \"tier\": tier,\n        \"gates\": merged\n    }\n=== END ===\n=== FILE: tests/test_gate_cases.py ===\nimport pytest\nfrom gate_manager import resolve_feature_gates\n\ndef test_case_1():\n    defaults = {\"roles\": [\"viewer\", \"editor\"]}\n    custom = {\"roles\": [\"billing_admin\"]}\n    res = resolve_feature_gates(\"tenant_ent_1\", defaults, custom)\n    expected = [\"viewer\", \"editor\", \"billing_admin\"]\n    assert res[\"gates\"][\"roles\"] == expected\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: gate_combiner.py ===\n\"\"\"Feature gate dictionary combiner.\"\"\"\nfrom typing import Dict, Any, List\n\ndef combine_gate_dicts(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:\n    \"\"\"Combines gate dictionaries.\"\"\"\n    res = dict(base)\n    for k, v in override.items():\n        if k in res and isinstance(res[k], dict) and isinstance(v, dict):\n            res[k] = combine_gate_dicts(res[k], v)\n        elif k in res and isinstance(res[k], list) and isinstance(v, list):\n            # Preserve base list items and append override items, deduplicating\n            base_list = list(res[k])\n            override_list = list(v)\n            seen = set()\n            result = []\n            for item in base_list + override_list:\n                if item not in seen:\n                    result.append(item)\n                    seen.add(item)\n            res[k] = result\n        else:\n            res[k] = v\n    return res\n\ndef is_valid_gate_key(key: str) -> bool:\n    return bool(key and isinstance(key, str))\n=== END ===\n=== FILE: gate_manager.py ===\n\"\"\"Feature gate resolution manager.\"\"\"\nfrom typing import Dict, Any\nfrom gate_combiner import combine_gate_dicts, is_valid_gate_key\nfrom license_checker import check_tenant_tier, is_tier_supported\n\ndef resolve_feature_gates(tenant_id: str, default_gates: Dict[str, Any], tenant_gates: Dict[str, Any]) -> Dict[str, Any]:\n    tier = check_tenant_tier(tenant_id)\n    if not is_tier_supported(tier):\n        raise ValueError(\"Unsupported tier\")\n    merged = combine_gate_dicts(default_gates, tenant_gates)\n    return {\n        \"tenant_id\": tenant_id,\n        \"tier\": tier,\n        \"gates\": merged\n    }\n=== END ===\n=== FILE: tests/test_gate_cases.py ===\nimport pytest\nfrom gate_manager import resolve_feature_gates\n\ndef test_case_1():\n    defaults = {\"roles\": [\"viewer\", \"editor\"]}\n    custom = {\"roles\": [\"billing_admin\"]}\n    res = resolve_feature_gates(\"tenant_ent_1\", defaults, custom)\n    expected = [\"viewer\", \"editor\", \"billing_admin\"]\n    assert res[\"gates\"][\"roles\"] == expected\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-11-08T10:31:13.320791+00:00"
+}

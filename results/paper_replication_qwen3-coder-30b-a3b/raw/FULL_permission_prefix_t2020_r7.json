@@ -1,0 +1,42 @@
+{
+  "status": "COMPLETED",
+  "arm": "FULL",
+  "dimension": "Books",
+  "family": "permission_prefix",
+  "rule_id": "H06",
+  "task_id": 2020,
+  "run_idx": 7,
+  "stage": "middle",
+  "order_idx": 148,
+  "strict_pass": false,
+  "attempt1_strict_pass": false,
+  "func_pass": false,
+  "tamper": false,
+  "violations": [],
+  "changed_files": [
+    "prefix_validator.py",
+    "scope_checker.py",
+    "tests/test_scope_cases.py"
+  ],
+  "model_turns": 1,
+  "prompt_tokens": 2125,
+  "candidate_tokens": 495,
+  "thoughts_tokens": 0,
+  "infra_log": [],
+  "backend": "local:qwen3-coder-30b-a3b-instruct-q4_k_m",
+  "cfg_model_id": "qwen3-coder-30b-a3b-instruct-q4_k_m",
+  "cfg_temperature": 0.7,
+  "cfg_top_p": 0.95,
+  "cfg_max_output_tokens": 4096,
+  "cfg_thinking_budget": null,
+  "final_patch": "=== FILE: prefix_validator.py ===\n\"\"\"Topic path subscription matcher.\"\"\"\ndef is_topic_subscribed(subscribed_pattern: str, event_topic: str) -> bool:\n    # Exact match for topic root\n    if subscribed_pattern == event_topic.split(\"::\")[0]:\n        return True\n    # Prefix match for topic paths\n    return event_topic.startswith(subscribed_pattern)\n\ndef clean_topic_segment(topic: str) -> str:\n    return topic.strip().lower()\n\ndef is_wildcard_subscription(pattern: str) -> bool:\n    return pattern.strip() in (\"*\", \"**\")\n=== END ===\n=== FILE: scope_checker.py ===\n\"\"\"Webhook scope dispatch checker.\"\"\"\nfrom prefix_validator import is_topic_subscribed, clean_topic_segment\nfrom webhook import WebhookEvent\n\ndef should_dispatch_webhook(subscribed_topic: str, event: WebhookEvent) -> bool:\n    \"\"\"Determine if webhook event topic is permitted under the subscription filter.\"\"\"\n    # Ensure exact root topic match to prevent leakage (EVT-918)\n    event_root = event.topic_path.split(\"::\")[0]\n    if subscribed_topic == event_root:\n        return is_topic_subscribed(subscribed_topic, event.topic_path)\n    # For non-root matches, fall back to prefix matching\n    return is_topic_subscribed(subscribed_topic, event.topic_path)\n\ndef filter_dispatch_queue(subscribed_topic: str, events: list) -> list:\n    return [e for e in events if should_dispatch_webhook(subscribed_topic, e)]\n\ndef batch_topic_summary(events: list) -> dict:\n    summary = {}\n    for e in events:\n        summary[e.topic_path] = summary.get(e.topic_path, 0) + 1\n    return summary\n=== END ===\n=== FILE: tests/test_scope_cases.py ===\nfrom webhook import WebhookEvent\nfrom scope_checker import should_dispatch_webhook\n\ndef test_channel_routing():\n    # Test that 'orders' subscription does not leak admin events\n    evt_admin = WebhookEvent(\"orders_admin::created\", \"{'id': 1}\")\n    evt_normal = WebhookEvent(\"orders::created\", \"{'id': 1}\")\n    \n    # Should not dispatch admin event to orders subscriber\n    assert should_dispatch_webhook(\"orders\", evt_admin) is False\n    # Should dispatch normal event to orders subscriber\n    assert should_dispatch_webhook(\"orders\", evt_normal) is True\n=== END ===",
+  "transcript": [
+    {
+      "kind": "initial",
+      "prompt": "<first prompt>",
+      "response": "=== FILE: prefix_validator.py ===\n\"\"\"Topic path subscription matcher.\"\"\"\ndef is_topic_subscribed(subscribed_pattern: str, event_topic: str) -> bool:\n    # Exact match for topic root\n    if subscribed_pattern == event_topic.split(\"::\")[0]:\n        return True\n    # Prefix match for topic paths\n    return event_topic.startswith(subscribed_pattern)\n\ndef clean_topic_segment(topic: str) -> str:\n    return topic.strip().lower()\n\ndef is_wildcard_subscription(pattern: str) -> bool:\n    return pattern.strip() in (\"*\", \"**\")\n=== END ===\n=== FILE: scope_checker.py ===\n\"\"\"Webhook scope dispatch checker.\"\"\"\nfrom prefix_validator import is_topic_subscribed, clean_topic_segment\nfrom webhook import WebhookEvent\n\ndef should_dispatch_webhook(subscribed_topic: str, event: WebhookEvent) -> bool:\n    \"\"\"Determine if webhook event topic is permitted under the subscription filter.\"\"\"\n    # Ensure exact root topic match to prevent leakage (EVT-918)\n    event_root = event.topic_path.split(\"::\")[0]\n    if subscribed_topic == event_root:\n        return is_topic_subscribed(subscribed_topic, event.topic_path)\n    # For non-root matches, fall back to prefix matching\n    return is_topic_subscribed(subscribed_topic, event.topic_path)\n\ndef filter_dispatch_queue(subscribed_topic: str, events: list) -> list:\n    return [e for e in events if should_dispatch_webhook(subscribed_topic, e)]\n\ndef batch_topic_summary(events: list) -> dict:\n    summary = {}\n    for e in events:\n        summary[e.topic_path] = summary.get(e.topic_path, 0) + 1\n    return summary\n=== END ===\n=== FILE: tests/test_scope_cases.py ===\nfrom webhook import WebhookEvent\nfrom scope_checker import should_dispatch_webhook\n\ndef test_channel_routing():\n    # Test that 'orders' subscription does not leak admin events\n    evt_admin = WebhookEvent(\"orders_admin::created\", \"{'id': 1}\")\n    evt_normal = WebhookEvent(\"orders::created\", \"{'id': 1}\")\n    \n    # Should not dispatch admin event to orders subscriber\n    assert should_dispatch_webhook(\"orders\", evt_admin) is False\n    # Should dispatch normal event to orders subscriber\n    assert should_dispatch_webhook(\"orders\", evt_normal) is True\n=== END ===",
+      "stop_reason": "STOP"
+    }
+  ],
+  "timestamp": "2026-11-08T23:20:14.965093+00:00"
+}
